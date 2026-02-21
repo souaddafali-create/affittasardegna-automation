@@ -370,6 +370,19 @@ _TIPO_EXPEDIA = {
     "loft": "LOFT",
 }
 
+# KrossBooking usa i propri codici tipo struttura (PMS interno)
+_TIPO_KROSSBOOKING = {
+    "villa": "Villa",
+    "appartamento": "Appartamento",
+    "agriturismo": "Agriturismo",
+    "bungalow": "Bungalow",
+    "casa": "Casa Vacanze",
+    "chalet": "Chalet",
+    "monolocale": "Monolocale",
+    "mansarda": "Mansarda",
+    "loft": "Loft",
+}
+
 
 def esporta_casevacanza(proprieta: list[Proprieta]) -> list[dict]:
     """
@@ -413,6 +426,58 @@ def esporta_casevacanza(proprieta: list[Proprieta]) -> list[dict]:
             "disponibile_al": p.disponibile_a,
             "contatto_email": p.contatto_email,
             "contatto_telefono": p.contatto_telefono,
+        })
+    return righe
+
+
+def esporta_krossbooking(proprieta: list[Proprieta]) -> list[dict]:
+    """
+    Formato per l'inserimento manuale (o via API) su KrossBooking PMS.
+
+    Campi specifici:
+    - codice_struttura : codice interno univoco (sigla provincia + CAP + prime 4 lettere nome)
+    - check_in_ore     : orario standard check-in (15:00)
+    - check_out_ore    : orario standard check-out (10:00)
+    - num_letti        : stima letti = ospiti_max (singoli/matrimoniali)
+    - tariffa_pulizie  : pulizie finali stimate (8% prezzo notte)
+    - soggiorno_minimo : 2 notti (standard PMS)
+    - politica_cancellazione : 'Moderata' (default)
+    """
+    righe = []
+    for p in proprieta:
+        if not p.valida:
+            continue
+        slug = re.sub(r"[^A-Z]", "", p.nome.upper())[:4]
+        codice = f"{p.provincia}-{p.cap}-{slug}"
+        prezzo_settimana = round(p.prezzo_notte * 7, 2)
+        cauzione = round(prezzo_settimana * 0.20, 2)
+        tariffa_pulizie = round(p.prezzo_notte * 0.08, 2)
+        righe.append({
+            "codice_struttura": codice,
+            "nome_proprieta": p.nome,
+            "tipo_struttura": _TIPO_KROSSBOOKING.get(p.tipo_proprieta, "Casa Vacanze"),
+            "descrizione": p.descrizione,
+            "max_ospiti": p.posti_letto,
+            "num_letti": p.posti_letto,
+            "num_bagni": p.bagni,
+            "superficie_mq": p.metri_quadri,
+            "check_in_ore": "15:00",
+            "check_out_ore": "10:00",
+            "soggiorno_minimo": 2,
+            "prezzo_base_notte": p.prezzo_notte,
+            "tariffa_settimanale": prezzo_settimana,
+            "deposito_cauzionale": cauzione,
+            "tariffa_pulizie": tariffa_pulizie,
+            "politica_cancellazione": "Moderata",
+            "indirizzo": p.indirizzo,
+            "citta": p.citta,
+            "provincia": p.provincia,
+            "cap": p.cap,
+            "nazione": "Italia",
+            "disponibile_dal": p.disponibile_da,
+            "disponibile_al": p.disponibile_a,
+            "email_contatto": p.contatto_email,
+            "telefono_contatto": p.contatto_telefono,
         })
     return righe
 
@@ -515,6 +580,7 @@ def genera_output(proprieta: list[Proprieta], cartella_output: str = "output") -
         "immobiliare": esporta_immobiliare(proprieta),
         "casevacanza": esporta_casevacanza(proprieta),
         "expedia": esporta_expedia(proprieta),
+        "krossbooking": esporta_krossbooking(proprieta),
     }
 
     for nome_portale, dati in portali.items():
