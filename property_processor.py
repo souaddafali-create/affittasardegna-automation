@@ -8,6 +8,8 @@ Supporta i formati di esportazione per:
 - Booking.com
 - HomeAway / Vrbo
 - Immobiliare.it Vacanze
+- CaseVacanza.it
+- Expedia / Hotels.com
 """
 
 import csv
@@ -343,6 +345,143 @@ def esporta_immobiliare(proprieta: list[Proprieta]) -> list[dict]:
     return righe
 
 
+# Mappatura dei tipi di proprietà verso i valori accettati dai nuovi portali
+_TIPO_CASEVACANZA = {
+    "villa": "Villa",
+    "appartamento": "Appartamento",
+    "agriturismo": "Agriturismo",
+    "bungalow": "Bungalow",
+    "casa": "Casa Vacanze",
+    "chalet": "Chalet",
+    "monolocale": "Monolocale",
+    "mansarda": "Mansarda",
+    "loft": "Loft",
+}
+
+_TIPO_EXPEDIA = {
+    "villa": "VILLA",
+    "appartamento": "APARTMENT",
+    "agriturismo": "FARMHOUSE",
+    "bungalow": "BUNGALOW",
+    "casa": "HOUSE",
+    "chalet": "CHALET",
+    "monolocale": "STUDIO",
+    "mansarda": "APARTMENT",
+    "loft": "LOFT",
+}
+
+
+def esporta_casevacanza(proprieta: list[Proprieta]) -> list[dict]:
+    """
+    Formato compatibile con CaseVacanza.it (feed CSV per inserzioni).
+
+    Campi specifici del portale:
+    - prezzo_settimana: calcolato come prezzo_notte * 7
+    - cauzione: deposito cauzionale stimato (20% del prezzo settimanale)
+    - soggiorno_minimo_notti: minimo 2 notti (standard portale)
+    - regione: sempre 'Sardegna' per questo progetto
+    - descrizione_breve: prime 160 caratteri della descrizione (anteprima)
+    - lingua: 'it' (lingua dell'annuncio)
+    """
+    righe = []
+    for p in proprieta:
+        if not p.valida:
+            continue
+        prezzo_settimana = round(p.prezzo_notte * 7, 2)
+        cauzione = round(prezzo_settimana * 0.20, 2)
+        righe.append({
+            "titolo_annuncio": p.nome,
+            "tipo_immobile": _TIPO_CASEVACANZA.get(p.tipo_proprieta, "Casa Vacanze"),
+            "descrizione_breve": p.descrizione[:160],
+            "descrizione_completa": p.descrizione,
+            "lingua_annuncio": "it",
+            "prezzo_per_notte_eur": p.prezzo_notte,
+            "prezzo_per_settimana_eur": prezzo_settimana,
+            "cauzione_eur": cauzione,
+            "soggiorno_minimo_notti": 2,
+            "numero_ospiti_max": p.posti_letto,
+            "numero_camere": max(1, p.posti_letto // 2),
+            "numero_bagni": p.bagni,
+            "superficie_mq": p.metri_quadri,
+            "indirizzo": p.indirizzo,
+            "localita": p.citta,
+            "provincia": p.provincia,
+            "regione": "Sardegna",
+            "cap": p.cap,
+            "nazione": "Italia",
+            "disponibile_dal": p.disponibile_da,
+            "disponibile_al": p.disponibile_a,
+            "contatto_email": p.contatto_email,
+            "contatto_telefono": p.contatto_telefono,
+        })
+    return righe
+
+
+def esporta_expedia(proprieta: list[Proprieta]) -> list[dict]:
+    """
+    Formato compatibile con Expedia Partner Central / Lodging API.
+
+    Campi specifici del portale:
+    - property_id: identificatore univoco generato da nome+cap
+    - rate_plan_id: piano tariffario standard 'NIGHTLY'
+    - base_rate / weekend_rate: tariffa notte (weekend +10%)
+    - min_stay_nights: soggiorno minimo (3 notti, standard Expedia vacation)
+    - check_in_time / check_out_time: orari standard (15:00 / 10:00)
+    - star_rating: stimato in base al prezzo (budget/standard/premium/luxury)
+    - market: mercato di riferimento 'IT'
+    - chain_code: 'IND' per strutture indipendenti
+    """
+    righe = []
+    for p in proprieta:
+        if not p.valida:
+            continue
+
+        # Stima star rating in base al prezzo per notte
+        if p.prezzo_notte < 80:
+            star_rating = 2.0
+        elif p.prezzo_notte < 200:
+            star_rating = 3.0
+        elif p.prezzo_notte < 500:
+            star_rating = 4.0
+        else:
+            star_rating = 5.0
+
+        # ID univoco: sigla provincia + CAP + iniziali nome (max 20 car.)
+        slug = re.sub(r"[^A-Z0-9]", "", p.nome.upper())[:8]
+        property_id = f"{p.provincia}{p.cap}{slug}"
+
+        righe.append({
+            "property_id": property_id,
+            "property_name": p.nome,
+            "property_type": _TIPO_EXPEDIA.get(p.tipo_proprieta, "HOUSE"),
+            "chain_code": "IND",
+            "market": "IT",
+            "description_en": p.descrizione,
+            "base_rate": p.prezzo_notte,
+            "weekend_rate": round(p.prezzo_notte * 1.10, 2),
+            "currency_code": "EUR",
+            "rate_plan_id": "NIGHTLY",
+            "max_occupancy": p.posti_letto,
+            "bedroom_count": max(1, p.posti_letto // 2),
+            "bathroom_count": p.bagni,
+            "property_size_sqm": p.metri_quadri,
+            "star_rating": star_rating,
+            "min_stay_nights": 3,
+            "check_in_time": "15:00",
+            "check_out_time": "10:00",
+            "address_line_1": p.indirizzo,
+            "city": p.citta,
+            "state_province": "Sardinia",
+            "postal_code": p.cap,
+            "country_code": "IT",
+            "availability_start": p.disponibile_da,
+            "availability_end": p.disponibile_a,
+            "contact_email": p.contatto_email,
+            "contact_phone": p.contatto_telefono,
+        })
+    return righe
+
+
 # ---------------------------------------------------------------------------
 # Output su file
 # ---------------------------------------------------------------------------
@@ -374,6 +513,8 @@ def genera_output(proprieta: list[Proprieta], cartella_output: str = "output") -
         "booking": esporta_booking(proprieta),
         "homeaway": esporta_homeaway(proprieta),
         "immobiliare": esporta_immobiliare(proprieta),
+        "casevacanza": esporta_casevacanza(proprieta),
+        "expedia": esporta_expedia(proprieta),
     }
 
     for nome_portale, dati in portali.items():
