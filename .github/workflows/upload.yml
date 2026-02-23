@@ -1,0 +1,33 @@
+name: Casevacanza Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'listings.json'
+      - 'casevacanza_uploader.py'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run uploader
+        env:
+          CASEVACANZA_API_URL: ${{ vars.CASEVACANZA_API_URL }}
+          CASEVACANZA_API_KEY: ${{ secrets.CASEVACANZA_API_KEY }}
+        run: python casevacanza_uploader.py
