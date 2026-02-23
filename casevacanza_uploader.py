@@ -1,31 +1,43 @@
 import os
-import requests
+from playwright.sync_api import sync_playwright
 
-API_URL = os.environ["CASEVACANZA_API_URL"]
-API_KEY = os.environ["CASEVACANZA_API_KEY"]
-
-
-def load_listings(path: str = "listings.json") -> list[dict]:
-    import json
-    with open(path) as f:
-        return json.load(f)
+EMAIL = os.environ["CASEVACANZA_EMAIL"]
+PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
 
 
-def upload_listing(session: requests.Session, listing: dict) -> None:
-    response = session.post(f"{API_URL}/listings", json=listing)
-    response.raise_for_status()
-    print(f"Uploaded: {listing.get('title', listing)}")
+def login(page) -> None:
+    page.goto("https://my.casevacanza.it")
+    page.get_by_label("Email").fill(EMAIL)
+    page.get_by_label("Password").fill(PASSWORD)
+    page.get_by_role("button", name="Accedi").click()
+    page.wait_for_url("**/dashboard**")
+    print("Login effettuato.")
+
+
+def insert_property(page) -> None:
+    page.get_by_role("link", name="Aggiungi proprietà").click()
+
+    page.get_by_label("Nome proprietà").fill("Casa vacanze Sardegna")
+    page.get_by_label("Indirizzo").fill("Via Sardegna 1, Cagliari")
+    page.get_by_label("Descrizione").fill(
+        "Splendida casa vacanze con vista mare in Sardegna."
+    )
+    page.get_by_label("Prezzo per notte").fill("120")
+
+    page.get_by_role("button", name="Salva").click()
+    page.wait_for_selector("text=Proprietà salvata", timeout=10_000)
+    print("Proprietà inserita con successo.")
 
 
 def main() -> None:
-    listings = load_listings()
-
-    with requests.Session() as session:
-        session.headers.update({"Authorization": f"Bearer {API_KEY}"})
-        for listing in listings:
-            upload_listing(session, listing)
-
-    print(f"Done: {len(listings)} listing(s) uploaded.")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        try:
+            login(page)
+            insert_property(page)
+        finally:
+            browser.close()
 
 
 if __name__ == "__main__":
