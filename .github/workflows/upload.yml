@@ -1,0 +1,34 @@
+name: Casevacanza Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'casevacanza_uploader.py'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Run uploader
+        env:
+          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
+          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
+        run: python casevacanza_uploader.py
