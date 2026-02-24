@@ -52,6 +52,19 @@ def main() -> None:
                 print("Popup cookies chiuso.")
                 page.wait_for_timeout(1_000)
 
+            # Chiudi ReactModal overlay (se presente)
+            modal_overlay = page.locator(".ReactModal__Overlay")
+            if modal_overlay.count() > 0:
+                # Prova a chiudere con bottone di chiusura nel modal
+                close_btn = modal_overlay.locator("button").first
+                if close_btn.count() > 0:
+                    close_btn.click()
+                else:
+                    # Click fuori dal modal per chiuderlo
+                    modal_overlay.click(position={"x": 10, "y": 10})
+                page.wait_for_timeout(1_000)
+                print("ReactModal chiuso.")
+
             # Clicca su "Proprietà" nel menu in alto
             page.locator("a", has_text="Proprietà").first.click()
             page.wait_for_timeout(3_000)
