@@ -70,7 +70,12 @@ def main() -> None:
             page.wait_for_timeout(3_000)
             print("Navigato a Proprietà.")
 
-            # Debug: screenshot + HTML della pagina Proprietà
+            # Clicca "Aggiungi una proprietà"
+            page.locator("a", has_text="Aggiungi una proprietà").click()
+            page.wait_for_timeout(3_000)
+            print("Navigato a Aggiungi una proprietà.")
+
+            # Debug: screenshot + HTML della pagina
             page.screenshot(path="home_after_login.png", full_page=True)
             print("Screenshot salvato: home_after_login.png")
             html = page.content()
