@@ -1,0 +1,148 @@
+name: Booking.com Extranet Uploader
+
+# ---------------------------------------------------------------------------
+# Trigger
+# ---------------------------------------------------------------------------
+on:
+  # Esecuzione manuale dalla UI di GitHub Actions
+  workflow_dispatch:
+    inputs:
+      csv_path:
+        description: "Path del CSV (es. output/booking_test.csv)"
+        required: false
+        default: "output/booking_test.csv"
+      indice:
+        description: "Indice 0-based della proprietà (vuoto = tutte)"
+        required: false
+        default: "0"
+
+  # Push / PR sul branch di sviluppo → esegui solo il test end-to-end locale
+  push:
+    branches:
+      - "claude/**"
+      - main
+      - master
+    paths:
+      - "booking_uploader.py"
+      - "test_booking_uploader.py"
+      - "output/booking*.csv"
+  pull_request:
+    paths:
+      - "booking_uploader.py"
+      - "test_booking_uploader.py"
+      - "output/booking*.csv"
+
+# ---------------------------------------------------------------------------
+# Permessi minimi necessari
+# ---------------------------------------------------------------------------
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Test end-to-end con mock server locale (nessuna credenziale reale)
+  # ---------------------------------------------------------------------------
+  test-end-to-end:
+    name: End-to-end test (mock server)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install playwright
+
+      - name: Install Chromium via Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run end-to-end test (booking_uploader — mock server)
+        run: python3 test_booking_uploader.py
+
+      - name: Upload screenshot artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-errori-bk-test
+          path: screenshot_errori_bk/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — Dry run (nessun browser, nessuna credenziale)
+  # Verifica che il CSV venga letto e i dati stampati correttamente.
+  # ---------------------------------------------------------------------------
+  dry-run:
+    name: Dry run (CSV validation)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dry run — CSV di test (Appartamento Test Stintino)
+        run: python3 booking_uploader.py --csv output/booking_test.csv --dry-run
+
+      - name: Dry run — CSV principale (tutte le proprietà)
+        run: python3 booking_uploader.py --dry-run
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — Upload reale su Booking.com Extranet
+  # Attivato SOLO tramite workflow_dispatch (trigger manuale).
+  # Richiede i secret BK_EMAIL e BK_PASSWORD configurati nel repository.
+  # ---------------------------------------------------------------------------
+  upload-reale:
+    name: Upload reale su Booking.com Extranet
+    runs-on: ubuntu-latest
+    # Eseguito solo se avviato manualmente e se i secret sono configurati
+    if: github.event_name == 'workflow_dispatch'
+    needs: [test-end-to-end, dry-run]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install playwright
+
+      - name: Install Chromium via Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Upload proprietà su Booking.com Extranet
+        env:
+          BK_EMAIL:    ${{ secrets.BK_EMAIL }}
+          BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
+        run: |
+          CSV="${{ github.event.inputs.csv_path }}"
+          INDICE="${{ github.event.inputs.indice }}"
+
+          ARGS="--headless --csv $CSV"
+          if [ -n "$INDICE" ]; then
+            ARGS="$ARGS --indice $INDICE"
+          fi
+
+          python3 booking_uploader.py $ARGS
+
+      - name: Upload screenshot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-errori-bk-${{ github.run_number }}
+          path: screenshot_errori_bk/
+          retention-days: 14
