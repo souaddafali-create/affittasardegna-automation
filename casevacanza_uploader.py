@@ -12,7 +12,7 @@ def login(page) -> None:
     page.locator("#username").fill(EMAIL)
     page.locator("#password").fill(PASSWORD)
     page.locator("#kc-login").click()
-    page.wait_for_url("**/dashboard**", timeout=30_000)
+    page.wait_for_url("**/home**", timeout=30_000)
     print("Login effettuato.")
 
 
