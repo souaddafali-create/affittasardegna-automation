@@ -159,39 +159,68 @@ def insert_property(page):
     # --- Step 5: Compila indirizzo ---
     print("Step 5: Compila indirizzo")
 
-    # Stato o provincia → Sardegna
-    page.get_by_label("Stato o provincia").fill("Sardegna")
+    # Debug: salva HTML per ispezionare la struttura dei campi
+    screenshot(page, "indirizzo_pagina")
+    html = page.content()
+    with open(f"{SCREENSHOT_DIR}/step05_indirizzo.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print("HTML pagina indirizzo salvato.")
+
+    # Floating labels: trova label → input più vicino (sibling o parent)
+    def fill_field(label_text, value):
+        """Try multiple strategies to fill a field by its label text."""
+        # Strategy 1: xpath — input following the label
+        xpath_loc = page.locator(
+            f'//label[contains(text(),"{label_text}")]/following::input[1]'
+        )
+        if xpath_loc.count() > 0:
+            xpath_loc.fill(value)
+            print(f"  {label_text} → '{value}' (xpath)")
+            return
+        # Strategy 2: text label → parent → input
+        parent_loc = page.locator(f"text={label_text}").locator("..").locator("input")
+        if parent_loc.count() > 0:
+            parent_loc.first.fill(value)
+            print(f"  {label_text} → '{value}' (parent)")
+            return
+        # Strategy 3: grandparent
+        gp_loc = page.locator(f"text={label_text}").locator("../..").locator("input")
+        if gp_loc.count() > 0:
+            gp_loc.first.fill(value)
+            print(f"  {label_text} → '{value}' (grandparent)")
+            return
+        raise Exception(f"Campo '{label_text}' non trovato con nessuna strategia")
+
+    fill_field("Stato o provincia", "Sardegna")
     wait(page, 2000)
-    # Se appare un suggerimento autocomplete, clicca il primo risultato
-    suggestion = page.locator("[class*='suggestion'], [class*='option'], [role='option']").first
+    # Autocomplete: clicca il primo suggerimento se presente
+    suggestion = page.locator(
+        "[class*='suggestion'], [class*='option'], [role='option'], "
+        "[class*='dropdown'] li, [class*='autocomplete'] li"
+    ).first
     if suggestion.count() > 0:
         suggestion.click()
         wait(page, 1000)
     screenshot(page, "provincia_compilata")
 
-    # Città
-    page.get_by_label("Città").fill("Stintino")
+    fill_field("Città", "Stintino")
     wait(page, 2000)
-    suggestion = page.locator("[class*='suggestion'], [class*='option'], [role='option']").first
+    suggestion = page.locator(
+        "[class*='suggestion'], [class*='option'], [role='option'], "
+        "[class*='dropdown'] li, [class*='autocomplete'] li"
+    ).first
     if suggestion.count() > 0:
         suggestion.click()
         wait(page, 1000)
     screenshot(page, "citta_compilata")
 
-    # Via
-    page.get_by_label("Via").fill("Via Sassari")
+    fill_field("Via", "Via Sassari")
     wait(page, 1000)
 
-    # Numero civico
-    page.get_by_label("Numero civico").fill("10")
+    fill_field("Numero civico", "10")
     wait(page, 1000)
 
-    # CAP / Codice postale
-    cap_field = page.get_by_label("Codice postale")
-    if cap_field.count() > 0:
-        cap_field.fill("07040")
-    else:
-        page.get_by_label("CAP").fill("07040")
+    fill_field("Codice postale", "07040")
     wait(page, 1000)
 
     screenshot(page, "indirizzo_compilato")
