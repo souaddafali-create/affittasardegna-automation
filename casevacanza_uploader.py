@@ -43,7 +43,14 @@ def main() -> None:
         page = browser.new_page(user_agent=USER_AGENT)
         try:
             login(page)
-            insert_property(page)
+            # Debug: screenshot + HTML della home dopo il login
+            page.wait_for_timeout(3_000)
+            page.screenshot(path="home_after_login.png", full_page=True)
+            print("Screenshot salvato: home_after_login.png")
+            html = page.content()
+            with open("home_after_login.html", "w", encoding="utf-8") as f:
+                f.write(html)
+            print("HTML salvato: home_after_login.html")
         finally:
             browser.close()
 
