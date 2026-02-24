@@ -47,19 +47,10 @@ def wait(page, ms=5000):
     page.wait_for_timeout(ms)
 
 
-def click_continua(page):
-    """Click the 'Continua' button and wait."""
-    page.get_by_text("Continua", exact=True).click()
+def click_save(page):
+    """Click the save/continue button (data-test='save-button') and wait."""
+    page.locator('[data-test="save-button"]').click()
     wait(page)
-
-
-def click_plus(page, label_text, times=1):
-    """Click the + button near a label N times."""
-    for _ in range(times):
-        container = page.get_by_text(label_text, exact=True).locator("..").locator("..")
-        plus_btn = container.locator("button").last
-        plus_btn.click()
-        page.wait_for_timeout(500)
 
 
 def download_placeholder_photos(count=5):
@@ -144,9 +135,9 @@ def insert_property(page):
     wait(page)
     screenshot(page, "intero_alloggio")
 
-    # --- Step 4: Click "Continua" ---
+    # --- Step 4: Continua (tipo proprietà) ---
     print("Step 4: Continua (tipo proprietà)")
-    click_continua(page)
+    click_save(page)
     screenshot(page, "dopo_tipo")
 
     # --- Step 5: Compila indirizzo (modalità manuale) ---
@@ -155,8 +146,6 @@ def insert_property(page):
     wait(page, 3000)
     screenshot(page, "campi_manuali")
 
-    # Paese: Italia è già selezionato di default
-    # Compila i campi con selettori data-test
     page.locator('[data-test="stateOrProvince"]').fill("Sardegna")
     wait(page, 1000)
     page.locator('[data-test="city"]').fill("Stintino")
@@ -171,57 +160,186 @@ def insert_property(page):
 
     # --- Step 6: Continua (indirizzo) ---
     print("Step 6: Continua (indirizzo)")
-    click_continua(page)
+    click_save(page)
     screenshot(page, "dopo_indirizzo")
 
     # --- Step 7: Mappa — Continua senza modificare pin ---
     print("Step 7: Mappa — Continua")
-    click_continua(page)
+    click_save(page)
     screenshot(page, "dopo_mappa")
 
-    # --- Step 8: DIAGNOSTICA ospiti e camere ---
-    print("Step 8: DIAGNOSTICA ospiti e camere")
-    screenshot(page, "ospiti_camere_pagina")
+    # --- Step 8: Ospiti e camere (data-test counters) ---
+    print("Step 8: Ospiti e camere")
+    # Ospiti: default 1, click + 3 volte → 4
+    for _ in range(3):
+        page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
+        page.wait_for_timeout(500)
+    # Camere da letto: default 1, click + 1 volta → 2
+    page.locator('[data-test="bedroom"] [data-test="counter-add-btn"]').click()
+    page.wait_for_timeout(500)
+    # Soggiorno: default 0, click + 1 volta → 1
+    page.locator('[data-test="living_room"] [data-test="counter-add-btn"]').click()
+    page.wait_for_timeout(500)
+    # Bagno: default 0, click + 1 volta → 1
+    page.locator('[data-test="bath_room"] [data-test="counter-add-btn"]').click()
+    page.wait_for_timeout(500)
 
+    # Bambini ammessi: già checked di default
+    # Animali: lascia unchecked (no)
+    wait(page)
+    screenshot(page, "ospiti_camere")
+
+    # --- Step 9: Continua (ospiti) ---
+    print("Step 9: Continua (ospiti)")
+    click_save(page)
+    screenshot(page, "dopo_ospiti")
+
+    # --- Step 10: Configura letti ---
+    print("Step 10: Configura letti")
+    # Dump HTML per diagnostica (prima volta su questa pagina)
     html = page.content()
-    with open(f"{SCREENSHOT_DIR}/step08_ospiti.html", "w", encoding="utf-8") as f:
+    with open(f"{SCREENSHOT_DIR}/step10_letti.html", "w", encoding="utf-8") as f:
         f.write(html)
-    print("HTML pagina ospiti salvato.")
 
-    # Dump tutti i data-test
-    print("\n=== DATA-TEST ATTRIBUTES ===")
+    # Dump data-test per questa pagina
     dt_matches = re.findall(r'data-test="[^"]*"', html)
+    print("  data-test su pagina letti:")
     for m in sorted(set(dt_matches)):
-        print(f"  {m}")
+        print(f"    {m}")
 
-    # Dump tutti i bottoni (primi 40)
-    print("\n=== BUTTONS ===")
-    buttons = re.findall(r'<button[^>]*>.*?</button>', html, re.DOTALL)
-    for i, b in enumerate(buttons[:40]):
-        print(f"  [{i}] {b[:300]}")
-        print("  ---")
+    # Camera 1: 1 Letto matrimoniale
+    # Camera 2: 2 Letto singolo
+    # Try data-test based approach first, fallback to text-based
+    camera_sections = page.locator("[class*='camera'], [class*='room'], [class*='Camera']")
+    if camera_sections.count() >= 2:
+        cam1 = camera_sections.nth(0)
+        mat_plus = cam1.get_by_text("Letto matrimoniale").locator("..").locator("..").locator("button").last
+        if mat_plus.count() > 0:
+            mat_plus.click()
+        cam2 = camera_sections.nth(1)
+        sin_plus = cam2.get_by_text("Letto singolo").locator("..").locator("..").locator("button").last
+        if sin_plus.count() > 0:
+            sin_plus.click()
+            page.wait_for_timeout(500)
+            sin_plus.click()
+    else:
+        # Fallback: find all counter-add-btn and use positional approach
+        add_btns = page.locator('[data-test="counter-add-btn"]')
+        count = add_btns.count()
+        print(f"  Trovati {count} counter-add-btn nella pagina letti")
+        if count >= 2:
+            # First + is likely Letto matrimoniale, click 1x
+            add_btns.nth(0).click()
+            page.wait_for_timeout(500)
+            # Second + is likely Letto singolo, click 2x
+            add_btns.nth(1).click()
+            page.wait_for_timeout(500)
+            add_btns.nth(1).click()
 
-    # Contesto attorno a "ospiti" / "guest"
-    print("\n=== CONTESTO 'ospiti'/'guest' ===")
-    matches = re.findall(r'.{200}(?:ospiti|guest|Ospiti|Guest).{200}', html, re.IGNORECASE)
-    for m in matches:
-        print(m[:500])
-        print("---")
+    wait(page)
+    screenshot(page, "letti_configurati")
 
-    # Contesto attorno a "bedroom" / "camere"
-    print("\n=== CONTESTO 'bedroom'/'camere' ===")
-    matches = re.findall(r'.{200}(?:bedroom|camere|Bedroom|Camere).{200}', html, re.IGNORECASE)
-    for m in matches:
-        print(m[:500])
-        print("---")
+    # --- Step 11: Continua (letti) ---
+    print("Step 11: Continua (letti)")
+    click_save(page)
+    screenshot(page, "dopo_letti")
 
-    # Tutti gli aria-label
-    print("\n=== ARIA-LABEL ===")
-    aria_matches = re.findall(r'aria-label="[^"]*"', html)
-    for m in sorted(set(aria_matches)):
-        print(f"  {m}")
+    # --- Step 12: Upload 5 foto ---
+    print("Step 12: Upload foto")
+    file_input = page.locator("input[type='file']")
+    file_input.set_input_files(photo_paths)
+    wait(page, 10_000)
+    screenshot(page, "foto_caricate")
 
-    print("\nDIAGNOSTICA OSPITI COMPLETATA.")
+    # --- Step 13: Continua (foto) ---
+    print("Step 13: Continua (foto)")
+    click_save(page)
+    screenshot(page, "dopo_foto")
+
+    # --- Step 14: Seleziona servizi ---
+    print("Step 14: Servizi")
+    servizi = ["Aria condizionata", "Wi-Fi", "Parcheggio", "Lavatrice", "Forno"]
+    for servizio in servizi:
+        btn = page.get_by_text(servizio, exact=True)
+        if btn.count() > 0:
+            btn.first.click()
+            page.wait_for_timeout(500)
+            print(f"  Servizio selezionato: {servizio}")
+    wait(page)
+    screenshot(page, "servizi_selezionati")
+
+    # --- Step 15: Continua (servizi) ---
+    print("Step 15: Continua (servizi)")
+    click_save(page)
+    screenshot(page, "dopo_servizi")
+
+    # --- Step 16: Click "Li scrivo io" ---
+    print("Step 16: Li scrivo io")
+    page.get_by_text("Li scrivo io").click()
+    wait(page)
+    screenshot(page, "li_scrivo_io")
+
+    # --- Step 17: Titolo e descrizione ---
+    print("Step 17: Titolo e descrizione")
+    titolo = "Appartamento Test Stintino - Vista Mare"
+
+    titolo_field = page.get_by_label("Titolo")
+    if titolo_field.count() > 0:
+        titolo_field.fill(titolo)
+    else:
+        page.locator("input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']").first.fill(titolo)
+    wait(page, 1000)
+
+    desc_field = page.get_by_label("Descrizione")
+    if desc_field.count() > 0:
+        desc_field.fill(DESCRIPTION)
+    else:
+        page.locator("textarea").first.fill(DESCRIPTION)
+    wait(page, 1000)
+    screenshot(page, "titolo_descrizione")
+
+    # --- Step 18: Continua (titolo/descrizione) ---
+    print("Step 18: Continua (titolo/descrizione)")
+    click_save(page)
+    screenshot(page, "dopo_titolo_desc")
+
+    # --- Step 19: Prezzo ---
+    print("Step 19: Prezzo")
+    prezzo_field = page.get_by_label("Prezzo")
+    if prezzo_field.count() > 0:
+        prezzo_field.fill("120")
+    else:
+        page.locator("input[type='number'], input[name*='prezz'], input[name*='price']").first.fill("120")
+    wait(page)
+    screenshot(page, "prezzo")
+
+    # --- Step 20: Continua (prezzo) ---
+    print("Step 20: Continua (prezzo)")
+    click_save(page)
+    screenshot(page, "dopo_prezzo")
+
+    # --- Step 21: Impostazioni avanzate prezzi — skip, Continua ---
+    print("Step 21: Skip impostazioni prezzi avanzate")
+    click_save(page)
+    screenshot(page, "dopo_prezzi_avanzati")
+
+    # --- Step 22: Calendario — lascia default, Continua ---
+    print("Step 22: Calendario")
+    click_save(page)
+    screenshot(page, "dopo_calendario")
+
+    # --- Step 23: Requisiti regionali — lascia CIN/CIR vuoti, Continua ---
+    print("Step 23: Requisiti regionali")
+    click_save(page)
+    screenshot(page, "dopo_requisiti")
+
+    # --- Step 24: Pagina finale — solo screenshot, NON inviare ---
+    print("Step 24: Pagina finale — SOLO screenshot")
+    wait(page)
+    screenshot(page, "pagina_finale")
+    with open(f"{SCREENSHOT_DIR}/pagina_finale.html", "w", encoding="utf-8") as f:
+        f.write(page.content())
+    print("Flusso completato! NON inviato per la verifica.")
 
 
 def main():
