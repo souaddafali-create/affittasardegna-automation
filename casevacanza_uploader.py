@@ -157,50 +157,35 @@ def insert_property(page):
     click_continua(page)
     screenshot(page, "dopo_tipo")
 
-    # --- Step 5: DIAGNOSTICA indirizzo — solo dump HTML, nessun fill ---
-    print("Step 5: DIAGNOSTICA pagina indirizzo")
-    screenshot(page, "indirizzo_pagina")
+    # --- Step 5: Clicca "Inseriscilo manualmente" e diagnostica campi ---
+    print("Step 5: Indirizzo — click 'Inseriscilo manualmente'")
+    screenshot(page, "indirizzo_pagina_default")
 
+    page.get_by_text("Inseriscilo manualmente").click()
+    wait(page, 3000)
+    screenshot(page, "indirizzo_campi_manuali")
+
+    # Diagnostica: dump HTML e form elements dei campi manuali
     html = page.content()
-    with open(f"{SCREENSHOT_DIR}/step05_indirizzo.html", "w", encoding="utf-8") as f:
+    with open(f"{SCREENSHOT_DIR}/step05_campi_manuali.html", "w", encoding="utf-8") as f:
         f.write(html)
-    print("HTML completo salvato in step05_indirizzo.html")
+    print("HTML campi manuali salvato.")
 
-    # Dump tutti gli <input>, <select>, <textarea>
-    print("\n=== FORM ELEMENTS ===")
+    print("\n=== FORM ELEMENTS (campi manuali) ===")
     inputs = re.findall(r'<(?:input|select|textarea)[^>]*>', html)
     for inp in inputs:
         print(inp)
     print(f"=== TOTALE: {len(inputs)} elementi ===\n")
 
-    # Contesto attorno a "provincia" (case-insensitive)
-    print("=== CONTESTO 'provincia' ===")
-    matches = re.findall(r'.{300}provincia.{300}', html, re.IGNORECASE)
-    for m in matches:
-        print(m)
-        print("---")
-
-    # Contesto attorno a "city" / "città"
-    print("=== CONTESTO 'citt' ===")
-    matches = re.findall(r'.{300}citt.{300}', html, re.IGNORECASE)
-    for m in matches:
-        print(m)
-        print("---")
-
-    # Contesto attorno a "street" / "via"
-    print("=== CONTESTO 'street' / 'via' ===")
-    matches = re.findall(r'.{200}street.{200}', html, re.IGNORECASE)
-    for m in matches:
-        print(m)
-        print("---")
-
-    # Tutti gli attributi name e id degli input
     print("=== INPUT NAME/ID ===")
-    name_ids = re.findall(r'<(?:input|select|textarea)[^>]*(?:name|id)=["\']([^"\']+)["\'][^>]*>', html)
+    name_ids = re.findall(
+        r'<(?:input|select|textarea)[^>]*(?:name|id)=["\']([^"\']+)["\'][^>]*>',
+        html,
+    )
     for ni in name_ids:
         print(f"  {ni}")
 
-    print("\nDIAGNOSTICA COMPLETATA. Controlla i log e step05_indirizzo.html per i selettori.")
+    print("\nDIAGNOSTICA COMPLETATA — controlla log e artifact per i selettori.")
 
 
 def main():
