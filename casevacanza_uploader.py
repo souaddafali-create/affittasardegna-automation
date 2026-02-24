@@ -211,25 +211,27 @@ def insert_property(page):
 
     def do_step10():
         save_html(page, "step10_letti")
-        # Dump data-test for debugging
-        html = page.content()
-        dt_matches = re.findall(r'data-test="[^"]*"', html)
-        print("  data-test su pagina letti:")
-        for m in sorted(set(dt_matches)):
-            print(f"    {m}")
-
-        # Try positional counter-add-btn approach
         add_btns = page.locator('[data-test="counter-add-btn"]')
         count = add_btns.count()
         print(f"  Trovati {count} counter-add-btn nella pagina letti")
-        if count >= 2:
-            # First + → Letto matrimoniale 1x
-            add_btns.nth(0).click()
-            page.wait_for_timeout(500)
-            # Second + → Letto singolo 2x
-            add_btns.nth(1).click()
-            page.wait_for_timeout(500)
-            add_btns.nth(1).click()
+
+        # Camera da letto 1: 1 Letto matrimoniale (indice 1)
+        # Indici 0-8: king, matrimoniale, queen, singolo, ...
+        print("  Camera 1: +1 Letto matrimoniale (indice 1)")
+        add_btns.nth(1).click()
+        page.wait_for_timeout(500)
+        screenshot(page, "camera1_configurata")
+
+        # Camera da letto 2: 2 Letto singolo (indice 12)
+        # Indici 9-17: king, matrimoniale, queen, singolo, ...
+        page.get_by_text("Camera da letto 2").scroll_into_view_if_needed()
+        page.wait_for_timeout(500)
+        print("  Camera 2: +2 Letto singolo (indice 12)")
+        add_btns.nth(12).click()
+        page.wait_for_timeout(500)
+        add_btns.nth(12).click()
+        page.wait_for_timeout(500)
+
         wait(page)
         screenshot(page, "letti_configurati")
 
