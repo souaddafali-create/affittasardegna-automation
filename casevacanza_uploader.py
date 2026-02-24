@@ -43,8 +43,21 @@ def main() -> None:
         page = browser.new_page(user_agent=USER_AGENT)
         try:
             login(page)
-            # Debug: screenshot + HTML della home dopo il login
             page.wait_for_timeout(3_000)
+
+            # Chiudi popup cookies cliccando "Ok"
+            ok_btn = page.locator("button", has_text="Ok")
+            if ok_btn.count() > 0:
+                ok_btn.first.click()
+                print("Popup cookies chiuso.")
+                page.wait_for_timeout(1_000)
+
+            # Clicca su "Proprietà" nel menu in alto
+            page.locator("a", has_text="Proprietà").first.click()
+            page.wait_for_timeout(3_000)
+            print("Navigato a Proprietà.")
+
+            # Debug: screenshot + HTML della pagina Proprietà
             page.screenshot(path="home_after_login.png", full_page=True)
             print("Screenshot salvato: home_after_login.png")
             html = page.content()
