@@ -32,3 +32,12 @@ jobs:
           CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
           CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
         run: xvfb-run python casevacanza_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: |
+            home_after_login.png
+            home_after_login.html
