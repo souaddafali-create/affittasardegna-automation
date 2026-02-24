@@ -42,6 +42,14 @@ def screenshot(page, name):
     print(f"  Screenshot: {path}")
 
 
+def save_html(page, name):
+    """Save full HTML of current page for debugging."""
+    path = f"{SCREENSHOT_DIR}/{name}.html"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(page.content())
+    print(f"  HTML salvato: {path}")
+
+
 def wait(page, ms=5000):
     """Wait between steps — CaseVacanza is slow."""
     page.wait_for_timeout(ms)
@@ -109,6 +117,17 @@ def navigate_to_add_property(page):
     print("Navigato a Aggiungi una proprietà.")
 
 
+def try_step(page, step_name, func):
+    """Execute a step wrapped in try/except. Always screenshot."""
+    try:
+        func()
+        print(f"  OK: {step_name}")
+    except Exception as e:
+        print(f"  ERRORE in {step_name}: {e}")
+        screenshot(page, f"errore_{step_name}")
+        save_html(page, f"errore_{step_name}")
+
+
 def insert_property(page):
     """Complete the full property insertion wizard."""
     photo_paths = download_placeholder_photos(5)
@@ -170,22 +189,15 @@ def insert_property(page):
 
     # --- Step 8: Ospiti e camere (data-test counters) ---
     print("Step 8: Ospiti e camere")
-    # Ospiti: default 1, click + 3 volte → 4
     for _ in range(3):
         page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
         page.wait_for_timeout(500)
-    # Camere da letto: default 1, click + 1 volta → 2
     page.locator('[data-test="bedroom"] [data-test="counter-add-btn"]').click()
     page.wait_for_timeout(500)
-    # Soggiorno: default 0, click + 1 volta → 1
     page.locator('[data-test="living_room"] [data-test="counter-add-btn"]').click()
     page.wait_for_timeout(500)
-    # Bagno: default 0, click + 1 volta → 1
     page.locator('[data-test="bath_room"] [data-test="counter-add-btn"]').click()
     page.wait_for_timeout(500)
-
-    # Bambini ammessi: già checked di default
-    # Animali: lascia unchecked (no)
     wait(page)
     screenshot(page, "ospiti_camere")
 
@@ -196,150 +208,246 @@ def insert_property(page):
 
     # --- Step 10: Configura letti ---
     print("Step 10: Configura letti")
-    # Dump HTML per diagnostica (prima volta su questa pagina)
-    html = page.content()
-    with open(f"{SCREENSHOT_DIR}/step10_letti.html", "w", encoding="utf-8") as f:
-        f.write(html)
 
-    # Dump data-test per questa pagina
-    dt_matches = re.findall(r'data-test="[^"]*"', html)
-    print("  data-test su pagina letti:")
-    for m in sorted(set(dt_matches)):
-        print(f"    {m}")
+    def do_step10():
+        save_html(page, "step10_letti")
+        # Dump data-test for debugging
+        html = page.content()
+        dt_matches = re.findall(r'data-test="[^"]*"', html)
+        print("  data-test su pagina letti:")
+        for m in sorted(set(dt_matches)):
+            print(f"    {m}")
 
-    # Camera 1: 1 Letto matrimoniale
-    # Camera 2: 2 Letto singolo
-    # Try data-test based approach first, fallback to text-based
-    camera_sections = page.locator("[class*='camera'], [class*='room'], [class*='Camera']")
-    if camera_sections.count() >= 2:
-        cam1 = camera_sections.nth(0)
-        mat_plus = cam1.get_by_text("Letto matrimoniale").locator("..").locator("..").locator("button").last
-        if mat_plus.count() > 0:
-            mat_plus.click()
-        cam2 = camera_sections.nth(1)
-        sin_plus = cam2.get_by_text("Letto singolo").locator("..").locator("..").locator("button").last
-        if sin_plus.count() > 0:
-            sin_plus.click()
-            page.wait_for_timeout(500)
-            sin_plus.click()
-    else:
-        # Fallback: find all counter-add-btn and use positional approach
+        # Try positional counter-add-btn approach
         add_btns = page.locator('[data-test="counter-add-btn"]')
         count = add_btns.count()
         print(f"  Trovati {count} counter-add-btn nella pagina letti")
         if count >= 2:
-            # First + is likely Letto matrimoniale, click 1x
+            # First + → Letto matrimoniale 1x
             add_btns.nth(0).click()
             page.wait_for_timeout(500)
-            # Second + is likely Letto singolo, click 2x
+            # Second + → Letto singolo 2x
             add_btns.nth(1).click()
             page.wait_for_timeout(500)
             add_btns.nth(1).click()
+        wait(page)
+        screenshot(page, "letti_configurati")
 
-    wait(page)
-    screenshot(page, "letti_configurati")
+    try_step(page, "step10_letti", do_step10)
 
     # --- Step 11: Continua (letti) ---
     print("Step 11: Continua (letti)")
-    click_save(page)
-    screenshot(page, "dopo_letti")
+
+    def do_step11():
+        click_save(page)
+        screenshot(page, "dopo_letti")
+
+    try_step(page, "step11_continua_letti", do_step11)
 
     # --- Step 12: Upload 5 foto ---
     print("Step 12: Upload foto")
-    file_input = page.locator("input[type='file']")
-    file_input.set_input_files(photo_paths)
-    wait(page, 10_000)
-    screenshot(page, "foto_caricate")
+
+    def do_step12():
+        screenshot(page, "foto_pagina")
+        save_html(page, "step12_foto")
+
+        uploaded = False
+
+        # Strategy 1: standard input[type="file"]
+        try:
+            fi = page.locator("input[type='file']")
+            if fi.count() > 0:
+                fi.set_input_files(photo_paths, timeout=5000)
+                uploaded = True
+                print("  Upload via input[type='file']")
+        except Exception as e:
+            print(f"  Strategy 1 fallita: {e}")
+
+        # Strategy 2: input[accept*="image"]
+        if not uploaded:
+            try:
+                fi = page.locator("input[accept*='image']")
+                if fi.count() > 0:
+                    fi.set_input_files(photo_paths, timeout=5000)
+                    uploaded = True
+                    print("  Upload via input[accept*='image']")
+            except Exception as e:
+                print(f"  Strategy 2 fallita: {e}")
+
+        # Strategy 3: force display on hidden input
+        if not uploaded:
+            try:
+                fi = page.locator("input[type='file']")
+                if fi.count() > 0:
+                    fi.evaluate("el => el.style.display = 'block'")
+                    fi.set_input_files(photo_paths, timeout=5000)
+                    uploaded = True
+                    print("  Upload via forced display input[type='file']")
+            except Exception as e:
+                print(f"  Strategy 3 fallita: {e}")
+
+        if uploaded:
+            wait(page, 10_000)
+            screenshot(page, "foto_caricate")
+        else:
+            print("  SKIP foto: nessuna strategia ha funzionato")
+            screenshot(page, "foto_skip")
+
+    try_step(page, "step12_foto", do_step12)
 
     # --- Step 13: Continua (foto) ---
     print("Step 13: Continua (foto)")
-    click_save(page)
-    screenshot(page, "dopo_foto")
+
+    def do_step13():
+        click_save(page)
+        screenshot(page, "dopo_foto")
+
+    try_step(page, "step13_continua_foto", do_step13)
 
     # --- Step 14: Seleziona servizi ---
     print("Step 14: Servizi")
-    servizi = ["Aria condizionata", "Wi-Fi", "Parcheggio", "Lavatrice", "Forno"]
-    for servizio in servizi:
-        btn = page.get_by_text(servizio, exact=True)
-        if btn.count() > 0:
-            btn.first.click()
-            page.wait_for_timeout(500)
-            print(f"  Servizio selezionato: {servizio}")
-    wait(page)
-    screenshot(page, "servizi_selezionati")
+
+    def do_step14():
+        screenshot(page, "servizi_pagina")
+        save_html(page, "step14_servizi")
+        servizi = ["Aria condizionata", "Wi-Fi", "Parcheggio", "Lavatrice", "Forno"]
+        for servizio in servizi:
+            try:
+                btn = page.get_by_text(servizio, exact=True)
+                if btn.count() > 0:
+                    btn.first.click()
+                    page.wait_for_timeout(500)
+                    print(f"  Servizio selezionato: {servizio}")
+                else:
+                    print(f"  Servizio non trovato: {servizio}")
+            except Exception as e:
+                print(f"  Errore servizio {servizio}: {e}")
+        wait(page)
+        screenshot(page, "servizi_selezionati")
+
+    try_step(page, "step14_servizi", do_step14)
 
     # --- Step 15: Continua (servizi) ---
     print("Step 15: Continua (servizi)")
-    click_save(page)
-    screenshot(page, "dopo_servizi")
+
+    def do_step15():
+        click_save(page)
+        screenshot(page, "dopo_servizi")
+
+    try_step(page, "step15_continua_servizi", do_step15)
 
     # --- Step 16: Click "Li scrivo io" ---
     print("Step 16: Li scrivo io")
-    page.get_by_text("Li scrivo io").click()
-    wait(page)
-    screenshot(page, "li_scrivo_io")
+
+    def do_step16():
+        screenshot(page, "titolo_desc_pagina")
+        save_html(page, "step16_titolo_desc")
+        page.get_by_text("Li scrivo io").click()
+        wait(page)
+        screenshot(page, "li_scrivo_io")
+
+    try_step(page, "step16_li_scrivo_io", do_step16)
 
     # --- Step 17: Titolo e descrizione ---
     print("Step 17: Titolo e descrizione")
-    titolo = "Appartamento Test Stintino - Vista Mare"
 
-    titolo_field = page.get_by_label("Titolo")
-    if titolo_field.count() > 0:
-        titolo_field.fill(titolo)
-    else:
-        page.locator("input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']").first.fill(titolo)
-    wait(page, 1000)
+    def do_step17():
+        titolo = "Appartamento Test Stintino - Vista Mare"
 
-    desc_field = page.get_by_label("Descrizione")
-    if desc_field.count() > 0:
-        desc_field.fill(DESCRIPTION)
-    else:
-        page.locator("textarea").first.fill(DESCRIPTION)
-    wait(page, 1000)
-    screenshot(page, "titolo_descrizione")
+        titolo_field = page.get_by_label("Titolo")
+        if titolo_field.count() > 0:
+            titolo_field.fill(titolo)
+        else:
+            page.locator("input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']").first.fill(titolo)
+        wait(page, 1000)
+
+        desc_field = page.get_by_label("Descrizione")
+        if desc_field.count() > 0:
+            desc_field.fill(DESCRIPTION)
+        else:
+            page.locator("textarea").first.fill(DESCRIPTION)
+        wait(page, 1000)
+        screenshot(page, "titolo_descrizione")
+
+    try_step(page, "step17_titolo_desc", do_step17)
 
     # --- Step 18: Continua (titolo/descrizione) ---
     print("Step 18: Continua (titolo/descrizione)")
-    click_save(page)
-    screenshot(page, "dopo_titolo_desc")
+
+    def do_step18():
+        click_save(page)
+        screenshot(page, "dopo_titolo_desc")
+
+    try_step(page, "step18_continua_titolo", do_step18)
 
     # --- Step 19: Prezzo ---
     print("Step 19: Prezzo")
-    prezzo_field = page.get_by_label("Prezzo")
-    if prezzo_field.count() > 0:
-        prezzo_field.fill("120")
-    else:
-        page.locator("input[type='number'], input[name*='prezz'], input[name*='price']").first.fill("120")
-    wait(page)
-    screenshot(page, "prezzo")
+
+    def do_step19():
+        screenshot(page, "prezzo_pagina")
+        save_html(page, "step19_prezzo")
+        prezzo_field = page.get_by_label("Prezzo")
+        if prezzo_field.count() > 0:
+            prezzo_field.fill("120")
+        else:
+            page.locator("input[type='number'], input[name*='prezz'], input[name*='price']").first.fill("120")
+        wait(page)
+        screenshot(page, "prezzo")
+
+    try_step(page, "step19_prezzo", do_step19)
 
     # --- Step 20: Continua (prezzo) ---
     print("Step 20: Continua (prezzo)")
-    click_save(page)
-    screenshot(page, "dopo_prezzo")
 
-    # --- Step 21: Impostazioni avanzate prezzi — skip, Continua ---
+    def do_step20():
+        click_save(page)
+        screenshot(page, "dopo_prezzo")
+
+    try_step(page, "step20_continua_prezzo", do_step20)
+
+    # --- Step 21: Impostazioni avanzate prezzi — skip ---
     print("Step 21: Skip impostazioni prezzi avanzate")
-    click_save(page)
-    screenshot(page, "dopo_prezzi_avanzati")
 
-    # --- Step 22: Calendario — lascia default, Continua ---
+    def do_step21():
+        screenshot(page, "prezzi_avanzati_pagina")
+        save_html(page, "step21_prezzi_avanzati")
+        click_save(page)
+        screenshot(page, "dopo_prezzi_avanzati")
+
+    try_step(page, "step21_prezzi_avanzati", do_step21)
+
+    # --- Step 22: Calendario ---
     print("Step 22: Calendario")
-    click_save(page)
-    screenshot(page, "dopo_calendario")
 
-    # --- Step 23: Requisiti regionali — lascia CIN/CIR vuoti, Continua ---
+    def do_step22():
+        screenshot(page, "calendario_pagina")
+        save_html(page, "step22_calendario")
+        click_save(page)
+        screenshot(page, "dopo_calendario")
+
+    try_step(page, "step22_calendario", do_step22)
+
+    # --- Step 23: Requisiti regionali ---
     print("Step 23: Requisiti regionali")
-    click_save(page)
-    screenshot(page, "dopo_requisiti")
+
+    def do_step23():
+        screenshot(page, "requisiti_pagina")
+        save_html(page, "step23_requisiti")
+        click_save(page)
+        screenshot(page, "dopo_requisiti")
+
+    try_step(page, "step23_requisiti", do_step23)
 
     # --- Step 24: Pagina finale — solo screenshot, NON inviare ---
     print("Step 24: Pagina finale — SOLO screenshot")
-    wait(page)
-    screenshot(page, "pagina_finale")
-    with open(f"{SCREENSHOT_DIR}/pagina_finale.html", "w", encoding="utf-8") as f:
-        f.write(page.content())
-    print("Flusso completato! NON inviato per la verifica.")
+
+    def do_step24():
+        wait(page)
+        screenshot(page, "pagina_finale")
+        save_html(page, "step24_finale")
+        print("Flusso completato! NON inviato per la verifica.")
+
+    try_step(page, "step24_finale", do_step24)
 
 
 def main():
@@ -357,8 +465,7 @@ def main():
         finally:
             try:
                 screenshot(page, "final_state")
-                with open(f"{SCREENSHOT_DIR}/final_state.html", "w", encoding="utf-8") as f:
-                    f.write(page.content())
+                save_html(page, "final_state")
             except Exception:
                 pass
             browser.close()
