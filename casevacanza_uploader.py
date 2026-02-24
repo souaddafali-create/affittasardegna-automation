@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import urllib.request
 
@@ -156,237 +157,50 @@ def insert_property(page):
     click_continua(page)
     screenshot(page, "dopo_tipo")
 
-    # --- Step 5: Compila indirizzo ---
-    print("Step 5: Compila indirizzo")
-
-    # Debug: salva HTML per ispezionare la struttura dei campi
+    # --- Step 5: DIAGNOSTICA indirizzo — solo dump HTML, nessun fill ---
+    print("Step 5: DIAGNOSTICA pagina indirizzo")
     screenshot(page, "indirizzo_pagina")
+
     html = page.content()
     with open(f"{SCREENSHOT_DIR}/step05_indirizzo.html", "w", encoding="utf-8") as f:
         f.write(html)
-    print("HTML pagina indirizzo salvato.")
+    print("HTML completo salvato in step05_indirizzo.html")
 
-    # Floating labels: trova label → input più vicino (sibling o parent)
-    def fill_field(label_text, value):
-        """Try multiple strategies to fill a field by its label text."""
-        # Strategy 1: xpath — input following the label
-        xpath_loc = page.locator(
-            f'//label[contains(text(),"{label_text}")]/following::input[1]'
-        )
-        if xpath_loc.count() > 0:
-            xpath_loc.fill(value)
-            print(f"  {label_text} → '{value}' (xpath)")
-            return
-        # Strategy 2: text label → parent → input
-        parent_loc = page.locator(f"text={label_text}").locator("..").locator("input")
-        if parent_loc.count() > 0:
-            parent_loc.first.fill(value)
-            print(f"  {label_text} → '{value}' (parent)")
-            return
-        # Strategy 3: grandparent
-        gp_loc = page.locator(f"text={label_text}").locator("../..").locator("input")
-        if gp_loc.count() > 0:
-            gp_loc.first.fill(value)
-            print(f"  {label_text} → '{value}' (grandparent)")
-            return
-        raise Exception(f"Campo '{label_text}' non trovato con nessuna strategia")
+    # Dump tutti gli <input>, <select>, <textarea>
+    print("\n=== FORM ELEMENTS ===")
+    inputs = re.findall(r'<(?:input|select|textarea)[^>]*>', html)
+    for inp in inputs:
+        print(inp)
+    print(f"=== TOTALE: {len(inputs)} elementi ===\n")
 
-    fill_field("Stato o provincia", "Sardegna")
-    wait(page, 2000)
-    # Autocomplete: clicca il primo suggerimento se presente
-    suggestion = page.locator(
-        "[class*='suggestion'], [class*='option'], [role='option'], "
-        "[class*='dropdown'] li, [class*='autocomplete'] li"
-    ).first
-    if suggestion.count() > 0:
-        suggestion.click()
-        wait(page, 1000)
-    screenshot(page, "provincia_compilata")
+    # Contesto attorno a "provincia" (case-insensitive)
+    print("=== CONTESTO 'provincia' ===")
+    matches = re.findall(r'.{300}provincia.{300}', html, re.IGNORECASE)
+    for m in matches:
+        print(m)
+        print("---")
 
-    fill_field("Città", "Stintino")
-    wait(page, 2000)
-    suggestion = page.locator(
-        "[class*='suggestion'], [class*='option'], [role='option'], "
-        "[class*='dropdown'] li, [class*='autocomplete'] li"
-    ).first
-    if suggestion.count() > 0:
-        suggestion.click()
-        wait(page, 1000)
-    screenshot(page, "citta_compilata")
+    # Contesto attorno a "city" / "città"
+    print("=== CONTESTO 'citt' ===")
+    matches = re.findall(r'.{300}citt.{300}', html, re.IGNORECASE)
+    for m in matches:
+        print(m)
+        print("---")
 
-    fill_field("Via", "Via Sassari")
-    wait(page, 1000)
+    # Contesto attorno a "street" / "via"
+    print("=== CONTESTO 'street' / 'via' ===")
+    matches = re.findall(r'.{200}street.{200}', html, re.IGNORECASE)
+    for m in matches:
+        print(m)
+        print("---")
 
-    fill_field("Numero civico", "10")
-    wait(page, 1000)
+    # Tutti gli attributi name e id degli input
+    print("=== INPUT NAME/ID ===")
+    name_ids = re.findall(r'<(?:input|select|textarea)[^>]*(?:name|id)=["\']([^"\']+)["\'][^>]*>', html)
+    for ni in name_ids:
+        print(f"  {ni}")
 
-    fill_field("Codice postale", "07040")
-    wait(page, 1000)
-
-    screenshot(page, "indirizzo_compilato")
-
-    # --- Step 6: Continua (indirizzo) ---
-    print("Step 6: Continua (indirizzo)")
-    click_continua(page)
-    screenshot(page, "dopo_indirizzo")
-
-    # --- Step 7: Mappa — Continua senza modificare pin ---
-    print("Step 7: Mappa — Continua")
-    click_continua(page)
-    screenshot(page, "dopo_mappa")
-
-    # --- Step 8: Ospiti e camere ---
-    print("Step 8: Ospiti e camere")
-    # Ospiti: default 1, click + 3 volte → 4
-    click_plus(page, "Ospiti", 3)
-    # Camere da letto: default 1, click + 1 volta → 2
-    click_plus(page, "Camere da letto", 1)
-    # Soggiorno: default 0, click + 1 volta → 1
-    click_plus(page, "Soggiorno", 1)
-    # Bagno: default 0 o 1, click + 1 volta
-    click_plus(page, "Bagno", 1)
-    wait(page)
-    screenshot(page, "ospiti_camere")
-
-    # --- Step 9: Continua (ospiti) ---
-    print("Step 9: Continua (ospiti)")
-    click_continua(page)
-    screenshot(page, "dopo_ospiti")
-
-    # --- Step 10: Configura letti ---
-    print("Step 10: Configura letti")
-    # Camera 1: 1 Letto matrimoniale (might be default)
-    # Camera 2: 2 Letto singolo
-    # Look for bed config sections — try clicking + on Letto matrimoniale
-    # and Letto singolo within their respective camera sections
-    camera_sections = page.locator("[class*='camera'], [class*='room'], [class*='Camera']")
-    if camera_sections.count() >= 2:
-        # Camera 1: Letto matrimoniale
-        cam1 = camera_sections.nth(0)
-        matrimoniale_plus = cam1.get_by_text("Letto matrimoniale").locator("..").locator("..").locator("button").last
-        if matrimoniale_plus.count() > 0:
-            matrimoniale_plus.click()
-        # Camera 2: 2x Letto singolo
-        cam2 = camera_sections.nth(1)
-        singolo_plus = cam2.get_by_text("Letto singolo").locator("..").locator("..").locator("button").last
-        if singolo_plus.count() > 0:
-            singolo_plus.click()
-            page.wait_for_timeout(500)
-            singolo_plus.click()
-    else:
-        # Fallback: use text-based approach
-        click_plus(page, "Letto matrimoniale", 1)
-        click_plus(page, "Letto singolo", 2)
-
-    wait(page)
-    screenshot(page, "letti_configurati")
-
-    # --- Step 11: Continua (letti) ---
-    print("Step 11: Continua (letti)")
-    click_continua(page)
-    screenshot(page, "dopo_letti")
-
-    # --- Step 12: Upload 5 foto ---
-    print("Step 12: Upload foto")
-    file_input = page.locator("input[type='file']")
-    file_input.set_input_files(photo_paths)
-    # Wait for uploads to complete
-    wait(page, 10_000)
-    screenshot(page, "foto_caricate")
-
-    # --- Step 13: Continua (foto) ---
-    print("Step 13: Continua (foto)")
-    click_continua(page)
-    screenshot(page, "dopo_foto")
-
-    # --- Step 14: Seleziona servizi ---
-    print("Step 14: Servizi")
-    servizi = ["Aria condizionata", "Wi-Fi", "Parcheggio", "Lavatrice", "Forno"]
-    for servizio in servizi:
-        btn = page.get_by_text(servizio, exact=True)
-        if btn.count() > 0:
-            btn.first.click()
-            page.wait_for_timeout(500)
-            print(f"  Servizio selezionato: {servizio}")
-    wait(page)
-    screenshot(page, "servizi_selezionati")
-
-    # --- Step 15: Continua (servizi) ---
-    print("Step 15: Continua (servizi)")
-    click_continua(page)
-    screenshot(page, "dopo_servizi")
-
-    # --- Step 16: Click "Li scrivo io" ---
-    print("Step 16: Li scrivo io")
-    page.get_by_text("Li scrivo io").click()
-    wait(page)
-    screenshot(page, "li_scrivo_io")
-
-    # --- Step 17: Titolo e descrizione ---
-    print("Step 17: Titolo e descrizione")
-    titolo = "Appartamento Test Stintino - Vista Mare"
-
-    # Titolo
-    titolo_field = page.get_by_label("Titolo")
-    if titolo_field.count() > 0:
-        titolo_field.fill(titolo)
-    else:
-        page.locator("input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']").first.fill(titolo)
-    wait(page, 1000)
-
-    # Descrizione
-    desc_field = page.get_by_label("Descrizione")
-    if desc_field.count() > 0:
-        desc_field.fill(DESCRIPTION)
-    else:
-        page.locator("textarea").first.fill(DESCRIPTION)
-    wait(page, 1000)
-
-    screenshot(page, "titolo_descrizione")
-
-    # --- Step 18: Continua (titolo/descrizione) ---
-    print("Step 18: Continua (titolo/descrizione)")
-    click_continua(page)
-    screenshot(page, "dopo_titolo_desc")
-
-    # --- Step 19: Prezzo ---
-    print("Step 19: Prezzo")
-    prezzo_field = page.get_by_label("Prezzo")
-    if prezzo_field.count() > 0:
-        prezzo_field.fill("120")
-    else:
-        page.locator("input[type='number'], input[name*='prezz'], input[name*='price']").first.fill("120")
-    wait(page)
-    screenshot(page, "prezzo")
-
-    # --- Step 20: Continua (prezzo) ---
-    print("Step 20: Continua (prezzo)")
-    click_continua(page)
-    screenshot(page, "dopo_prezzo")
-
-    # --- Step 21: Impostazioni avanzate prezzi — skip, Continua ---
-    print("Step 21: Skip impostazioni prezzi avanzate")
-    click_continua(page)
-    screenshot(page, "dopo_prezzi_avanzati")
-
-    # --- Step 22: Calendario — lascia default, Continua ---
-    print("Step 22: Calendario")
-    click_continua(page)
-    screenshot(page, "dopo_calendario")
-
-    # --- Step 23: Requisiti regionali — lascia CIN/CIR vuoti, Continua ---
-    print("Step 23: Requisiti regionali")
-    click_continua(page)
-    screenshot(page, "dopo_requisiti")
-
-    # --- Step 24: Pagina finale — solo screenshot, NON inviare ---
-    print("Step 24: Pagina finale — SOLO screenshot")
-    wait(page)
-    screenshot(page, "pagina_finale")
-    page.content()  # force page load
-    with open(f"{SCREENSHOT_DIR}/pagina_finale.html", "w", encoding="utf-8") as f:
-        f.write(page.content())
-    print("Flusso completato! NON inviato per la verifica.")
+    print("\nDIAGNOSTICA COMPLETATA. Controlla i log e step05_indirizzo.html per i selettori.")
 
 
 def main():
