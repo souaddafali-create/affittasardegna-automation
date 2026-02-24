@@ -210,23 +210,35 @@ def insert_property(page):
     print("Step 10: Configura letti")
 
     def do_step10():
-        save_html(page, "step10_letti")
+        save_html(page, "step10_letti_before")
         add_btns = page.locator('[data-test="counter-add-btn"]')
         count = add_btns.count()
-        print(f"  Trovati {count} counter-add-btn nella pagina letti")
+        print(f"  Trovati {count} counter-add-btn (prima di espandere camera 2)")
 
         # Camera da letto 1: 1 Letto matrimoniale (indice 1)
-        # Indici 0-8: king, matrimoniale, queen, singolo, ...
         print("  Camera 1: +1 Letto matrimoniale (indice 1)")
         add_btns.nth(1).click()
         page.wait_for_timeout(500)
         screenshot(page, "camera1_configurata")
 
-        # Camera da letto 2: 2 Letto singolo (indice 12)
-        # Indici 9-17: king, matrimoniale, queen, singolo, ...
+        # Espandi Camera da letto 2 (collapsed di default)
         page.get_by_text("Camera da letto 2").scroll_into_view_if_needed()
         page.wait_for_timeout(500)
-        print("  Camera 2: +2 Letto singolo (indice 12)")
+        page.get_by_text("Camera da letto 2").click()
+        page.wait_for_timeout(1000)
+        screenshot(page, "camera2_espansa")
+
+        # Ri-conta i bottoni dopo espansione
+        add_btns = page.locator('[data-test="counter-add-btn"]')
+        count_after = add_btns.count()
+        print(f"  Trovati {count_after} counter-add-btn (dopo espansione camera 2)")
+
+        # Camera da letto 2: 2 Letto singolo
+        # Indice 3 dentro camera 1 = singolo, quindi camera 2 singolo = indice originale + 9
+        # Con ~9 tipi per camera: singolo camera 2 = nth(9+3) = nth(12)
+        # Ma verifichiamo: se prima c'erano N bottoni e ora ce ne sono di più,
+        # i nuovi sono quelli della camera 2
+        print(f"  Camera 2: +2 Letto singolo (indice 12)")
         add_btns.nth(12).click()
         page.wait_for_timeout(500)
         add_btns.nth(12).click()
@@ -234,6 +246,7 @@ def insert_property(page):
 
         wait(page)
         screenshot(page, "letti_configurati")
+        save_html(page, "step10_letti_after")
 
     try_step(page, "step10_letti", do_step10)
 
