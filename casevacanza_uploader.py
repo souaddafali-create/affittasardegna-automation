@@ -7,10 +7,12 @@ PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
 
 def login(page) -> None:
     page.goto("https://my.casevacanza.it")
-    page.get_by_label("Email").fill(EMAIL)
-    page.get_by_label("Password").fill(PASSWORD)
-    page.get_by_role("button", name="Accedi").click()
-    page.wait_for_url("**/dashboard**")
+    # The SPA redirects to a Keycloak login page; wait for the form to appear
+    page.wait_for_selector("#username", timeout=15_000)
+    page.locator("#username").fill(EMAIL)
+    page.locator("#password").fill(PASSWORD)
+    page.locator("#kc-login").click()
+    page.wait_for_url("**/dashboard**", timeout=15_000)
     print("Login effettuato.")
 
 
