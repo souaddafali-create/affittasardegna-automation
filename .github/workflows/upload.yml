@@ -31,4 +31,4 @@ jobs:
         env:
           CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
           CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
-        run: python casevacanza_uploader.py
+        run: xvfb-run python casevacanza_uploader.py
