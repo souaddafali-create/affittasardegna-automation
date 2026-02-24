@@ -158,46 +158,40 @@ def insert_property(page):
 
     # --- Step 5: Compila indirizzo ---
     print("Step 5: Compila indirizzo")
-    # Provincia / Regione
-    provincia_field = page.get_by_label("Provincia")
-    if provincia_field.count() > 0:
-        provincia_field.fill("Sardegna")
-    else:
-        provincia_select = page.locator("select", has_text="Provincia")
-        if provincia_select.count() > 0:
-            provincia_select.select_option(label="Sardegna")
-    wait(page, 1000)
+
+    # Stato o provincia → Sardegna
+    page.get_by_label("Stato o provincia").fill("Sardegna")
+    wait(page, 2000)
+    # Se appare un suggerimento autocomplete, clicca il primo risultato
+    suggestion = page.locator("[class*='suggestion'], [class*='option'], [role='option']").first
+    if suggestion.count() > 0:
+        suggestion.click()
+        wait(page, 1000)
+    screenshot(page, "provincia_compilata")
 
     # Città
-    citta_field = page.get_by_label("Città")
-    if citta_field.count() > 0:
-        citta_field.fill("Stintino")
-    else:
-        page.get_by_placeholder("Città").fill("Stintino")
-    wait(page, 1000)
+    page.get_by_label("Città").fill("Stintino")
+    wait(page, 2000)
+    suggestion = page.locator("[class*='suggestion'], [class*='option'], [role='option']").first
+    if suggestion.count() > 0:
+        suggestion.click()
+        wait(page, 1000)
+    screenshot(page, "citta_compilata")
 
     # Via
-    via_field = page.get_by_label("Via")
-    if via_field.count() > 0:
-        via_field.fill("Via Sassari")
-    else:
-        page.get_by_placeholder("Via").fill("Via Sassari")
+    page.get_by_label("Via").fill("Via Sassari")
     wait(page, 1000)
 
     # Numero civico
-    civico_field = page.get_by_label("Numero civico")
-    if civico_field.count() > 0:
-        civico_field.fill("10")
-    else:
-        page.get_by_placeholder("Numero civico").fill("10")
+    page.get_by_label("Numero civico").fill("10")
     wait(page, 1000)
 
-    # CAP
-    cap_field = page.get_by_label("CAP")
+    # CAP / Codice postale
+    cap_field = page.get_by_label("Codice postale")
     if cap_field.count() > 0:
         cap_field.fill("07040")
     else:
-        page.get_by_placeholder("CAP").fill("07040")
+        page.get_by_label("CAP").fill("07040")
     wait(page, 1000)
 
     screenshot(page, "indirizzo_compilato")
