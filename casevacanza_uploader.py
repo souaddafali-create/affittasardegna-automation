@@ -8,11 +8,11 @@ PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
 def login(page) -> None:
     page.goto("https://my.casevacanza.it")
     # The SPA redirects to a Keycloak login page; wait for the form to appear
-    page.wait_for_selector("#username", timeout=15_000)
+    page.wait_for_selector("#username", timeout=30_000)
     page.locator("#username").fill(EMAIL)
     page.locator("#password").fill(PASSWORD)
     page.locator("#kc-login").click()
-    page.wait_for_url("**/dashboard**", timeout=15_000)
+    page.wait_for_url("**/dashboard**", timeout=30_000)
     print("Login effettuato.")
 
 
@@ -31,10 +31,16 @@ def insert_property(page) -> None:
     print("Proprietà inserita con successo.")
 
 
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+
 def main() -> None:
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page(user_agent=USER_AGENT)
         try:
             login(page)
             insert_property(page)
