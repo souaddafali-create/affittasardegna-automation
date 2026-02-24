@@ -71,7 +71,7 @@ def main() -> None:
             print("Navigato a Proprietà.")
 
             # Clicca "Aggiungi una proprietà"
-            page.locator("a", has_text="Aggiungi una proprietà").click()
+            page.get_by_text("Aggiungi una proprietà").click()
             page.wait_for_timeout(3_000)
             print("Navigato a Aggiungi una proprietà.")
 
