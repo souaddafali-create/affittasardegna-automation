@@ -12,7 +12,6 @@ on:
 jobs:
   esplora:
     runs-on: ubuntu-latest
-    environment: Default
 
     steps:
       - name: Checkout repository
