@@ -39,7 +39,7 @@ jobs:
 
       - name: Esplora Booking.com (screenshot + HTML ogni step)
         env:
-          BK_EMAIL:    ${{ secrets.BK_EMAIL }}
+          BK_EMAIL: ${{ secrets.BK_EMAIL }}
           BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
         run: xvfb-run --auto-servernum python3 booking_uploader.py
 
