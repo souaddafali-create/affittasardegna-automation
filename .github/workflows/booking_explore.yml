@@ -1,0 +1,114 @@
+name: Booking.com - Esplora il sito reale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  esplora:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Installa dipendenze
+        run: pip install playwright beautifulsoup4
+
+      - name: Installa Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Esplora Booking.com
+        env:
+          BK_EMAIL: ${{ secrets.BK_EMAIL }}
+          BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
+        run: |
+          xvfb-run --auto-servernum python3 -c "
+          import os, time
+          from playwright.sync_api import sync_playwright
+
+          email = os.environ.get('BK_EMAIL', '')
+          password = os.environ.get('BK_PASSWORD', '')
+
+          if not email or 'tua' in email:
+              print('ERRORE: BK_EMAIL non configurato')
+              exit(1)
+
+          print(f'Email: {email[:3]}***')
+
+          with sync_playwright() as pw:
+              browser = pw.chromium.launch(headless=True, args=['--no-sandbox'])
+              context = browser.new_context(locale='it-IT', viewport={'width':1280,'height':900})
+              page = context.new_page()
+
+              try:
+                  print('Step 1: Apro login Booking...')
+                  page.goto('https://account.booking.com/sign-in', timeout=30000)
+                  time.sleep(3)
+                  page.screenshot(path='step01_login.png')
+                  print('  Screenshot: step01_login.png')
+
+                  html = page.content()
+                  with open('step01_login.html', 'w') as f:
+                      f.write(html)
+                  print('  HTML salvato')
+
+                  print('Step 2: Inserisco email...')
+                  try:
+                      page.fill('input[type=\"email\"], input[name=\"loginname\"], #loginname', email, timeout=10000)
+                      page.screenshot(path='step02_email.png')
+                      print('  Email inserita')
+                  except Exception as e:
+                      print(f'  Errore email: {e}')
+                      page.screenshot(path='step02_errore.png')
+
+                  print('Step 3: Click continua/submit...')
+                  try:
+                      page.click('button[type=\"submit\"], input[type=\"submit\"]', timeout=10000)
+                      time.sleep(3)
+                      page.screenshot(path='step03_dopo_email.png')
+                      print('  Click fatto')
+                  except Exception as e:
+                      print(f'  Errore click: {e}')
+                      page.screenshot(path='step03_errore.png')
+
+                  print('Step 4: Password o 2FA...')
+                  time.sleep(2)
+                  page.screenshot(path='step04_password_o_2fa.png')
+                  html2 = page.content()
+                  with open('step04_pagina.html', 'w') as f:
+                      f.write(html2)
+
+                  try:
+                      page.fill('input[type=\"password\"], #password', password, timeout=10000)
+                      page.screenshot(path='step05_password.png')
+                      page.click('button[type=\"submit\"]', timeout=10000)
+                      time.sleep(5)
+                      page.screenshot(path='step06_dopo_login.png')
+                      print('  Login completato')
+                  except Exception as e:
+                      print(f'  Errore password: {e}')
+                      page.screenshot(path='step05_errore.png')
+
+                  print('Step 5: Stato finale')
+                  page.screenshot(path='step_finale.png')
+                  with open('step_finale.html', 'w') as f:
+                      f.write(page.content())
+
+              except Exception as e:
+                  print(f'Errore generale: {e}')
+                  page.screenshot(path='errore_generale.png')
+              finally:
+                  browser.close()
+          print('FINE')
+          "
+
+      - name: Carica screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-debug
+          path: |
+            *.png
+            *.html
