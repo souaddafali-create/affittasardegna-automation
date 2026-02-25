@@ -14,19 +14,20 @@ jobs:
           python-version: '3.12'
 
       - name: Installa dipendenze
-        run: pip install playwright beautifulsoup4
+        run: pip install playwright playwright-stealth beautifulsoup4
 
       - name: Installa Chromium
         run: python -m playwright install --with-deps chromium
 
-      - name: Esplora Booking.com
+      - name: Esplora Booking.com (Stealth Mode)
         env:
           BK_EMAIL: ${{ secrets.BK_EMAIL }}
           BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
         run: |
-          xvfb-run --auto-servernum python3 -c "
-          import os, time
+          cat > bot_stealth.py << 'PYEOF'
+          import os, time, random
           from playwright.sync_api import sync_playwright
+          from playwright_stealth import stealth_sync
 
           email = os.environ.get('BK_EMAIL', '')
           password = os.environ.get('BK_PASSWORD', '')
@@ -35,69 +36,113 @@ jobs:
               print('ERRORE: BK_EMAIL non configurato')
               exit(1)
 
-          print(f'Username: {email[:3]}***')
+          print(f'Email: {email[:3]}***')
+
+          def human_type(page, selector, text):
+              """Digita come un umano con pause random"""
+              page.click(selector)
+              time.sleep(random.uniform(0.3, 0.7))
+              for char in text:
+                  page.keyboard.type(char, delay=random.randint(50, 150))
+              time.sleep(random.uniform(0.2, 0.5))
 
           with sync_playwright() as pw:
-              browser = pw.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
-              context = browser.new_context(locale='it-IT', viewport={'width':1280,'height':900})
+              browser = pw.chromium.launch(
+                  headless=True,
+                  args=[
+                      '--no-sandbox',
+                      '--disable-dev-shm-usage',
+                      '--disable-blink-features=AutomationControlled',
+                  ]
+              )
+              context = browser.new_context(
+                  locale='it-IT',
+                  viewport={'width': 1366, 'height': 768},
+                  user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                  java_script_enabled=True,
+              )
               page = context.new_page()
 
+              # Applica stealth per nascondere fingerprint bot
+              stealth_sync(page)
+
               try:
-                  print('Step 1: Apro login Extranet Booking...')
-                  page.goto('https://admin.booking.com', timeout=30000)
-                  time.sleep(3)
-                  page.screenshot(path='step01_login.png')
-                  print('  Screenshot: step01_login.png')
+                  print('Step 1: Apro login Booking (stealth)...')
+                  page.goto('https://account.booking.com/sign-in', wait_until='networkidle', timeout=30000)
+                  time.sleep(random.uniform(2, 4))
+                  page.screenshot(path='step01_login.png', full_page=True)
                   with open('step01_login.html', 'w') as f:
                       f.write(page.content())
+                  print(f'  URL: {page.url}')
 
-                  print('Step 2: Cerco campo username/email...')
+                  print('Step 2: Inserisco email (human-like)...')
                   try:
-                      page.fill('input[type=\"email\"], input[name=\"loginname\"], input[name=\"username\"], input[id=\"loginname\"], input[type=\"text\"]', email, timeout=10000)
-                      page.screenshot(path='step02_username.png')
-                      print('  Username inserito')
+                      sel = 'input[type="email"], input[name="loginname"], #loginname'
+                      page.wait_for_selector(sel, timeout=10000)
+                      human_type(page, sel, email)
+                      time.sleep(random.uniform(0.5, 1))
+                      page.screenshot(path='step02_email.png')
+                      print('  Email inserita')
                   except Exception as e:
-                      print(f'  Errore username: {e}')
+                      print(f'  Errore email: {e}')
                       page.screenshot(path='step02_errore.png')
 
-                  print('Step 3: Click continua/submit...')
+                  print('Step 3: Click continua...')
                   try:
-                      page.click('button[type=\"submit\"], input[type=\"submit\"], button:has-text(\"Continue\"), button:has-text(\"Continua\"), button:has-text(\"Sign in\"), button:has-text(\"Accedi\")', timeout=10000)
-                      time.sleep(3)
-                      page.screenshot(path='step03_dopo_username.png')
-                      print('  Click fatto')
+                      time.sleep(random.uniform(0.5, 1.5))
+                      page.click('button[type="submit"]', timeout=10000)
+                      print('  Click fatto, aspetto risposta...')
+                      time.sleep(random.uniform(4, 6))
+                      page.screenshot(path='step03_dopo_email.png', full_page=True)
                       with open('step03_pagina.html', 'w') as f:
                           f.write(page.content())
+                      print(f'  URL: {page.url}')
                   except Exception as e:
                       print(f'  Errore click: {e}')
                       page.screenshot(path='step03_errore.png')
 
+                  # Controlla se c'e' CAPTCHA
+                  html = page.content().lower()
+                  if 'captcha' in html or 'human' in html or 'choose all' in html:
+                      print('  *** CAPTCHA RILEVATO - stealth non bastato ***')
+                      page.screenshot(path='step03b_captcha.png', full_page=True)
+                  else:
+                      print('  *** NESSUN CAPTCHA! Stealth funziona! ***')
+
                   print('Step 4: Cerco campo password...')
-                  time.sleep(2)
-                  page.screenshot(path='step04_password_pagina.png')
+                  time.sleep(random.uniform(1, 2))
+                  page.screenshot(path='step04_password_pagina.png', full_page=True)
                   with open('step04_pagina.html', 'w') as f:
                       f.write(page.content())
 
                   try:
-                      page.fill('input[type=\"password\"], input[name=\"password\"], input[id=\"password\"]', password, timeout=10000)
+                      sel_pw = 'input[type="password"], input[name="password"], #password'
+                      page.wait_for_selector(sel_pw, timeout=15000)
+                      print('  Campo password trovato!')
+                      human_type(page, sel_pw, password)
                       page.screenshot(path='step05_password.png')
                       print('  Password inserita')
-                      page.click('button[type=\"submit\"], input[type=\"submit\"], button:has-text(\"Sign in\"), button:has-text(\"Accedi\")', timeout=10000)
-                      time.sleep(5)
-                      page.screenshot(path='step06_dopo_login.png')
-                      print('  Login completato')
+
+                      time.sleep(random.uniform(0.5, 1.5))
+                      page.click('button[type="submit"]', timeout=10000)
+                      print('  Login inviato, aspetto...')
+                      time.sleep(random.uniform(5, 8))
+                      page.screenshot(path='step06_dopo_login.png', full_page=True)
                       with open('step06_pagina.html', 'w') as f:
                           f.write(page.content())
+                      print(f'  URL dopo login: {page.url}')
+
                   except Exception as e:
                       print(f'  Errore password/login: {e}')
                       page.screenshot(path='step05_errore.png')
 
-                  print('Step 5: Verifico dove siamo...')
+                  print('Step 5: Stato finale...')
                   time.sleep(3)
-                  page.screenshot(path='step07_stato_finale.png')
-                  with open('step07_finale.html', 'w') as f:
+                  page.screenshot(path='step_finale.png', full_page=True)
+                  with open('step_finale.html', 'w') as f:
                       f.write(page.content())
                   print(f'  URL finale: {page.url}')
+                  print(f'  Titolo: {page.title()}')
 
               except Exception as e:
                   print(f'Errore generale: {e}')
@@ -105,7 +150,8 @@ jobs:
               finally:
                   browser.close()
           print('FINE')
-          "
+          PYEOF
+          xvfb-run --auto-servernum python3 bot_stealth.py
 
       - name: Carica screenshot
         if: always()
