@@ -18,7 +18,6 @@ import os
 import sys
 import threading
 import time
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 # ---------------------------------------------------------------------------
@@ -196,20 +195,11 @@ def _esegui_uploader(base_url: str, csv_path: str, indice: int) -> list[dict]:
     proprieta = uploader.leggi_csv(csv_path)
     da_caricare = [proprieta[indice]]
 
-    CHROMIUM_PATH = os.environ.get(
-        "CHROMIUM_PATH",
-        "/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome",
-    )
-
     with sync_playwright() as pw:
-        launch_args: dict = dict(
+        browser = pw.chromium.launch(
             headless=True,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
-        if Path(CHROMIUM_PATH).exists():
-            launch_args["executable_path"] = CHROMIUM_PATH
-
-        browser = pw.chromium.launch(**launch_args)
         context = browser.new_context(locale="it-IT")
         page = context.new_page()
         try:

@@ -37,7 +37,6 @@ Uso:
 Variabili d'ambiente utili:
     BK_EMAIL         email account Booking.com Extranet
     BK_PASSWORD      password account Booking.com Extranet
-    CHROMIUM_PATH    percorso binario Chromium (opzionale)
 """
 
 import argparse
@@ -570,20 +569,15 @@ def main() -> None:
         )
         sys.exit(1)
 
-    chromium_path = os.environ.get("CHROMIUM_PATH") or None
     ok = 0
     ko = 0
 
     with sync_playwright() as pw:
-        launch_kwargs: dict = dict(
+        browser = pw.chromium.launch(
             headless=args.headless,
             slow_mo=80,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
-        if chromium_path:
-            launch_kwargs["executable_path"] = chromium_path
-
-        browser = pw.chromium.launch(**launch_kwargs)
         context = browser.new_context(
             locale="it-IT",
             timezone_id="Europe/Rome",
