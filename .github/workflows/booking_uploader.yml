@@ -2,18 +2,23 @@ name: Booking.com — Esplora sito reale
 
 on:
   workflow_dispatch:
-    inputs:
-      headless:
-        description: "Browser headless? (true/false)"
-        required: false
-        default: "true"
+
+  push:
+    branches:
+      - "claude/**"
+      - main
+      - master
+    paths:
+      - "booking_uploader.py"
+      - ".github/workflows/booking_uploader.yml"
+      - "requirements.txt"
 
 permissions:
   contents: read
 
 jobs:
-  esplora:
-    name: "Esplora Booking.com Partner Hub"
+  esplora-booking:
+    name: "Esplora Booking.com (screenshot + HTML)"
     runs-on: ubuntu-latest
 
     steps:
@@ -32,11 +37,11 @@ jobs:
       - name: Installa Chromium via Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Esplora Booking.com (screenshot + HTML di ogni step)
+      - name: Esplora Booking.com (screenshot + HTML ogni step)
         env:
           BK_EMAIL:    ${{ secrets.BK_EMAIL }}
           BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
-        run: xvfb-run --auto-servernum python3 booking_explorer.py
+        run: xvfb-run --auto-servernum python3 booking_uploader.py
 
       - name: Upload screenshot e HTML (sempre, anche se fallisce)
         if: always()
