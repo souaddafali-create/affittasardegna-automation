@@ -478,23 +478,227 @@ def insert_property(page):
 
     try_step(page, "step21_prezzi_avanzati", do_step21)
 
-    # --- Step 22: Calendario ---
-    print("Step 22: Calendario")
+    # --- Step 22: Pulizie, biancheria, soggiorno minimo ---
+    print("Step 22: Condizioni — pulizie, biancheria, soggiorno minimo")
 
     def do_step22():
+        screenshot(page, "condizioni_pagina")
+        save_html(page, "step22_condizioni")
+
+        cond = PROP["condizioni"]
+
+        # Pulizia finale
+        pulizia = cond.get("pulizia_finale", "")
+        if pulizia:
+            for label in ["Pulizia finale", "Pulizie", "Cleaning", "Pulizia"]:
+                try:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(pulizia)
+                        print(f"  Pulizia finale: {pulizia}")
+                        break
+                except Exception:
+                    continue
+            else:
+                # Fallback: cerca campo per name/placeholder
+                pf = page.locator(
+                    "input[name*='puliz'], input[name*='clean'], "
+                    "textarea[name*='puliz'], textarea[name*='clean']"
+                )
+                if pf.count() > 0:
+                    pf.first.fill(pulizia)
+                    print(f"  Pulizia finale (fallback): {pulizia}")
+                else:
+                    print(f"  Campo pulizia non trovato, provo click etichetta")
+                    try:
+                        btn = page.get_by_text("A carico dell'ospite")
+                        if btn.count() > 0:
+                            btn.first.click()
+                            print("  Pulizia: selezionato 'A carico dell'ospite'")
+                    except Exception:
+                        print("  Skip pulizia finale")
+
+        wait(page, 1000)
+
+        # Biancheria
+        biancheria = cond.get("biancheria", "")
+        if biancheria:
+            for label in ["Biancheria", "Linen", "Biancheria da letto"]:
+                try:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(biancheria)
+                        print(f"  Biancheria: {biancheria}")
+                        break
+                except Exception:
+                    continue
+            else:
+                bf = page.locator(
+                    "input[name*='bianch'], input[name*='linen'], "
+                    "textarea[name*='bianch'], textarea[name*='linen']"
+                )
+                if bf.count() > 0:
+                    bf.first.fill(biancheria)
+                    print(f"  Biancheria (fallback): {biancheria}")
+                else:
+                    print("  Campo biancheria non trovato, skip")
+
+        wait(page, 1000)
+
+        # Soggiorno minimo bassa stagione
+        sog_bassa = cond.get("soggiorno_minimo_bassa", {})
+        sog_alta = cond.get("soggiorno_minimo_alta", {})
+
+        for label in ["Soggiorno minimo", "Notti minime", "Minimum stay"]:
+            try:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    # Usa il valore più basso come default
+                    notti = str(sog_bassa.get("notti", sog_alta.get("notti", 1)))
+                    field.first.fill(notti)
+                    print(f"  Soggiorno minimo: {notti} notti")
+                    break
+            except Exception:
+                continue
+        else:
+            sf = page.locator(
+                "input[name*='soggiorno'], input[name*='minim'], "
+                "input[name*='stay']"
+            )
+            if sf.count() > 0:
+                notti = str(sog_bassa.get("notti", sog_alta.get("notti", 1)))
+                sf.first.fill(notti)
+                print(f"  Soggiorno minimo (fallback): {notti} notti")
+            else:
+                print("  Campo soggiorno minimo non trovato, skip")
+
+        wait(page, 1000)
+        screenshot(page, "condizioni_compilate")
+
+    try_step(page, "step22_condizioni", do_step22)
+
+    # --- Step 23: Continua (condizioni) ---
+    print("Step 23: Continua (condizioni)")
+
+    def do_step23():
+        click_save(page)
+        screenshot(page, "dopo_condizioni")
+
+    try_step(page, "step23_continua_condizioni", do_step23)
+
+    # --- Step 24: Regole check-in / check-out ---
+    print("Step 24: Regole — check-in, check-out, regole casa")
+
+    def do_step24():
+        screenshot(page, "regole_pagina")
+        save_html(page, "step24_regole")
+
+        cond = PROP["condizioni"]
+
+        # Check-in
+        check_in = cond.get("check_in", "")
+        if check_in:
+            for label in ["Check-in", "Check in", "Orario arrivo", "Arrivo"]:
+                try:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(check_in)
+                        print(f"  Check-in: {check_in}")
+                        break
+                except Exception:
+                    continue
+            else:
+                ci = page.locator(
+                    "input[name*='check_in'], input[name*='checkin'], "
+                    "input[name*='arriv']"
+                )
+                if ci.count() > 0:
+                    ci.first.fill(check_in)
+                    print(f"  Check-in (fallback): {check_in}")
+                else:
+                    print("  Campo check-in non trovato, skip")
+
+        wait(page, 1000)
+
+        # Check-out
+        check_out = cond.get("check_out", "")
+        if check_out:
+            for label in ["Check-out", "Check out", "Orario partenza", "Partenza"]:
+                try:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(check_out)
+                        print(f"  Check-out: {check_out}")
+                        break
+                except Exception:
+                    continue
+            else:
+                co = page.locator(
+                    "input[name*='check_out'], input[name*='checkout'], "
+                    "input[name*='parten']"
+                )
+                if co.count() > 0:
+                    co.first.fill(check_out)
+                    print(f"  Check-out (fallback): {check_out}")
+                else:
+                    print("  Campo check-out non trovato, skip")
+
+        wait(page, 1000)
+
+        # Regole della casa
+        regole = cond.get("regole_casa", "")
+        if regole:
+            for label in ["Regole", "Regole della casa", "House rules", "Regolamento"]:
+                try:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(regole)
+                        print("  Regole casa compilate")
+                        break
+                except Exception:
+                    continue
+            else:
+                rf = page.locator(
+                    "textarea[name*='regol'], textarea[name*='rule'], "
+                    "textarea[name*='house']"
+                )
+                if rf.count() > 0:
+                    rf.first.fill(regole)
+                    print("  Regole casa (fallback) compilate")
+                else:
+                    print("  Campo regole non trovato, skip")
+
+        wait(page, 1000)
+        screenshot(page, "regole_compilate")
+
+    try_step(page, "step24_regole", do_step24)
+
+    # --- Step 25: Continua (regole) ---
+    print("Step 25: Continua (regole)")
+
+    def do_step25():
+        click_save(page)
+        screenshot(page, "dopo_regole")
+
+    try_step(page, "step25_continua_regole", do_step25)
+
+    # --- Step 26: Calendario ---
+    print("Step 26: Calendario")
+
+    def do_step26():
         screenshot(page, "calendario_pagina")
-        save_html(page, "step22_calendario")
+        save_html(page, "step26_calendario")
         click_save(page)
         screenshot(page, "dopo_calendario")
 
-    try_step(page, "step22_calendario", do_step22)
+    try_step(page, "step26_calendario", do_step26)
 
-    # --- Step 23: Requisiti regionali — CIN ---
-    print("Step 23: Requisiti regionali (CIN)")
+    # --- Step 27: Requisiti regionali — CIN ---
+    print("Step 27: Requisiti regionali (CIN)")
 
-    def do_step23():
+    def do_step27():
         screenshot(page, "requisiti_pagina")
-        save_html(page, "step23_requisiti")
+        save_html(page, "step27_requisiti")
 
         # Compila il CIN (Codice Identificativo Nazionale)
         try:
@@ -525,18 +729,18 @@ def insert_property(page):
         click_save(page)
         screenshot(page, "dopo_requisiti")
 
-    try_step(page, "step23_requisiti", do_step23)
+    try_step(page, "step27_requisiti", do_step27)
 
-    # --- Step 24: Pagina finale — solo screenshot, NON inviare ---
-    print("Step 24: Pagina finale — SOLO screenshot")
+    # --- Step 28: Pagina finale — solo screenshot, NON inviare ---
+    print("Step 28: Pagina finale — SOLO screenshot")
 
-    def do_step24():
+    def do_step28():
         wait(page)
         screenshot(page, "pagina_finale")
-        save_html(page, "step24_finale")
+        save_html(page, "step28_finale")
         print("Flusso completato! NON inviato per la verifica.")
 
-    try_step(page, "step24_finale", do_step24)
+    try_step(page, "step28_finale", do_step28)
 
 
 def main():

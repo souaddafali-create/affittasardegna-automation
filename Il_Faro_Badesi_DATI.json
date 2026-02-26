@@ -71,7 +71,10 @@
     "soggiorno_massimo_giorni": 30,
     "cauzione_euro": 300,
     "pulizia_finale": "a carico ospite - da definire",
-    "biancheria": "noleggio a carico ospite - da definire"
+    "biancheria": "noleggio a carico ospite - da definire",
+    "check_in": "15:00 - 20:00",
+    "check_out": "entro le 10:00",
+    "regole_casa": "Non fumare all'interno. Rispettare il silenzio dalle 23:00 alle 08:00. Raccolta differenziata obbligatoria."
   },
   "marketing": {
     "descrizione_breve": "Accogliente appartamento con piscina e terrazza nel residence Le Onde a Badesi, a pochi minuti dalle spiagge dorate della costa nord della Sardegna.",
