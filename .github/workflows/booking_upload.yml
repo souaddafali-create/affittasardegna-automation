@@ -1,4 +1,4 @@
-name: Casevacanza Uploader
+name: Booking Extranet Uploader
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'casevacanza_uploader.py'
+      - 'booking_uploader.py'
       - 'Il_Faro_Badesi_DATI.json'
 
 jobs:
@@ -23,20 +23,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Playwright
+      - name: Install dependencies
         run: |
-          pip install playwright
+          pip install playwright playwright-stealth
           playwright install chromium --with-deps
 
-      - name: Run uploader
+      - name: Run Booking uploader
         env:
-          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
-          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
-        run: xvfb-run python casevacanza_uploader.py
+          BK_EMAIL: ${{ secrets.BK_EMAIL }}
+          BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
+        run: xvfb-run python booking_uploader.py
 
       - name: Upload debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-screenshots
-          path: screenshots/
+          name: booking-debug-screenshots
+          path: screenshots_booking/

@@ -1,0 +1,93 @@
+{
+  "identificativi": {
+    "nome_struttura": "Il Faro",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via Dettori 20",
+    "cap": "07030",
+    "comune": "Badesi",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "residence_complesso": "Le Onde",
+    "interno": "421",
+    "piano": "2",
+    "cin": "IT090081C2000U0391",
+    "cir": "090081C2000U0391"
+  },
+  "composizione": {
+    "max_ospiti": 4,
+    "camere": 1,
+    "posti_letto": 4,
+    "bagni": 1,
+    "bagno_con_doccia": true,
+    "bagno_con_vasca": false,
+    "metri_quadri": null
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": true,
+    "forno": false,
+    "microonde": true,
+    "lavatrice": true,
+    "lavastoviglie": false,
+    "aria_condizionata": true,
+    "riscaldamento": false,
+    "camino": false,
+    "internet_wifi": false,
+    "phon": true,
+    "ferro_stiro": false,
+    "zanzariere": false,
+    "terrazza": true,
+    "veranda": false,
+    "giardino": false,
+    "cortile": false,
+    "parcheggio_privato": false,
+    "garage": false,
+    "piscina": true,
+    "piscina_tipo": "comune del residence",
+    "arredi_esterno": true,
+    "barbecue": false,
+    "doccia_esterna": false,
+    "biciclette": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": true,
+    "animali_note": "piccola taglia",
+    "altro_dotazioni": "posto auto libero del residence"
+  },
+  "sicurezza": {
+    "estintori": true,
+    "rilevatore_gas_co": true
+  },
+  "condizioni": {
+    "soggiorno_minimo_bassa": {
+      "notti": 3,
+      "periodo": "29 mar - 14 giu / 13 set - 2 nov"
+    },
+    "soggiorno_minimo_alta": {
+      "notti": 5,
+      "periodo": "15 giu - 14 set"
+    },
+    "soggiorno_massimo_giorni": 30,
+    "cauzione_euro": 300,
+    "pulizia_finale": "a carico ospite - da definire",
+    "biancheria": "noleggio a carico ospite - da definire"
+  },
+  "marketing": {
+    "descrizione_breve": "Accogliente appartamento con piscina e terrazza nel residence Le Onde a Badesi, a pochi minuti dalle spiagge dorate della costa nord della Sardegna.",
+    "descrizione_lunga": "Situato al secondo piano del residence Le Onde a Badesi, sulla splendida costa nord della Sardegna, l'appartamento Il Faro è la base perfetta per una vacanza tra mare, natura e relax. L'alloggio climatizzato dispone di terrazza con arredi da esterno, cucina attrezzata con piano cottura, microonde, frigorifero con congelatore e lavatrice.\n\nLa posizione è ideale per raggiungere le lunghe spiagge dorate di Badesi e Li Junchi. Il residence offre piscina comune e posto auto libero.\n\nGrazie alla posizione strategica, Il Faro è un eccellente punto di partenza per scoprire Castelsardo, Isola Rossa, la Costa Paradiso e le meraviglie dell'Anglona. Gli amici a quattro zampe di piccola taglia sono i benvenuti.",
+    "punti_forza": [
+      "Residence con piscina comune e posto auto libero",
+      "A pochi minuti dalle spiagge di Badesi e Li Junchi",
+      "Appartamento climatizzato con terrazza",
+      "Animali di piccola taglia ammessi",
+      "Base ideale per Castelsardo, Isola Rossa e Costa Paradiso"
+    ],
+    "distanze": [
+      {"luogo": "Spiaggia di Badesi", "km": 3, "tempo": "5 min in auto"},
+      {"luogo": "Castelsardo", "km": 25, "tempo": "25 min in auto"},
+      {"luogo": "Isola Rossa", "km": 15, "tempo": "15 min in auto"},
+      {"luogo": "Aeroporto Alghero", "km": 90, "tempo": "1h 15min"}
+    ]
+  }
+}
