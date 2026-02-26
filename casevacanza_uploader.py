@@ -123,11 +123,19 @@ def download_placeholder_photos(count=5):
 def login(page):
     """Login su CaseVacanza.it — prova diversi selettori per email e password."""
     print("Login CaseVacanza.it...")
-    page.goto("https://my.casevacanza.it", wait_until="networkidle", timeout=30_000)
-    wait(page, 3000)
+    page.goto("https://my.casevacanza.it", timeout=60_000)
+    wait(page, 5000)
     screenshot(page, "login_page")
     save_html(page, "login_page")
     print(f"  URL login: {page.url}")
+
+    # Aspetta che compaia un campo input (la pagina potrebbe fare redirect a Keycloak)
+    page.wait_for_selector(
+        "#username, #email, input[name='username'], input[name='email'], "
+        "input[type='email'], input[type='text'], input[type='password']",
+        timeout=30_000,
+    )
+    wait(page, 2000)
 
     # Trova il campo email/username
     email_selectors = [
@@ -147,7 +155,6 @@ def login(page):
             print(f"  Campo email trovato: {sel}")
             break
     if email_field is None:
-        # Prova anche per label
         for lbl in ["Email", "Username", "E-mail", "Indirizzo email"]:
             loc = page.get_by_label(lbl)
             if loc.count() > 0:
