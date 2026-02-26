@@ -1,9 +1,17 @@
+import json
 import os
 import re
 import tempfile
 import urllib.request
 
 from playwright.sync_api import sync_playwright
+
+# --- Carica dati proprietà dal file JSON ---
+DATA_FILE = os.environ.get(
+    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+)
+with open(DATA_FILE, encoding="utf-8") as _f:
+    PROP = json.load(_f)
 
 EMAIL = os.environ["CASEVACANZA_EMAIL"]
 PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
@@ -13,20 +21,42 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-DESCRIPTION = (
-    "Bellissimo appartamento a due passi dalla spiaggia della Pelosa, "
-    "una delle spiagge più belle e rinomate di tutta la Sardegna. "
-    "Ideale per famiglie e coppie, con 2 camere da letto spaziose, "
-    "un soggiorno luminoso e accogliente e tutti i comfort necessari "
-    "per un soggiorno indimenticabile. La posizione è strategica per "
-    "esplorare il nord della Sardegna: a pochi minuti troverete il "
-    "Parco Nazionale dell'Asinara, raggiungibile in traghetto, e le "
-    "magnifiche calette di Capo Falcone. L'appartamento dispone di "
-    "aria condizionata, Wi-Fi veloce, parcheggio privato, lavatrice "
-    "e forno. La zona è ricca di ristoranti tipici, negozi e servizi. "
-    "Perfetto come base per escursioni, snorkeling e giornate di relax "
-    "al mare con tutta la famiglia."
-)
+DESCRIPTION = PROP["marketing"]["descrizione_lunga"]
+
+# Mappa dotazioni JSON → label CaseVacanza
+DOTAZIONI_MAP = {
+    "tv": "TV",
+    "piano_cottura": "Piano cottura",
+    "frigo_congelatore": "Frigorifero",
+    "forno": "Forno",
+    "microonde": "Microonde",
+    "lavatrice": "Lavatrice",
+    "lavastoviglie": "Lavastoviglie",
+    "aria_condizionata": "Aria condizionata",
+    "riscaldamento": "Riscaldamento",
+    "internet_wifi": "Wi-Fi",
+    "phon": "Asciugacapelli",
+    "ferro_stiro": "Ferro da stiro",
+    "terrazza": "Terrazza",
+    "giardino": "Giardino",
+    "piscina": "Piscina",
+    "arredi_esterno": "Arredi da esterno",
+    "barbecue": "Barbecue",
+    "culla": "Culla",
+    "seggiolone": "Seggiolone",
+    "animali_ammessi": "Animali ammessi",
+}
+
+def _build_servizi():
+    """Restituisce la lista dei servizi attivi da selezionare su CaseVacanza."""
+    dot = PROP["dotazioni"]
+    servizi = [label for key, label in DOTAZIONI_MAP.items() if dot.get(key)]
+    # Parcheggio: il JSON non ha un flag diretto, ma altro_dotazioni lo indica
+    if dot.get("parcheggio_privato") or "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
+        servizi.append("Parcheggio")
+    return servizi
+
+SERVIZI = _build_servizi()
 
 SCREENSHOT_DIR = "screenshots"
 
@@ -138,13 +168,14 @@ def insert_property(page):
     wait(page)
     screenshot(page, "tipo_proprietà")
 
-    # --- Step 2: Seleziona "Appartamento" dal dropdown ---
-    print("Step 2: Seleziona Appartamento")
+    # --- Step 2: Seleziona tipo struttura dal dropdown ---
+    tipo = PROP["identificativi"]["tipo_struttura"]
+    print(f"Step 2: Seleziona {tipo}")
     select = page.locator("select")
     if select.count() > 0:
-        select.first.select_option(label="Appartamento")
+        select.first.select_option(label=tipo)
     else:
-        page.get_by_text("Appartamento").click()
+        page.get_by_text(tipo).click()
     wait(page)
     screenshot(page, "appartamento_selezionato")
 
@@ -165,15 +196,21 @@ def insert_property(page):
     wait(page, 3000)
     screenshot(page, "campi_manuali")
 
-    page.locator('[data-test="stateOrProvince"]').fill("Sardegna")
+    ident = PROP["identificativi"]
+    # Separa via e numero civico dall'indirizzo (es. "Via Dettori 20")
+    addr_parts = ident["indirizzo"].rsplit(" ", 1)
+    via = addr_parts[0] if len(addr_parts) > 1 else ident["indirizzo"]
+    civico = addr_parts[1] if len(addr_parts) > 1 else ""
+
+    page.locator('[data-test="stateOrProvince"]').fill(ident["regione"])
     wait(page, 1000)
-    page.locator('[data-test="city"]').fill("Stintino")
+    page.locator('[data-test="city"]').fill(ident["comune"])
     wait(page, 1000)
-    page.locator('[data-test="street"]').fill("Via Sassari")
+    page.locator('[data-test="street"]').fill(via)
     wait(page, 1000)
-    page.locator('[data-test="houseNumberOrName"]').fill("10")
+    page.locator('[data-test="houseNumberOrName"]').fill(civico)
     wait(page, 1000)
-    page.locator('[data-test="postalCode"]').fill("07040")
+    page.locator('[data-test="postalCode"]').fill(ident["cap"])
     wait(page, 1000)
     screenshot(page, "indirizzo_compilato")
 
@@ -188,16 +225,21 @@ def insert_property(page):
     screenshot(page, "dopo_mappa")
 
     # --- Step 8: Ospiti e camere (data-test counters) ---
-    print("Step 8: Ospiti e camere")
-    for _ in range(3):
+    comp = PROP["composizione"]
+    print(f"Step 8: Ospiti e camere ({comp['max_ospiti']} ospiti, "
+          f"{comp['camere']} cam, {comp['bagni']} bagni)")
+    # guest-count default=1, click (max_ospiti - 1) volte
+    for _ in range(comp["max_ospiti"] - 1):
         page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
         page.wait_for_timeout(500)
-    page.locator('[data-test="bedroom"] [data-test="counter-add-btn"]').click()
-    page.wait_for_timeout(500)
-    page.locator('[data-test="living_room"] [data-test="counter-add-btn"]').click()
-    page.wait_for_timeout(500)
-    page.locator('[data-test="bath_room"] [data-test="counter-add-btn"]').click()
-    page.wait_for_timeout(500)
+    # bedroom default=1, click (camere - 1) volte
+    for _ in range(comp["camere"] - 1):
+        page.locator('[data-test="bedroom"] [data-test="counter-add-btn"]').click()
+        page.wait_for_timeout(500)
+    # bath_room default=0, click bagni volte
+    for _ in range(comp["bagni"]):
+        page.locator('[data-test="bath_room"] [data-test="counter-add-btn"]').click()
+        page.wait_for_timeout(500)
     wait(page)
     screenshot(page, "ospiti_camere")
 
@@ -207,41 +249,25 @@ def insert_property(page):
     screenshot(page, "dopo_ospiti")
 
     # --- Step 10: Configura letti ---
+    # 1 camera, 4 posti letto: 1 matrimoniale (2 posti) + 2 singoli (2 posti)
     print("Step 10: Configura letti")
 
     def do_step10():
         save_html(page, "step10_letti_before")
         add_btns = page.locator('[data-test="counter-add-btn"]')
         count = add_btns.count()
-        print(f"  Trovati {count} counter-add-btn (prima di espandere camera 2)")
+        print(f"  Trovati {count} counter-add-btn")
 
-        # Camera da letto 1: 1 Letto matrimoniale (indice 1)
+        # Camera da letto 1 (unica): 1 Letto matrimoniale (indice 1)
         print("  Camera 1: +1 Letto matrimoniale (indice 1)")
         add_btns.nth(1).click()
         page.wait_for_timeout(500)
-        screenshot(page, "camera1_configurata")
 
-        # Espandi Camera da letto 2 (collapsed di default)
-        page.get_by_text("Camera da letto 2").scroll_into_view_if_needed()
+        # Camera da letto 1: 2 Letti singoli (indice 3)
+        print("  Camera 1: +2 Letto singolo (indice 3)")
+        add_btns.nth(3).click()
         page.wait_for_timeout(500)
-        page.get_by_text("Camera da letto 2").click()
-        page.wait_for_timeout(1000)
-        screenshot(page, "camera2_espansa")
-
-        # Ri-conta i bottoni dopo espansione
-        add_btns = page.locator('[data-test="counter-add-btn"]')
-        count_after = add_btns.count()
-        print(f"  Trovati {count_after} counter-add-btn (dopo espansione camera 2)")
-
-        # Camera da letto 2: 2 Letto singolo
-        # Indice 3 dentro camera 1 = singolo, quindi camera 2 singolo = indice originale + 9
-        # Con ~9 tipi per camera: singolo camera 2 = nth(9+3) = nth(12)
-        # Ma verifichiamo: se prima c'erano N bottoni e ora ce ne sono di più,
-        # i nuovi sono quelli della camera 2
-        print(f"  Camera 2: +2 Letto singolo (indice 12)")
-        add_btns.nth(12).click()
-        page.wait_for_timeout(500)
-        add_btns.nth(12).click()
+        add_btns.nth(3).click()
         page.wait_for_timeout(500)
 
         wait(page)
@@ -325,8 +351,7 @@ def insert_property(page):
     def do_step14():
         screenshot(page, "servizi_pagina")
         save_html(page, "step14_servizi")
-        servizi = ["Aria condizionata", "Wi-Fi", "Parcheggio", "Lavatrice", "Forno"]
-        for servizio in servizi:
+        for servizio in SERVIZI:
             try:
                 btn = page.get_by_text(servizio, exact=True)
                 if btn.count() > 0:
@@ -367,7 +392,7 @@ def insert_property(page):
     print("Step 17: Titolo e descrizione")
 
     def do_step17():
-        titolo = "Appartamento Test Stintino - Vista Mare"
+        titolo = PROP["identificativi"]["nome_struttura"]
 
         titolo_field = page.get_by_label("Titolo")
         if titolo_field.count() > 0:
@@ -420,12 +445,34 @@ def insert_property(page):
 
     try_step(page, "step20_continua_prezzo", do_step20)
 
-    # --- Step 21: Impostazioni avanzate prezzi — skip ---
-    print("Step 21: Skip impostazioni prezzi avanzate")
+    # --- Step 21: Impostazioni avanzate prezzi — cauzione 300 EUR ---
+    print("Step 21: Impostazioni prezzi avanzate (cauzione)")
 
     def do_step21():
         screenshot(page, "prezzi_avanzati_pagina")
         save_html(page, "step21_prezzi_avanzati")
+
+        # Prova a compilare il campo cauzione/deposito
+        cauzione = str(PROP["condizioni"]["cauzione_euro"])
+        try:
+            cauzione_field = page.get_by_label("Cauzione")
+            if cauzione_field.count() > 0:
+                cauzione_field.fill(cauzione)
+                print(f"  Cauzione impostata: {cauzione} EUR (label)")
+            else:
+                cauzione_field = page.locator(
+                    "input[name*='cauzione'], input[name*='deposit'], "
+                    "input[name*='Cauzione']"
+                )
+                if cauzione_field.count() > 0:
+                    cauzione_field.first.fill(cauzione)
+                    print(f"  Cauzione impostata: {cauzione} EUR (name)")
+                else:
+                    print("  Campo cauzione non trovato, skip")
+        except Exception as e:
+            print(f"  Errore cauzione: {e}")
+
+        wait(page, 1000)
         click_save(page)
         screenshot(page, "dopo_prezzi_avanzati")
 
@@ -442,12 +489,39 @@ def insert_property(page):
 
     try_step(page, "step22_calendario", do_step22)
 
-    # --- Step 23: Requisiti regionali ---
-    print("Step 23: Requisiti regionali")
+    # --- Step 23: Requisiti regionali — CIN ---
+    print("Step 23: Requisiti regionali (CIN)")
 
     def do_step23():
         screenshot(page, "requisiti_pagina")
         save_html(page, "step23_requisiti")
+
+        # Compila il CIN (Codice Identificativo Nazionale)
+        try:
+            cin_field = page.get_by_label("CIN")
+            if cin_field.count() > 0:
+                cin_field.fill(PROP["identificativi"]["cin"])
+                print("  CIN compilato (label)")
+            else:
+                cin_field = page.locator(
+                    "input[name*='cin'], input[name*='CIN'], "
+                    "input[name*='codice'], input[placeholder*='CIN']"
+                )
+                if cin_field.count() > 0:
+                    cin_field.first.fill(PROP["identificativi"]["cin"])
+                    print("  CIN compilato (name/placeholder)")
+                else:
+                    # Ultimo tentativo: cerca qualsiasi input di testo nella pagina
+                    text_inputs = page.locator("input[type='text']")
+                    if text_inputs.count() > 0:
+                        text_inputs.first.fill(PROP["identificativi"]["cin"])
+                        print("  CIN compilato (primo input text)")
+                    else:
+                        print("  Campo CIN non trovato, skip")
+        except Exception as e:
+            print(f"  Errore CIN: {e}")
+
+        wait(page, 1000)
         click_save(page)
         screenshot(page, "dopo_requisiti")
 
