@@ -472,108 +472,97 @@ def insert_property(page):
         screenshot(page, "servizi_pagina")
         save_html(page, "step14_servizi")
 
-        # Logga tutti gli elementi servizio visibili per debug
-        all_labels = page.evaluate("""() => {
-            const els = document.querySelectorAll(
-                'label, [role="checkbox"], [data-test], input[type="checkbox"]'
-            );
-            return Array.from(els).slice(0, 60).map(e => ({
-                tag: e.tagName,
-                text: (e.textContent || '').trim().substring(0, 60),
-                type: e.type || '',
-                role: e.getAttribute('role') || '',
-                classes: e.className || '',
-                checked: e.checked || e.classList.contains('selected') ||
-                         e.classList.contains('active') || e.getAttribute('aria-checked') === 'true',
-                dataTest: e.getAttribute('data-test') || '',
-            }));
-        }""")
-        print(f"  Elementi trovati sulla pagina: {len(all_labels)}")
-        for el in all_labels[:30]:
-            print(f"    {el}")
+        # 1) Clicca la tab "Tutti" per mostrare TUTTI i servizi
+        try:
+            tab_tutti = page.get_by_text("Tutti", exact=True)
+            if tab_tutti.count() > 0:
+                tab_tutti.first.click()
+                wait(page, 2000)
+                print("  Tab 'Tutti' cliccata — tutti i servizi visibili")
+                screenshot(page, "servizi_tab_tutti")
+        except Exception as e:
+            print(f"  [WARN] Tab 'Tutti' non trovata: {e}")
 
+        # 2) Debug: logga tutti i servizi visibili sulla pagina
+        all_items = page.evaluate("""() => {
+            const items = [];
+            // Cerca tutte le righe che contengono checkbox
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                const row = cb.closest('label') || cb.closest('div') || cb.parentElement;
+                items.push({
+                    text: (row.textContent || '').trim().substring(0, 80),
+                    id: cb.id || '',
+                    name: cb.name || '',
+                    value: cb.value || '',
+                    checked: cb.checked,
+                });
+            });
+            return items;
+        }""")
+        print(f"  Checkbox trovate sulla pagina: {len(all_items)}")
+        for item in all_items:
+            print(f"    {item}")
+
+        # 3) Seleziona ogni servizio
         for servizio in SERVIZI:
             selected = False
 
-            # Strategia 1: Cerca checkbox/label tramite JavaScript
+            # Strategia A: trova la checkbox associata al testo via JS
             try:
                 result = page.evaluate("""(label) => {
-                    // Cerca tutti gli elementi che contengono il testo
-                    const walker = document.createTreeWalker(
-                        document.body, NodeFilter.SHOW_TEXT, null, false
-                    );
-                    let node;
-                    while (node = walker.nextNode()) {
-                        const text = node.textContent.trim();
-                        if (text === label || text.includes(label)) {
-                            // Risali fino a trovare un elemento cliccabile
-                            let el = node.parentElement;
-                            for (let i = 0; i < 5 && el; i++) {
-                                // Cerca checkbox nascosta vicina
-                                const inp = el.querySelector('input[type="checkbox"]');
-                                if (inp) {
-                                    inp.click();
-                                    return {found: true, method: 'checkbox-input', tag: el.tagName};
-                                }
-                                // Se l'elemento stesso è una label o card cliccabile
-                                if (el.tagName === 'LABEL' || el.getAttribute('role') === 'checkbox'
-                                    || el.classList.contains('card') || el.classList.contains('chip')
-                                    || el.classList.contains('option') || el.classList.contains('tile')
-                                    || el.dataset.test) {
-                                    el.click();
-                                    return {found: true, method: 'parent-click', tag: el.tagName};
-                                }
-                                el = el.parentElement;
+                    // Cerca tutte le checkbox
+                    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                    for (const cb of checkboxes) {
+                        // Prendi il contenitore (label o div genitore)
+                        const container = cb.closest('label') || cb.parentElement?.parentElement || cb.parentElement;
+                        const text = (container?.textContent || '').trim();
+                        if (text.includes(label)) {
+                            if (!cb.checked) {
+                                cb.click();
                             }
-                            // Fallback: clicca il genitore diretto del testo
-                            node.parentElement.click();
-                            return {found: true, method: 'text-parent-click', tag: node.parentElement.tagName};
+                            return {found: true, method: 'checkbox', text: text.substring(0, 60), checked: cb.checked};
                         }
                     }
                     return {found: false};
                 }""", servizio)
-
                 if result.get("found"):
-                    page.wait_for_timeout(500)
-                    print(f"  [OK] {servizio} (JS: {result.get('method')}, {result.get('tag')})")
+                    page.wait_for_timeout(400)
+                    print(f"  [OK] {servizio} (checkbox: {result.get('text')})")
                     selected = True
             except Exception as e:
-                print(f"  [WARN] {servizio} JS error: {e}")
+                print(f"  [WARN] {servizio} checkbox JS: {e}")
 
-            # Strategia 2: Playwright get_by_text
+            # Strategia B: clicca la riga/label con get_by_label (Playwright)
             if not selected:
                 try:
-                    btn = page.get_by_text(servizio, exact=True)
-                    if btn.count() > 0:
-                        btn.first.click()
-                        page.wait_for_timeout(500)
-                        print(f"  [OK] {servizio} (exact)")
+                    cb = page.get_by_label(servizio, exact=True)
+                    if cb.count() > 0:
+                        cb.first.check()
+                        page.wait_for_timeout(400)
+                        print(f"  [OK] {servizio} (get_by_label exact)")
                         selected = True
                 except Exception:
                     pass
 
-            # Strategia 3: Playwright get_by_text partial
             if not selected:
                 try:
-                    btn = page.get_by_text(servizio, exact=False)
-                    if btn.count() > 0:
-                        btn.first.click()
-                        page.wait_for_timeout(500)
-                        print(f"  [OK] {servizio} (partial)")
+                    cb = page.get_by_label(servizio, exact=False)
+                    if cb.count() > 0:
+                        cb.first.check()
+                        page.wait_for_timeout(400)
+                        print(f"  [OK] {servizio} (get_by_label partial)")
                         selected = True
                 except Exception:
                     pass
 
-            # Strategia 4: locator label/span/div
+            # Strategia C: get_by_text e clicca la riga
             if not selected:
                 try:
-                    btn = page.locator(f"label:has-text('{servizio}'), "
-                                       f"span:has-text('{servizio}'), "
-                                       f"div:has-text('{servizio}')")
-                    if btn.count() > 0:
-                        btn.first.click()
-                        page.wait_for_timeout(500)
-                        print(f"  [OK] {servizio} (locator)")
+                    row = page.get_by_text(servizio, exact=True)
+                    if row.count() > 0:
+                        row.first.click()
+                        page.wait_for_timeout(400)
+                        print(f"  [OK] {servizio} (get_by_text)")
                         selected = True
                 except Exception:
                     pass
@@ -581,7 +570,7 @@ def insert_property(page):
             if not selected:
                 print(f"  [MISS] {servizio} — non trovato sulla pagina")
 
-        wait(page)
+        wait(page, 2000)
         screenshot(page, "servizi_selezionati")
         save_html(page, "step14_servizi_dopo")
 
