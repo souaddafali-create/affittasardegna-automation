@@ -23,7 +23,11 @@ USER_AGENT = (
 
 DESCRIPTION = PROP["marketing"]["descrizione_lunga"]
 
-# Mappa dotazioni JSON → label CaseVacanza
+# ---------------------------------------------------------------------------
+# Mappatura dotazioni JSON → label esatte CaseVacanza.it
+# REGOLA: spunta SOLO le dotazioni con valore true nel JSON.
+#         Se false o assente, NON spuntare. Zero eccezioni.
+# ---------------------------------------------------------------------------
 DOTAZIONI_MAP = {
     "tv": "TV",
     "piano_cottura": "Piano cottura",
@@ -39,7 +43,7 @@ DOTAZIONI_MAP = {
     "ferro_stiro": "Ferro da stiro",
     "terrazza": "Terrazza",
     "giardino": "Giardino",
-    "piscina": "Piscina",
+    "piscina": "Piscina (in comune)",
     "arredi_esterno": "Arredi da esterno",
     "barbecue": "Barbecue",
     "culla": "Culla",
@@ -47,14 +51,21 @@ DOTAZIONI_MAP = {
     "animali_ammessi": "Animali ammessi",
 }
 
+
 def _build_servizi():
-    """Restituisce la lista dei servizi attivi da selezionare su CaseVacanza."""
+    """Restituisce la lista dei servizi attivi (true) da selezionare su CaseVacanza.
+    Legge SOLO dal JSON — se un servizio è false, NON viene incluso."""
     dot = PROP["dotazioni"]
-    servizi = [label for key, label in DOTAZIONI_MAP.items() if dot.get(key)]
-    # Parcheggio: il JSON non ha un flag diretto, ma altro_dotazioni lo indica
-    if dot.get("parcheggio_privato") or "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
+    servizi = []
+    for key, label in DOTAZIONI_MAP.items():
+        if dot.get(key) is True:
+            servizi.append(label)
+    # Parcheggio: controlla flag diretto O la stringa in altro_dotazioni
+    if dot.get("parcheggio_privato") is True or \
+       "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
         servizi.append("Parcheggio")
     return servizi
+
 
 SERVIZI = _build_servizi()
 
@@ -248,9 +259,17 @@ def insert_property(page):
     click_save(page)
     screenshot(page, "dopo_ospiti")
 
-    # --- Step 10: Configura letti ---
-    # 1 camera, 4 posti letto: 1 matrimoniale (2 posti) + 2 singoli (2 posti)
+    # --- Step 10: Configura letti (dal JSON composizione.letti) ---
     print("Step 10: Configura letti")
+
+    # Mappa tipo letto JSON → indice bottone CaseVacanza
+    # CaseVacanza ordina: 0=Divano letto, 1=Matrimoniale, 2=Francese, 3=Singolo
+    LETTO_INDEX = {
+        "matrimoniale": 1,
+        "francese": 2,
+        "singolo": 3,
+        "divano_letto": 0,
+    }
 
     def do_step10():
         save_html(page, "step10_letti_before")
@@ -258,17 +277,23 @@ def insert_property(page):
         count = add_btns.count()
         print(f"  Trovati {count} counter-add-btn")
 
-        # Camera da letto 1 (unica): 1 Letto matrimoniale (indice 1)
-        print("  Camera 1: +1 Letto matrimoniale (indice 1)")
-        add_btns.nth(1).click()
-        page.wait_for_timeout(500)
-
-        # Camera da letto 1: 2 Letti singoli (indice 3)
-        print("  Camera 1: +2 Letto singolo (indice 3)")
-        add_btns.nth(3).click()
-        page.wait_for_timeout(500)
-        add_btns.nth(3).click()
-        page.wait_for_timeout(500)
+        letti = comp.get("letti", [])
+        if not letti:
+            print("  ATTENZIONE: nessun dato letti nel JSON, skip")
+        for letto in letti:
+            tipo = letto["tipo"]
+            quantita = letto["quantita"]
+            idx = LETTO_INDEX.get(tipo)
+            if idx is None:
+                print(f"  Tipo letto sconosciuto: {tipo}, skip")
+                continue
+            if idx >= count:
+                print(f"  Indice {idx} fuori range ({count} bottoni), skip {tipo}")
+                continue
+            for _ in range(quantita):
+                add_btns.nth(idx).click()
+                page.wait_for_timeout(500)
+            print(f"  {tipo}: +{quantita} (indice {idx})")
 
         wait(page)
         screenshot(page, "letti_configurati")
@@ -420,17 +445,27 @@ def insert_property(page):
 
     try_step(page, "step18_continua_titolo", do_step18)
 
-    # --- Step 19: Prezzo ---
+    # --- Step 19: Prezzo (dal JSON se presente, altrimenti skip) ---
     print("Step 19: Prezzo")
 
     def do_step19():
         screenshot(page, "prezzo_pagina")
         save_html(page, "step19_prezzo")
-        prezzo_field = page.get_by_label("Prezzo")
-        if prezzo_field.count() > 0:
-            prezzo_field.fill("120")
+
+        prezzo = PROP.get("condizioni", {}).get("prezzo_notte")
+        if prezzo is None:
+            print("  Prezzo non presente nel JSON — lascio vuoto")
         else:
-            page.locator("input[type='number'], input[name*='prezz'], input[name*='price']").first.fill("120")
+            prezzo_str = str(prezzo)
+            prezzo_field = page.get_by_label("Prezzo")
+            if prezzo_field.count() > 0:
+                prezzo_field.fill(prezzo_str)
+            else:
+                page.locator(
+                    "input[type='number'], input[name*='prezz'], input[name*='price']"
+                ).first.fill(prezzo_str)
+            print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
+
         wait(page)
         screenshot(page, "prezzo")
 
