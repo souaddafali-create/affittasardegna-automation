@@ -471,22 +471,90 @@ def insert_property(page):
     def do_step14():
         screenshot(page, "servizi_pagina")
         save_html(page, "step14_servizi")
+
+        # Logga tutti gli elementi servizio visibili per debug
+        all_labels = page.evaluate("""() => {
+            const els = document.querySelectorAll(
+                'label, [role="checkbox"], [data-test], input[type="checkbox"]'
+            );
+            return Array.from(els).slice(0, 60).map(e => ({
+                tag: e.tagName,
+                text: (e.textContent || '').trim().substring(0, 60),
+                type: e.type || '',
+                role: e.getAttribute('role') || '',
+                classes: e.className || '',
+                checked: e.checked || e.classList.contains('selected') ||
+                         e.classList.contains('active') || e.getAttribute('aria-checked') === 'true',
+                dataTest: e.getAttribute('data-test') || '',
+            }));
+        }""")
+        print(f"  Elementi trovati sulla pagina: {len(all_labels)}")
+        for el in all_labels[:30]:
+            print(f"    {el}")
+
         for servizio in SERVIZI:
             selected = False
-            try:
-                # 1) Match esatto con la label completa
-                btn = page.get_by_text(servizio, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    page.wait_for_timeout(500)
-                    print(f"  [OK] {servizio} (exact)")
-                    selected = True
-            except Exception:
-                pass
 
+            # Strategia 1: Cerca checkbox/label tramite JavaScript
+            try:
+                result = page.evaluate("""(label) => {
+                    // Cerca tutti gli elementi che contengono il testo
+                    const walker = document.createTreeWalker(
+                        document.body, NodeFilter.SHOW_TEXT, null, false
+                    );
+                    let node;
+                    while (node = walker.nextNode()) {
+                        const text = node.textContent.trim();
+                        if (text === label || text.includes(label)) {
+                            // Risali fino a trovare un elemento cliccabile
+                            let el = node.parentElement;
+                            for (let i = 0; i < 5 && el; i++) {
+                                // Cerca checkbox nascosta vicina
+                                const inp = el.querySelector('input[type="checkbox"]');
+                                if (inp) {
+                                    inp.click();
+                                    return {found: true, method: 'checkbox-input', tag: el.tagName};
+                                }
+                                // Se l'elemento stesso è una label o card cliccabile
+                                if (el.tagName === 'LABEL' || el.getAttribute('role') === 'checkbox'
+                                    || el.classList.contains('card') || el.classList.contains('chip')
+                                    || el.classList.contains('option') || el.classList.contains('tile')
+                                    || el.dataset.test) {
+                                    el.click();
+                                    return {found: true, method: 'parent-click', tag: el.tagName};
+                                }
+                                el = el.parentElement;
+                            }
+                            // Fallback: clicca il genitore diretto del testo
+                            node.parentElement.click();
+                            return {found: true, method: 'text-parent-click', tag: node.parentElement.tagName};
+                        }
+                    }
+                    return {found: false};
+                }""", servizio)
+
+                if result.get("found"):
+                    page.wait_for_timeout(500)
+                    print(f"  [OK] {servizio} (JS: {result.get('method')}, {result.get('tag')})")
+                    selected = True
+            except Exception as e:
+                print(f"  [WARN] {servizio} JS error: {e}")
+
+            # Strategia 2: Playwright get_by_text
             if not selected:
                 try:
-                    # 2) Match parziale (es. "Lavatrice" dentro "Lavatrice (privata)")
+                    btn = page.get_by_text(servizio, exact=True)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (exact)")
+                        selected = True
+                except Exception:
+                    pass
+
+            # Strategia 3: Playwright get_by_text partial
+            if not selected:
+                try:
                     btn = page.get_by_text(servizio, exact=False)
                     if btn.count() > 0:
                         btn.first.click()
@@ -496,9 +564,9 @@ def insert_property(page):
                 except Exception:
                     pass
 
+            # Strategia 4: locator label/span/div
             if not selected:
                 try:
-                    # 3) Fallback: cerca tramite locator label/span
                     btn = page.locator(f"label:has-text('{servizio}'), "
                                        f"span:has-text('{servizio}'), "
                                        f"div:has-text('{servizio}')")
@@ -515,6 +583,7 @@ def insert_property(page):
 
         wait(page)
         screenshot(page, "servizi_selezionati")
+        save_html(page, "step14_servizi_dopo")
 
     try_step(page, "step14_servizi", do_step14)
 
