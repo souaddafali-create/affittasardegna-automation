@@ -1,11 +1,15 @@
 import json
 import os
 import random
+import sys
 import tempfile
 import time
 import urllib.request
 
 from playwright.sync_api import sync_playwright
+
+# Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
+INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
 # --- Carica dati proprietà dal file JSON ---
 DATA_FILE = os.environ.get(
@@ -125,14 +129,58 @@ SERVIZI = _build_servizi_booking()
 # Login Booking Extranet
 # ---------------------------------------------------------------------------
 
+def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=300):
+    """Pausa interattiva: chiede input da terminale oppure aspetta che l'utente
+    agisca direttamente sul browser (modalità headless=False).
+
+    - Se INTERACTIVE: mostra un prompt e attende INVIO.
+    - Altrimenti (CI): attende fino a ``timeout_s`` che ``check_done_fn(page)``
+      restituisca True (polling ogni 5s), poi fallisce.
+    """
+    if INTERACTIVE:
+        input(f"\n>>> {prompt_msg}\n>>> Premi INVIO quando hai finito... ")
+    else:
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if check_done_fn(page):
+                return
+            time.sleep(5)
+        raise TimeoutError(f"Timeout ({timeout_s}s) in attesa di: {prompt_msg}")
+
+
+def _has_password_field(page):
+    """Restituisce True se nella pagina c'è un campo password visibile."""
+    return page.locator('input[type="password"]:visible').count() > 0
+
+
+def _page_has_captcha(page):
+    html = page.content().lower()
+    return "captcha" in html or "human" in html or "choose all" in html
+
+
+def _page_has_otp(page):
+    """Rileva se Booking sta chiedendo un codice di verifica email."""
+    html = page.content().lower()
+    otp_keywords = ["verification", "verifica", "codice", "code", "confirm", "pin"]
+    has_keyword = any(kw in html for kw in otp_keywords)
+    has_otp_input = page.locator(
+        "input[name*='otp'], input[name*='code'], input[name*='pin'], "
+        "input[name*='token'], input[type='tel'], "
+        "input[autocomplete='one-time-code']"
+    ).count() > 0
+    return has_keyword and has_otp_input
+
+
 def login(page):
-    """Accesso a Booking Extranet."""
+    """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi."""
     print("Login Booking Extranet...")
+    if INTERACTIVE:
+        print("  (modalità interattiva — il browser si aprirà visibile)")
     page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
     wait(page, 3000)
     screenshot(page, "login_page")
 
-    # Email
+    # ── Email ──
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
     page.wait_for_selector(email_sel, timeout=15_000)
     human_type(page, email_sel, EMAIL)
@@ -144,23 +192,80 @@ def login(page):
     wait(page, 5000)
     screenshot(page, "dopo_email")
 
-    # Check CAPTCHA
-    html = page.content().lower()
-    if "captcha" in html or "human" in html or "choose all" in html:
-        print("  *** CAPTCHA RILEVATO — intervento manuale necessario ***")
+    # ── CAPTCHA ──
+    if _page_has_captcha(page):
+        print("  *** CAPTCHA RILEVATO ***")
         screenshot(page, "captcha")
         save_html(page, "captcha")
+        _wait_for_interactive(
+            page,
+            "CAPTCHA rilevato! Risolvilo nel browser.",
+            lambda p: not _page_has_captcha(p),
+        )
+        print("  CAPTCHA superato.")
+        screenshot(page, "captcha_superato")
+        wait(page, 3000)
 
-    # Password
+    # ── Codice di verifica email (OTP) ──
+    if _page_has_otp(page):
+        print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
+        screenshot(page, "otp_richiesto")
+        save_html(page, "otp_pagina")
+
+        if INTERACTIVE:
+            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
+            # Trova il campo OTP e compila
+            otp_sel = (
+                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
+                "input[name*='token'], input[type='tel'], "
+                "input[autocomplete='one-time-code']"
+            )
+            otp_field = page.locator(otp_sel).first
+            otp_field.fill(code)
+            wait(page, 1000)
+            screenshot(page, "otp_inserito")
+
+            # Submit OTP
+            page.click('button[type="submit"]', timeout=10_000)
+            wait(page, 5000)
+            screenshot(page, "dopo_otp")
+            print("  Codice di verifica inviato.")
+        else:
+            # In CI non possiamo chiedere input — fallisce
+            raise RuntimeError(
+                "Booking richiede un codice di verifica email. "
+                "Eseguire lo script in locale con INTERACTIVE=1."
+            )
+    else:
+        print("  Nessun OTP richiesto, procedo.")
+
+    # ── Secondo CAPTCHA (possibile dopo OTP) ──
+    if _page_has_captcha(page):
+        print("  *** CAPTCHA RILEVATO (post-OTP) ***")
+        screenshot(page, "captcha_post_otp")
+        _wait_for_interactive(
+            page,
+            "Secondo CAPTCHA! Risolvilo nel browser.",
+            lambda p: not _page_has_captcha(p),
+        )
+        wait(page, 3000)
+
+    # ── Password ──
     pw_sel = 'input[type="password"], input[name="password"], #password'
-    page.wait_for_selector(pw_sel, timeout=15_000)
-    human_type(page, pw_sel, PASSWORD)
-    wait(page, 1000)
-    screenshot(page, "password_inserita")
+    try:
+        page.wait_for_selector(pw_sel, timeout=15_000)
+        human_type(page, pw_sel, PASSWORD)
+        wait(page, 1000)
+        screenshot(page, "password_inserita")
 
-    page.click('button[type="submit"]', timeout=10_000)
-    wait(page, 8000)
-    screenshot(page, "dopo_login")
+        page.click('button[type="submit"]', timeout=10_000)
+        wait(page, 8000)
+        screenshot(page, "dopo_login")
+    except Exception:
+        # Alcuni flussi (es. magic link) saltano la password
+        print("  Campo password non trovato — potrebbe essere login senza password.")
+        screenshot(page, "no_password")
+
     print(f"  URL dopo login: {page.url}")
 
 
@@ -662,9 +767,15 @@ def insert_property(page):
 def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
+    # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
+    # In CI: headless
+    headless = not INTERACTIVE
+    print(f"Browser: {'headless' if headless else 'visibile'} "
+          f"(INTERACTIVE={INTERACTIVE})")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=True,
+            headless=headless,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
