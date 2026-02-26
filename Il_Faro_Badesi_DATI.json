@@ -17,6 +17,10 @@
     "max_ospiti": 4,
     "camere": 1,
     "posti_letto": 4,
+    "letti": [
+      {"tipo": "matrimoniale", "quantita": 1},
+      {"tipo": "singolo", "quantita": 2}
+    ],
     "bagni": 1,
     "bagno_con_doccia": true,
     "bagno_con_vasca": false,

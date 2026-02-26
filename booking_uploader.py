@@ -87,9 +87,10 @@ def download_placeholder_photos(count=5):
 
 # ---------------------------------------------------------------------------
 # Booking Extranet: mappatura dotazioni
+# REGOLA: spunta SOLO le dotazioni con valore true nel JSON.
+#         Se false o assente, NON spuntare. Zero eccezioni.
 # ---------------------------------------------------------------------------
 
-# Mappa dotazioni JSON → checkbox label Booking Extranet
 DOTAZIONI_BOOKING = {
     "tv": "TV",
     "piano_cottura": "Piano cottura",
@@ -115,9 +116,15 @@ DOTAZIONI_BOOKING = {
 
 
 def _build_servizi_booking():
+    """Restituisce la lista dei servizi attivi (true) da selezionare su Booking.
+    Legge SOLO dal JSON — se un servizio è false, NON viene incluso."""
     dot = PROP["dotazioni"]
-    servizi = [label for key, label in DOTAZIONI_BOOKING.items() if dot.get(key)]
-    if dot.get("parcheggio_privato") or "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
+    servizi = []
+    for key, label in DOTAZIONI_BOOKING.items():
+        if dot.get(key) is True:
+            servizi.append(label)
+    if dot.get("parcheggio_privato") is True or \
+       "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
         servizi.append("Parcheggio")
     return servizi
 
@@ -490,32 +497,43 @@ def insert_property(page):
 
     try_step(page, "step5_composizione", do_step5)
 
-    # --- Step 6: Letti ---
+    # --- Step 6: Letti (dal JSON composizione.letti) ---
     print("Step 6: Configurazione letti")
+
+    # Mappa tipo letto JSON → possibili label Booking (IT/EN)
+    LETTO_LABELS_BOOKING = {
+        "matrimoniale": ["Letto matrimoniale", "Double bed", "Letto alla francese"],
+        "francese": ["Letto alla francese", "Queen bed"],
+        "singolo": ["Letto singolo", "Single bed", "Letti singoli"],
+        "divano_letto": ["Divano letto", "Sofa bed"],
+    }
 
     def do_step6():
         screenshot(page, "letti_pagina")
         save_html(page, "step6_letti")
 
-        # Booking chiede tipo e numero letti per camera
-        # Proviamo con letto matrimoniale + singoli
-        for label in ["Letto matrimoniale", "Double bed", "Letto alla francese"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill("1")
-                print(f"  {label}: 1")
-                break
+        letti = comp.get("letti", [])
+        if not letti:
+            print("  ATTENZIONE: nessun dato letti nel JSON, skip")
 
-        wait(page, 1000)
-
-        for label in ["Letto singolo", "Single bed", "Letti singoli"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill("2")
-                print(f"  {label}: 2")
-                break
-
-        wait(page, 1000)
+        for letto in letti:
+            tipo = letto["tipo"]
+            quantita = str(letto["quantita"])
+            labels = LETTO_LABELS_BOOKING.get(tipo, [])
+            if not labels:
+                print(f"  Tipo letto sconosciuto: {tipo}, skip")
+                continue
+            found = False
+            for label in labels:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(quantita)
+                    print(f"  {label}: {quantita} (dal JSON)")
+                    found = True
+                    break
+            if not found:
+                print(f"  Label non trovata per tipo '{tipo}', skip")
+            wait(page, 1000)
 
         # Continua
         for txt in ["Continua", "Continue", "Avanti", "Next"]:
@@ -654,31 +672,42 @@ def insert_property(page):
 
     try_step(page, "step9_descrizione", do_step9)
 
-    # --- Step 10: Prezzo e condizioni ---
+    # --- Step 10: Prezzo e condizioni (dal JSON, niente hardcoded) ---
     print("Step 10: Prezzo e condizioni")
 
     def do_step10():
         screenshot(page, "prezzo_pagina")
         save_html(page, "step10_prezzo")
 
-        # Prezzo a notte (placeholder — da configurare)
-        for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill("120")
-                print("  Prezzo: 120 EUR/notte")
-                break
+        cond = PROP.get("condizioni", {})
+
+        # Prezzo a notte — solo se presente nel JSON
+        prezzo = cond.get("prezzo_notte")
+        if prezzo is not None:
+            prezzo_str = str(prezzo)
+            for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(prezzo_str)
+                    print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
+                    break
+        else:
+            print("  Prezzo non presente nel JSON — lascio vuoto")
 
         wait(page, 1000)
 
-        # Cauzione
-        cauzione = str(PROP["condizioni"]["cauzione_euro"])
-        for label in ["Cauzione", "Deposit", "Damage deposit"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(cauzione)
-                print(f"  Cauzione: {cauzione} EUR")
-                break
+        # Cauzione — solo se presente nel JSON
+        cauzione_val = cond.get("cauzione_euro")
+        if cauzione_val is not None:
+            cauzione = str(cauzione_val)
+            for label in ["Cauzione", "Deposit", "Damage deposit"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(cauzione)
+                    print(f"  Cauzione: {cauzione} EUR (dal JSON)")
+                    break
+        else:
+            print("  Cauzione non presente nel JSON — lascio vuoto")
 
         wait(page, 1000)
 
