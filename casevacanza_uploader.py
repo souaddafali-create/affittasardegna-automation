@@ -121,12 +121,102 @@ def download_placeholder_photos(count=5):
 
 
 def login(page):
-    page.goto("https://my.casevacanza.it")
-    page.wait_for_selector("#username", timeout=30_000)
-    page.locator("#username").fill(EMAIL)
-    page.locator("#password").fill(PASSWORD)
-    page.locator("#kc-login").click()
-    page.wait_for_url("**/home**", timeout=30_000)
+    """Login su CaseVacanza.it — prova diversi selettori per email e password."""
+    print("Login CaseVacanza.it...")
+    page.goto("https://my.casevacanza.it", timeout=60_000)
+    wait(page, 5000)
+    screenshot(page, "login_page")
+    save_html(page, "login_page")
+    print(f"  URL login: {page.url}")
+
+    # Aspetta che compaia un campo input (la pagina potrebbe fare redirect a Keycloak)
+    page.wait_for_selector(
+        "#username, #email, input[name='username'], input[name='email'], "
+        "input[type='email'], input[type='text'], input[type='password']",
+        timeout=30_000,
+    )
+    wait(page, 2000)
+
+    # Trova il campo email/username
+    email_selectors = [
+        "#username",
+        "#email",
+        "input[name='username']",
+        "input[name='email']",
+        "input[name='loginname']",
+        "input[type='email']",
+        "input[type='text']",
+    ]
+    email_field = None
+    for sel in email_selectors:
+        loc = page.locator(sel)
+        if loc.count() > 0:
+            email_field = loc.first
+            print(f"  Campo email trovato: {sel}")
+            break
+    if email_field is None:
+        for lbl in ["Email", "Username", "E-mail", "Indirizzo email"]:
+            loc = page.get_by_label(lbl)
+            if loc.count() > 0:
+                email_field = loc.first
+                print(f"  Campo email trovato (label): {lbl}")
+                break
+    if email_field is None:
+        screenshot(page, "login_no_email_field")
+        save_html(page, "login_no_email_field")
+        raise RuntimeError("Campo email/username non trovato nella pagina di login")
+
+    email_field.fill(EMAIL)
+    wait(page, 1000)
+
+    # Trova il campo password
+    pw_selectors = [
+        "#password",
+        "input[name='password']",
+        "input[type='password']",
+    ]
+    pw_field = None
+    for sel in pw_selectors:
+        loc = page.locator(sel)
+        if loc.count() > 0:
+            pw_field = loc.first
+            print(f"  Campo password trovato: {sel}")
+            break
+    if pw_field is None:
+        screenshot(page, "login_no_pw_field")
+        raise RuntimeError("Campo password non trovato nella pagina di login")
+
+    pw_field.fill(PASSWORD)
+    wait(page, 1000)
+    screenshot(page, "login_credenziali")
+
+    # Trova il bottone di login
+    login_selectors = [
+        "#kc-login",
+        "button[type='submit']",
+        "input[type='submit']",
+    ]
+    login_btn = None
+    for sel in login_selectors:
+        loc = page.locator(sel)
+        if loc.count() > 0:
+            login_btn = loc.first
+            print(f"  Bottone login trovato: {sel}")
+            break
+    if login_btn is None:
+        for lbl in ["Accedi", "Login", "Sign in", "Entra"]:
+            loc = page.get_by_text(lbl, exact=True)
+            if loc.count() > 0:
+                login_btn = loc.first
+                print(f"  Bottone login trovato (text): {lbl}")
+                break
+    if login_btn is None:
+        raise RuntimeError("Bottone login non trovato")
+
+    login_btn.click()
+    wait(page, 8000)
+    screenshot(page, "dopo_login")
+    print(f"  URL dopo login: {page.url}")
     print("Login effettuato.")
 
 
