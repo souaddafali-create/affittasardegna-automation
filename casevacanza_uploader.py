@@ -27,6 +27,10 @@ DESCRIPTION = PROP["marketing"]["descrizione_lunga"]
 # Mappatura dotazioni JSON → label esatte CaseVacanza.it
 # REGOLA: spunta SOLO le dotazioni con valore true nel JSON.
 #         Se false o assente, NON spuntare. Zero eccezioni.
+#
+# Le label devono corrispondere ESATTAMENTE a quelle sulla pagina
+# "Servizi popolari" di CaseVacanza.it. Alcune hanno specificazioni
+# tra parentesi (es. "Lavatrice (privata)", "Piscina (in comune)").
 # ---------------------------------------------------------------------------
 DOTAZIONI_MAP = {
     "tv": "TV",
@@ -34,7 +38,7 @@ DOTAZIONI_MAP = {
     "frigo_congelatore": "Frigorifero",
     "forno": "Forno",
     "microonde": "Microonde",
-    "lavatrice": "Lavatrice",
+    "lavatrice": "Lavatrice (privata)",
     "lavastoviglie": "Lavastoviglie",
     "aria_condizionata": "Aria condizionata",
     "riscaldamento": "Riscaldamento",
@@ -45,7 +49,7 @@ DOTAZIONI_MAP = {
     "giardino": "Giardino",
     "piscina": "Piscina (in comune)",
     "arredi_esterno": "Arredi da esterno",
-    "barbecue": "Barbecue",
+    "barbecue": "Griglia per barbecue",
     "culla": "Culla",
     "seggiolone": "Seggiolone",
     "animali_ammessi": "Animali ammessi",
@@ -370,23 +374,55 @@ def insert_property(page):
 
     try_step(page, "step13_continua_foto", do_step13)
 
-    # --- Step 14: Seleziona servizi ---
+    # --- Step 14: Seleziona servizi (SOLO quelli true nel JSON) ---
     print("Step 14: Servizi")
+    print(f"  Servizi da selezionare dal JSON: {SERVIZI}")
 
     def do_step14():
         screenshot(page, "servizi_pagina")
         save_html(page, "step14_servizi")
         for servizio in SERVIZI:
+            selected = False
             try:
+                # 1) Match esatto con la label completa
                 btn = page.get_by_text(servizio, exact=True)
                 if btn.count() > 0:
                     btn.first.click()
                     page.wait_for_timeout(500)
-                    print(f"  Servizio selezionato: {servizio}")
-                else:
-                    print(f"  Servizio non trovato: {servizio}")
-            except Exception as e:
-                print(f"  Errore servizio {servizio}: {e}")
+                    print(f"  [OK] {servizio} (exact)")
+                    selected = True
+            except Exception:
+                pass
+
+            if not selected:
+                try:
+                    # 2) Match parziale (es. "Lavatrice" dentro "Lavatrice (privata)")
+                    btn = page.get_by_text(servizio, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (partial)")
+                        selected = True
+                except Exception:
+                    pass
+
+            if not selected:
+                try:
+                    # 3) Fallback: cerca tramite locator label/span
+                    btn = page.locator(f"label:has-text('{servizio}'), "
+                                       f"span:has-text('{servizio}'), "
+                                       f"div:has-text('{servizio}')")
+                    if btn.count() > 0:
+                        btn.first.click()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (locator)")
+                        selected = True
+                except Exception:
+                    pass
+
+            if not selected:
+                print(f"  [MISS] {servizio} — non trovato sulla pagina")
+
         wait(page)
         screenshot(page, "servizi_selezionati")
 
