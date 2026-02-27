@@ -42,7 +42,7 @@ DOTAZIONI_MAP = {
     "lavastoviglie": "Lavastoviglie",
     "aria_condizionata": "Aria condizionata",
     "riscaldamento": "Riscaldamento",
-    "internet_wifi": "Wi-Fi",
+    "internet_wifi": "WiFi",
     "phon": "Asciugacapelli",
     "ferro_stiro": "Ferro da stiro",
     "terrazza": "Terrazza",
@@ -473,96 +473,200 @@ def insert_property(page):
         save_html(page, "step14_servizi")
 
         # 1) Clicca la tab "Tutti" per mostrare TUTTI i servizi
-        try:
-            tab_tutti = page.get_by_text("Tutti", exact=True)
-            if tab_tutti.count() > 0:
-                tab_tutti.first.click()
-                wait(page, 2000)
-                print("  Tab 'Tutti' cliccata — tutti i servizi visibili")
-                screenshot(page, "servizi_tab_tutti")
-        except Exception as e:
-            print(f"  [WARN] Tab 'Tutti' non trovata: {e}")
+        #    (Piano cottura, Frigorifero, Microonde, Asciugacapelli, ecc.
+        #     non sono nella tab "Servizi popolari")
+        for tab_label in ["Tutti", "tutti", "All", "all"]:
+            try:
+                tab = page.get_by_role("tab", name=tab_label)
+                if tab.count() > 0:
+                    tab.first.click()
+                    wait(page, 2000)
+                    print(f"  Tab '{tab_label}' cliccata (role=tab)")
+                    screenshot(page, "servizi_tab_tutti")
+                    break
+            except Exception:
+                pass
+        else:
+            # Fallback: clicca link/button con testo "Tutti"
+            try:
+                tab = page.get_by_text("Tutti", exact=True)
+                if tab.count() > 0:
+                    tab.first.click()
+                    wait(page, 2000)
+                    print("  Tab 'Tutti' cliccata (text fallback)")
+                    screenshot(page, "servizi_tab_tutti")
+            except Exception as e:
+                print(f"  [WARN] Tab 'Tutti' non trovata: {e}")
 
-        # 2) Debug: logga tutti i servizi visibili sulla pagina
-        all_items = page.evaluate("""() => {
+        # 2) Debug: logga tutti gli elementi checkbox/role visibili
+        debug_info = page.evaluate("""() => {
             const items = [];
-            // Cerca tutte le righe che contengono checkbox
+            // Standard checkboxes
             document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                const row = cb.closest('label') || cb.closest('div') || cb.parentElement;
+                const row = cb.closest('label') || cb.closest('[class]') || cb.parentElement;
                 items.push({
-                    text: (row.textContent || '').trim().substring(0, 80),
-                    id: cb.id || '',
-                    name: cb.name || '',
-                    value: cb.value || '',
+                    type: 'input-checkbox',
+                    text: (row?.textContent || '').trim().substring(0, 80),
                     checked: cb.checked,
+                });
+            });
+            // ARIA role=checkbox (custom components)
+            document.querySelectorAll('[role="checkbox"]').forEach(el => {
+                items.push({
+                    type: 'role-checkbox',
+                    text: (el.textContent || '').trim().substring(0, 80),
+                    checked: el.getAttribute('aria-checked') === 'true',
+                });
+            });
+            // ARIA role=switch
+            document.querySelectorAll('[role="switch"]').forEach(el => {
+                items.push({
+                    type: 'role-switch',
+                    text: (el.textContent || '').trim().substring(0, 80),
+                    checked: el.getAttribute('aria-checked') === 'true',
                 });
             });
             return items;
         }""")
-        print(f"  Checkbox trovate sulla pagina: {len(all_items)}")
-        for item in all_items:
-            print(f"    {item}")
+        print(f"  Elementi checkbox trovati: {len(debug_info)}")
+        for item in debug_info:
+            print(f"    [{item.get('type')}] {item.get('text')} (checked={item.get('checked')})")
 
-        # 3) Seleziona ogni servizio
+        # Se nessun checkbox standard trovato, logga la struttura HTML
+        if len(debug_info) == 0:
+            html_structure = page.evaluate("""() => {
+                // Trova tutti gli elementi che contengono testi di servizi noti
+                const known = ['TV', 'Aria condizionata', 'Parcheggio', 'Terrazza'];
+                const results = [];
+                for (const name of known) {
+                    const walker = document.createTreeWalker(
+                        document.body, NodeFilter.SHOW_TEXT, null, false
+                    );
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.textContent.trim() === name) {
+                            let el = node.parentElement;
+                            // Risali 5 livelli e logga la struttura
+                            const chain = [];
+                            for (let i = 0; i < 5 && el; i++) {
+                                chain.push({
+                                    tag: el.tagName,
+                                    classes: (el.className || '').toString().substring(0, 60),
+                                    role: el.getAttribute('role') || '',
+                                    ariaChecked: el.getAttribute('aria-checked') || '',
+                                    dataTest: el.getAttribute('data-test') || '',
+                                    clickable: el.onclick !== null || el.tagName === 'BUTTON' ||
+                                               el.tagName === 'LABEL' || el.tagName === 'A',
+                                });
+                                el = el.parentElement;
+                            }
+                            results.push({name, chain});
+                            break;
+                        }
+                    }
+                }
+                return results;
+            }""")
+            print("  Struttura HTML dei servizi noti:")
+            for r in html_structure:
+                print(f"    '{r.get('name')}':")
+                for c in r.get("chain", []):
+                    print(f"      <{c.get('tag')}> class='{c.get('classes')}' "
+                          f"role='{c.get('role')}' aria-checked='{c.get('ariaChecked')}' "
+                          f"data-test='{c.get('dataTest')}' clickable={c.get('clickable')}")
+
+        # 3) Seleziona ogni servizio con 4 strategie progressive
         for servizio in SERVIZI:
             selected = False
 
-            # Strategia A: trova la checkbox associata al testo via JS
-            try:
-                result = page.evaluate("""(label) => {
-                    // Cerca tutte le checkbox
-                    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-                    for (const cb of checkboxes) {
-                        // Prendi il contenitore (label o div genitore)
-                        const container = cb.closest('label') || cb.parentElement?.parentElement || cb.parentElement;
-                        const text = (container?.textContent || '').trim();
-                        if (text.includes(label)) {
-                            if (!cb.checked) {
-                                cb.click();
-                            }
-                            return {found: true, method: 'checkbox', text: text.substring(0, 60), checked: cb.checked};
-                        }
-                    }
-                    return {found: false};
-                }""", servizio)
-                if result.get("found"):
-                    page.wait_for_timeout(400)
-                    print(f"  [OK] {servizio} (checkbox: {result.get('text')})")
-                    selected = True
-            except Exception as e:
-                print(f"  [WARN] {servizio} checkbox JS: {e}")
+            # Strategia 1: get_by_role("checkbox") — il metodo Playwright raccomandato
+            if not selected:
+                try:
+                    cb = page.get_by_role("checkbox", name=servizio, exact=True)
+                    if cb.count() > 0:
+                        cb.first.check()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (role=checkbox exact)")
+                        selected = True
+                except Exception:
+                    pass
 
-            # Strategia B: clicca la riga/label con get_by_label (Playwright)
+            if not selected:
+                try:
+                    cb = page.get_by_role("checkbox", name=servizio, exact=False)
+                    if cb.count() > 0:
+                        cb.first.check()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (role=checkbox partial)")
+                        selected = True
+                except Exception:
+                    pass
+
+            # Strategia 2: get_by_label — trova checkbox associata al testo
             if not selected:
                 try:
                     cb = page.get_by_label(servizio, exact=True)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(400)
-                        print(f"  [OK] {servizio} (get_by_label exact)")
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (get_by_label)")
+                        selected = True
+                except Exception:
+                    pass
+
+            # Strategia 3: JS — cerca checkbox nel contenitore del testo
+            if not selected:
+                try:
+                    result = page.evaluate("""(label) => {
+                        const checkboxes = document.querySelectorAll(
+                            'input[type="checkbox"], [role="checkbox"], [role="switch"]'
+                        );
+                        for (const cb of checkboxes) {
+                            const container = cb.closest('label')
+                                || cb.closest('[data-test]')
+                                || cb.parentElement?.parentElement?.parentElement
+                                || cb.parentElement?.parentElement
+                                || cb.parentElement;
+                            const text = (container?.textContent || '').trim();
+                            if (text.includes(label)) {
+                                const isInput = cb.tagName === 'INPUT';
+                                if (isInput && !cb.checked) {
+                                    cb.click();
+                                } else if (!isInput && cb.getAttribute('aria-checked') !== 'true') {
+                                    cb.click();
+                                }
+                                return {found: true, method: 'js-checkbox', text: text.substring(0, 60)};
+                            }
+                        }
+                        return {found: false};
+                    }""", servizio)
+                    if result.get("found"):
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (JS: {result.get('method')})")
+                        selected = True
+                except Exception as e:
+                    print(f"  [WARN] {servizio} JS: {e}")
+
+            # Strategia 4: Clicca direttamente il testo o il suo contenitore
+            if not selected:
+                try:
+                    el = page.get_by_text(servizio, exact=True)
+                    if el.count() > 0:
+                        # Clicca il genitore del testo (spesso è la riga cliccabile)
+                        el.first.locator("..").click()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (click parent of text)")
                         selected = True
                 except Exception:
                     pass
 
             if not selected:
                 try:
-                    cb = page.get_by_label(servizio, exact=False)
-                    if cb.count() > 0:
-                        cb.first.check()
-                        page.wait_for_timeout(400)
-                        print(f"  [OK] {servizio} (get_by_label partial)")
-                        selected = True
-                except Exception:
-                    pass
-
-            # Strategia C: get_by_text e clicca la riga
-            if not selected:
-                try:
-                    row = page.get_by_text(servizio, exact=True)
-                    if row.count() > 0:
-                        row.first.click()
-                        page.wait_for_timeout(400)
-                        print(f"  [OK] {servizio} (get_by_text)")
+                    el = page.get_by_text(servizio, exact=True)
+                    if el.count() > 0:
+                        el.first.click()
+                        page.wait_for_timeout(500)
+                        print(f"  [OK] {servizio} (click text directly)")
                         selected = True
                 except Exception:
                     pass
