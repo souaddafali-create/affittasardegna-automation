@@ -1,0 +1,43 @@
+name: Idealista Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'idealista_uploader.py'
+      - 'portali/idealista_map.py'
+      - 'Il_Faro_Badesi_DATI.json'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Run uploader
+        env:
+          IDEALISTA_EMAIL: ${{ secrets.IDEALISTA_EMAIL }}
+          IDEALISTA_PASSWORD: ${{ secrets.IDEALISTA_PASSWORD }}
+        run: xvfb-run python idealista_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-idealista
+          path: screenshots_idealista/

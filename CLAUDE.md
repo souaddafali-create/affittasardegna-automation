@@ -36,7 +36,7 @@ Ogni proprietà avrà un JSON diverso con servizi diversi. Gli uploader si adatt
 
 ## Cosa fa questo progetto
 
-Automazione per pubblicare proprietà in affitto breve su più portali (CaseVacanza.it, Booking.com) partendo da un unico file JSON dati.
+Automazione per pubblicare proprietà in affitto breve su 5 portali partendo da un unico file JSON dati.
 
 Flusso principale:
 
@@ -44,13 +44,20 @@ Flusso principale:
 Contratto proprietà + CIN
         │
         ▼
-  <proprietà>_DATI.json          ← unica fonte dati
+  <proprietà>_DATI.json              ← unica fonte dati
         │
-        ├──► casevacanza_uploader.py  → CaseVacanza.it
-        └──► booking_uploader.py      → Booking Extranet
+        ├──► casevacanza_uploader.py   → CaseVacanza.it   (Playwright)
+        ├──► booking_uploader.py       → Booking Extranet  (Playwright + stealth)
+        ├──► immobiliare_uploader.py   → Immobiliare.it    (API REST-XML)
+        ├──► idealista_uploader.py     → Idealista.it      (Playwright)
+        └──► expedia_uploader.py       → Vrbo/Expedia      (Playwright + stealth)
 ```
 
-Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserimento proprietà con Playwright e si ferma prima dell'invio finale (screenshot di verifica).
+Tutti gli uploader importano utilities condivise da `uploader_base.py`.
+Le mappature dotazioni sono in `portali/<portale>_map.py`.
+Krossbooking gestisce la sincronizzazione calendari e tariffe.
+
+Ogni uploader si ferma prima dell'invio finale (screenshot di verifica).
 
 ---
 
@@ -109,12 +116,25 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 |------|-------------|
 | `Il_Faro_Badesi_DATI.json` | Dati completi della proprietà "Il Faro" a Badesi (SS). Fonte unica: tutti gli uploader leggono da qui. |
 
+### Framework condiviso
+
+| File | Descrizione |
+|------|-------------|
+| `uploader_base.py` | Utilities condivise: `load_property_data()`, `screenshot()`, `save_html()`, `wait()`, `try_step()`, `download_placeholder_photos()`, `build_services()`, `create_browser_context()`. Importato da tutti gli uploader. |
+| `portali/` | Directory con mappature dotazioni per portale. |
+| `portali/immobiliare_map.py` | Mappatura dotazioni → XML tags per Immobiliare.it API. |
+| `portali/idealista_map.py` | Mappatura dotazioni → label checkbox Idealista. |
+| `portali/expedia_map.py` | Mappatura dotazioni → label checkbox Vrbo/Expedia (EN + IT). |
+
 ### Uploader
 
-| File | Portale | Dettagli |
-|------|---------|----------|
-| `casevacanza_uploader.py` | CaseVacanza.it | Playwright. Login su `my.casevacanza.it`, wizard 28 step: tipo → indirizzo → mappa → ospiti/camere → letti → foto → servizi → titolo/descrizione → prezzo → cauzione → pulizie/biancheria/soggiorno → check-in/out/regole → calendario → CIN → finale. Env vars: `CASEVACANZA_EMAIL`, `CASEVACANZA_PASSWORD`. Override JSON con `PROPERTY_DATA`. |
-| `booking_uploader.py` | Booking Extranet | Playwright + stealth + OTP interattivo. Login su `account.booking.com` con supporto codice verifica email. Wizard ~12 step: tipo → nome → indirizzo → composizione → letti → servizi → foto → descrizione → prezzo/cauzione → CIN/CIR → finale. Env vars: `BK_EMAIL`, `BK_PASSWORD`. Override JSON con `PROPERTY_DATA`. Modalità interattiva: `INTERACTIVE=1` (browser visibile, OTP da terminale). |
+| File | Portale | Metodo | Dettagli |
+|------|---------|--------|----------|
+| `casevacanza_uploader.py` | CaseVacanza.it | Playwright | Login su `my.casevacanza.it`, wizard 28 step. Env: `CASEVACANZA_EMAIL`, `CASEVACANZA_PASSWORD`. |
+| `booking_uploader.py` | Booking Extranet | Playwright + stealth | Login con OTP interattivo. Wizard ~12 step. Env: `BK_EMAIL`, `BK_PASSWORD`. `INTERACTIVE=1` per browser visibile. |
+| `immobiliare_uploader.py` | Immobiliare.it | **API REST-XML** | Niente Playwright! PUT su `feed.immobiliare.it`. Env: `IMMOBILIARE_EMAIL`, `IMMOBILIARE_PASSWORD`, `IMMOBILIARE_SOURCE`. `DRY_RUN=1` per test. |
+| `idealista_uploader.py` | Idealista.it | Playwright | Login su `idealista.it/login`, wizard ~10 step. Env: `IDEALISTA_EMAIL`, `IDEALISTA_PASSWORD`. |
+| `expedia_uploader.py` | Vrbo/Expedia | Playwright + stealth | Login su `vrbo.com`, wizard ~10 step. Env: `EXPEDIA_EMAIL`, `EXPEDIA_PASSWORD`. `INTERACTIVE=1` per 2FA. |
 
 ### Workflow GitHub Actions
 
@@ -122,6 +142,9 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 |------|---------|---------|
 | `.github/workflows/upload.yml` | Push su `main` (se cambia `casevacanza_uploader.py` o il JSON) + manual | Esegue `casevacanza_uploader.py` con xvfb. Artifact: `screenshots/`. |
 | `.github/workflows/booking_upload.yml` | Push su `main` (se cambia `booking_uploader.py` o il JSON) + manual | Esegue `booking_uploader.py` con xvfb e stealth. Artifact: `screenshots_booking/`. |
+| `.github/workflows/immobiliare_upload.yml` | Push su `main` (se cambia `immobiliare_uploader.py` o il JSON) + manual | Esegue `immobiliare_uploader.py` (API, no browser). |
+| `.github/workflows/idealista_upload.yml` | Push su `main` (se cambia `idealista_uploader.py` o il JSON) + manual | Esegue `idealista_uploader.py` con xvfb. Artifact: `screenshots_idealista/`. |
+| `.github/workflows/expedia_upload.yml` | Push su `main` (se cambia `expedia_uploader.py` o il JSON) + manual | Esegue `expedia_uploader.py` con xvfb e stealth. Artifact: `screenshots_expedia/`. |
 | `.github/workflows/booking_explore.yml` | Solo manual | Script esplorativo inline per Booking.com. Non usa il JSON. |
 
 ### Altro
@@ -141,6 +164,13 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 | `CASEVACANZA_PASSWORD` | casevacanza_uploader.py |
 | `BK_EMAIL` | booking_uploader.py |
 | `BK_PASSWORD` | booking_uploader.py |
+| `IMMOBILIARE_EMAIL` | immobiliare_uploader.py |
+| `IMMOBILIARE_PASSWORD` | immobiliare_uploader.py |
+| `IMMOBILIARE_SOURCE` | immobiliare_uploader.py |
+| `IDEALISTA_EMAIL` | idealista_uploader.py |
+| `IDEALISTA_PASSWORD` | idealista_uploader.py |
+| `EXPEDIA_EMAIL` | expedia_uploader.py |
+| `EXPEDIA_PASSWORD` | expedia_uploader.py |
 
 ---
 
@@ -148,24 +178,48 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 
 1. Creare un nuovo file JSON seguendo la struttura sopra (copiare `Il_Faro_Badesi_DATI.json` come template)
 2. Compilare TUTTI i campi: identificativi, composizione (incluso `letti`), dotazioni (true/false per ciascuna), condizioni, marketing
-3. Eseguire: `PROPERTY_DATA=nuovo_file.json python casevacanza_uploader.py`
+3. Eseguire su tutti i portali:
+   ```bash
+   export PROPERTY_DATA=nuovo_file.json
+   python casevacanza_uploader.py
+   python booking_uploader.py
+   DRY_RUN=1 python immobiliare_uploader.py   # test XML prima dell'invio
+   python idealista_uploader.py
+   python expedia_uploader.py
+   ```
 4. L'uploader spunta SOLO i servizi con `true` nel JSON, compila SOLO i dati presenti
 
 ## Come aggiungere un nuovo portale
 
-1. Creare `nuovo_portale_uploader.py` che carica il JSON con la stessa logica
-2. Aggiungere la mappatura `DOTAZIONI_MAP` specifica per quel portale
-3. Aggiungere un workflow in `.github/workflows/` con trigger e secrets adeguati
-4. Aggiornare questa mappa
+1. Creare `portali/nuovo_portale_map.py` con la mappatura `DOTAZIONI_MAP`
+2. Creare `nuovo_portale_uploader.py` che importa da `uploader_base` e dalla mappatura
+3. Aggiungere un workflow in `.github/workflows/` con trigger e secrets
+4. Aggiornare questa mappa e la tabella secrets
 
-## Esecuzione locale di Booking (OTP)
+## Esecuzione locale
 
-Booking richiede codice verifica email. Per eseguire in locale:
-
-```cmd
-set BK_EMAIL=tua@email.com
-set BK_PASSWORD=tuapassword
-python booking_uploader.py
+### Booking (richiede OTP email)
+```bash
+export BK_EMAIL=tua@email.com BK_PASSWORD=tuapassword
+python booking_uploader.py   # browser visibile, OTP da terminale
 ```
 
-Il browser si apre visibile. Quando Booking chiede l'OTP, lo script pausa e chiede il codice nel terminale.
+### Expedia/Vrbo (richiede 2FA)
+```bash
+export EXPEDIA_EMAIL=tua@email.com EXPEDIA_PASSWORD=tuapassword
+INTERACTIVE=1 python expedia_uploader.py   # browser visibile per 2FA
+```
+
+### Immobiliare.it (API — dry run consigliato)
+```bash
+export IMMOBILIARE_EMAIL=email IMMOBILIARE_PASSWORD=pwd IMMOBILIARE_SOURCE=src
+DRY_RUN=1 python immobiliare_uploader.py   # stampa XML senza inviare
+python immobiliare_uploader.py              # invio reale
+```
+
+### Note Immobiliare.it
+Per usare l'API REST-XML serve:
+1. Account agenzia su Immobiliare.it
+2. Richiedere credenziali API (username, password, X-IMMO-SOURCE) al supporto
+3. Registrare l'IP del server per accesso API
+4. Ref: https://feed.immobiliare.it/integration/ii/docs/import/get-start

@@ -1,0 +1,43 @@
+name: Expedia/Vrbo Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'expedia_uploader.py'
+      - 'portali/expedia_map.py'
+      - 'Il_Faro_Badesi_DATI.json'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright playwright-stealth
+          playwright install chromium --with-deps
+
+      - name: Run uploader
+        env:
+          EXPEDIA_EMAIL: ${{ secrets.EXPEDIA_EMAIL }}
+          EXPEDIA_PASSWORD: ${{ secrets.EXPEDIA_PASSWORD }}
+        run: xvfb-run python expedia_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots-expedia
+          path: screenshots_expedia/

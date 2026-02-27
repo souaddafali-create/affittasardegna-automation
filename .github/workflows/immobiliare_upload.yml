@@ -1,0 +1,35 @@
+name: Immobiliare.it Uploader
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'immobiliare_uploader.py'
+      - 'portali/immobiliare_map.py'
+      - 'Il_Faro_Badesi_DATI.json'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run uploader
+        env:
+          IMMOBILIARE_EMAIL: ${{ secrets.IMMOBILIARE_EMAIL }}
+          IMMOBILIARE_PASSWORD: ${{ secrets.IMMOBILIARE_PASSWORD }}
+          IMMOBILIARE_SOURCE: ${{ secrets.IMMOBILIARE_SOURCE }}
+        run: python immobiliare_uploader.py

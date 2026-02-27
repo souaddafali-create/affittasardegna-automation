@@ -1,17 +1,16 @@
-import json
 import os
 import re
-import tempfile
-import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-# --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+from uploader_base import (
+    load_property_data, StepCounter, screenshot as _screenshot_base,
+    save_html as _save_html_base, wait, try_step as _try_step_base,
+    download_placeholder_photos, build_services,
 )
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+
+# --- Carica dati proprietà dal file JSON ---
+PROP = load_property_data()
 
 EMAIL = os.environ["CASEVACANZA_EMAIL"]
 PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
@@ -74,50 +73,21 @@ def _build_servizi():
 SERVIZI = _build_servizi()
 
 SCREENSHOT_DIR = "screenshots"
-
-step_counter = 0
+_counter = StepCounter()
 
 
 def screenshot(page, name):
-    """Save a debug screenshot with incrementing step number."""
-    global step_counter
-    step_counter += 1
-    path = f"{SCREENSHOT_DIR}/step{step_counter:02d}_{name}.png"
-    page.screenshot(path=path, full_page=True)
-    print(f"  Screenshot: {path}")
+    _screenshot_base(page, name, _counter, SCREENSHOT_DIR)
 
 
 def save_html(page, name):
-    """Save full HTML of current page for debugging."""
-    path = f"{SCREENSHOT_DIR}/{name}.html"
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(page.content())
-    print(f"  HTML salvato: {path}")
-
-
-def wait(page, ms=5000):
-    """Wait between steps — CaseVacanza is slow."""
-    page.wait_for_timeout(ms)
+    _save_html_base(page, name, SCREENSHOT_DIR)
 
 
 def click_save(page):
     """Click the save/continue button (data-test='save-button') and wait."""
     page.locator('[data-test="save-button"]').click()
     wait(page)
-
-
-def download_placeholder_photos(count=5):
-    """Download placeholder photos from picsum.photos."""
-    paths = []
-    tmp_dir = tempfile.mkdtemp()
-    for i in range(count):
-        path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
-        urllib.request.urlretrieve(
-            f"https://picsum.photos/800/600?random={i+1}", path
-        )
-        paths.append(path)
-        print(f"  Foto scaricata: {path}")
-    return paths
 
 
 def _dismiss_cookie_popup(page):
@@ -323,14 +293,7 @@ def navigate_to_add_property(page):
 
 
 def try_step(page, step_name, func):
-    """Execute a step wrapped in try/except. Always screenshot."""
-    try:
-        func()
-        print(f"  OK: {step_name}")
-    except Exception as e:
-        print(f"  ERRORE in {step_name}: {e}")
-        screenshot(page, f"errore_{step_name}")
-        save_html(page, f"errore_{step_name}")
+    _try_step_base(page, step_name, func, _counter, SCREENSHOT_DIR)
 
 
 def insert_property(page):

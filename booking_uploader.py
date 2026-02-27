@@ -1,22 +1,21 @@
-import json
 import os
 import random
 import sys
-import tempfile
 import time
-import urllib.request
 
 from playwright.sync_api import sync_playwright
+
+from uploader_base import (
+    load_property_data, StepCounter, screenshot as _screenshot_base,
+    save_html as _save_html_base, wait, try_step as _try_step_base,
+    download_placeholder_photos, build_services, create_browser_context,
+)
 
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
 # --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
-)
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+PROP = load_property_data()
 
 EMAIL = os.environ["BK_EMAIL"]
 PASSWORD = os.environ["BK_PASSWORD"]
@@ -27,7 +26,7 @@ USER_AGENT = (
 )
 
 SCREENSHOT_DIR = "screenshots_booking"
-step_counter = 0
+_counter = StepCounter()
 
 
 # ---------------------------------------------------------------------------
@@ -35,22 +34,11 @@ step_counter = 0
 # ---------------------------------------------------------------------------
 
 def screenshot(page, name):
-    global step_counter
-    step_counter += 1
-    path = f"{SCREENSHOT_DIR}/step{step_counter:02d}_{name}.png"
-    page.screenshot(path=path, full_page=True)
-    print(f"  Screenshot: {path}")
+    _screenshot_base(page, name, _counter, SCREENSHOT_DIR)
 
 
 def save_html(page, name):
-    path = f"{SCREENSHOT_DIR}/{name}.html"
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(page.content())
-    print(f"  HTML salvato: {path}")
-
-
-def wait(page, ms=5000):
-    page.wait_for_timeout(ms)
+    _save_html_base(page, name, SCREENSHOT_DIR)
 
 
 def human_type(page, selector, text):
@@ -63,26 +51,7 @@ def human_type(page, selector, text):
 
 
 def try_step(page, step_name, func):
-    try:
-        func()
-        print(f"  OK: {step_name}")
-    except Exception as e:
-        print(f"  ERRORE in {step_name}: {e}")
-        screenshot(page, f"errore_{step_name}")
-        save_html(page, f"errore_{step_name}")
-
-
-def download_placeholder_photos(count=5):
-    paths = []
-    tmp_dir = tempfile.mkdtemp()
-    for i in range(count):
-        path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
-        urllib.request.urlretrieve(
-            f"https://picsum.photos/800/600?random={i+1}", path
-        )
-        paths.append(path)
-        print(f"  Foto scaricata: {path}")
-    return paths
+    _try_step_base(page, step_name, func, _counter, SCREENSHOT_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -115,21 +84,7 @@ DOTAZIONI_BOOKING = {
 }
 
 
-def _build_servizi_booking():
-    """Restituisce la lista dei servizi attivi (true) da selezionare su Booking.
-    Legge SOLO dal JSON — se un servizio è false, NON viene incluso."""
-    dot = PROP["dotazioni"]
-    servizi = []
-    for key, label in DOTAZIONI_BOOKING.items():
-        if dot.get(key) is True:
-            servizi.append(label)
-    if dot.get("parcheggio_privato") is True or \
-       "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
-        servizi.append("Parcheggio")
-    return servizi
-
-
-SERVIZI = _build_servizi_booking()
+SERVIZI = build_services(PROP["dotazioni"], DOTAZIONI_BOOKING)
 
 
 # ---------------------------------------------------------------------------
@@ -803,29 +758,10 @@ def main():
           f"(INTERACTIVE={INTERACTIVE})")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
+        browser, context, page = create_browser_context(
+            p, headless=headless, user_agent=USER_AGENT, stealth=True,
+            extra_args=["--disable-blink-features=AutomationControlled"],
         )
-        context = browser.new_context(
-            locale="it-IT",
-            viewport={"width": 1366, "height": 768},
-            user_agent=USER_AGENT,
-            java_script_enabled=True,
-        )
-        page = context.new_page()
-
-        # Stealth opzionale (se playwright-stealth è installato)
-        try:
-            from playwright_stealth import stealth_sync
-            stealth_sync(page)
-            print("Stealth mode attivato.")
-        except ImportError:
-            print("playwright-stealth non trovato, procedo senza stealth.")
 
         try:
             login(page)
