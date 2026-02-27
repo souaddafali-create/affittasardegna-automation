@@ -120,6 +120,46 @@ def download_placeholder_photos(count=5):
     return paths
 
 
+def _dismiss_cookie_popup(page):
+    """Chiudi popup cookie/GDPR PRIMA del login — necessario perché copre i campi."""
+    for btn_text in ["Ok", "Accetta", "Accept", "Accetto", "Ho capito",
+                     "Accetta tutti", "Accept all", "Agree", "OK"]:
+        try:
+            btn = page.get_by_role("button", name=btn_text, exact=True)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Popup cookie chiuso (bottone '{btn_text}')")
+                page.wait_for_timeout(1000)
+                return
+        except Exception:
+            pass
+    # Fallback: cerca qualsiasi bottone "Ok" (case-insensitive)
+    try:
+        btn = page.locator("button", has_text="Ok")
+        if btn.count() > 0 and btn.first.is_visible():
+            btn.first.click()
+            print("  Popup cookie chiuso (fallback 'Ok')")
+            page.wait_for_timeout(1000)
+            return
+    except Exception:
+        pass
+    # ReactModal overlay
+    try:
+        modal = page.locator(".ReactModal__Overlay")
+        if modal.count() > 0 and modal.first.is_visible():
+            close = modal.locator("button").first
+            if close.count() > 0:
+                close.click()
+            else:
+                modal.click(position={"x": 10, "y": 10})
+            print("  ReactModal chiuso")
+            page.wait_for_timeout(1000)
+            return
+    except Exception:
+        pass
+    print("  Nessun popup cookie trovato")
+
+
 def login(page):
     """Login su CaseVacanza.it — prova diversi selettori per email e password."""
     print("Login CaseVacanza.it...")
@@ -129,15 +169,45 @@ def login(page):
     save_html(page, "login_page")
     print(f"  URL login: {page.url}")
 
-    # Aspetta che compaia un campo input (la pagina potrebbe fare redirect a Keycloak)
-    page.wait_for_selector(
+    # IMPORTANTE: chiudere popup cookie PRIMA di cercare i campi login
+    # (il popup copre i campi e wait_for_selector fallisce con timeout)
+    _dismiss_cookie_popup(page)
+
+    # Controlla se il login form è dentro un iframe (comune con Keycloak SSO)
+    iframes = page.frames
+    login_frame = page
+    if len(iframes) > 1:
+        for frame in iframes:
+            try:
+                if frame.locator("input[type='password']").count() > 0:
+                    login_frame = frame
+                    print(f"  Login form trovato in iframe: {frame.url}")
+                    break
+            except Exception:
+                pass
+
+    # Aspetta che compaia un campo input
+    INPUT_SELECTOR = (
         "#username, #email, input[name='username'], input[name='email'], "
-        "input[type='email'], input[type='text'], input[type='password']",
-        timeout=30_000,
+        "input[type='email'], input[type='text'], input[type='password']"
     )
+    try:
+        login_frame.wait_for_selector(INPUT_SELECTOR, timeout=30_000)
+    except Exception:
+        # Fallback: prova con state="attached" (il campo c'è ma potrebbe non essere "visible")
+        print("  [WARN] Campi non visibili, provo state=attached...")
+        screenshot(page, "login_fields_not_visible")
+        save_html(page, "login_fields_not_visible")
+        _dismiss_cookie_popup(page)  # riprova a chiudere popup
+        try:
+            login_frame.wait_for_selector(INPUT_SELECTOR, timeout=15_000, state="attached")
+        except Exception:
+            screenshot(page, "login_timeout_final")
+            save_html(page, "login_timeout_final")
+            raise RuntimeError("Campi login non trovati dopo aver chiuso popup e provato iframe")
     wait(page, 2000)
 
-    # Trova il campo email/username
+    # Trova il campo email/username (usa login_frame per supporto iframe)
     email_selectors = [
         "#username",
         "#email",
@@ -149,14 +219,14 @@ def login(page):
     ]
     email_field = None
     for sel in email_selectors:
-        loc = page.locator(sel)
+        loc = login_frame.locator(sel)
         if loc.count() > 0:
             email_field = loc.first
             print(f"  Campo email trovato: {sel}")
             break
     if email_field is None:
         for lbl in ["Email", "Username", "E-mail", "Indirizzo email"]:
-            loc = page.get_by_label(lbl)
+            loc = login_frame.get_by_label(lbl)
             if loc.count() > 0:
                 email_field = loc.first
                 print(f"  Campo email trovato (label): {lbl}")
@@ -177,7 +247,7 @@ def login(page):
     ]
     pw_field = None
     for sel in pw_selectors:
-        loc = page.locator(sel)
+        loc = login_frame.locator(sel)
         if loc.count() > 0:
             pw_field = loc.first
             print(f"  Campo password trovato: {sel}")
@@ -198,14 +268,14 @@ def login(page):
     ]
     login_btn = None
     for sel in login_selectors:
-        loc = page.locator(sel)
+        loc = login_frame.locator(sel)
         if loc.count() > 0:
             login_btn = loc.first
             print(f"  Bottone login trovato: {sel}")
             break
     if login_btn is None:
         for lbl in ["Accedi", "Login", "Sign in", "Entra"]:
-            loc = page.get_by_text(lbl, exact=True)
+            loc = login_frame.get_by_text(lbl, exact=True)
             if loc.count() > 0:
                 login_btn = loc.first
                 print(f"  Bottone login trovato (text): {lbl}")
