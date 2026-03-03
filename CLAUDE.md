@@ -8,7 +8,7 @@
 2. Se un dato non è presente nel JSON, NON lo inseriscono (lasciano vuoto).
 3. Se una dotazione è `false` nel JSON, NON la spuntano.
 4. Se una dotazione è `true`, la spuntano.
-5. Prezzi: dal JSON (`condizioni.prezzo_notte`) se presente, altrimenti vuoto.
+5. Prezzi: dal JSON (`condizioni.listino_prezzi` mediana, o `condizioni.prezzo_notte`), altrimenti vuoto.
 6. Letti: dal JSON (`composizione.letti[]`) con tipo e quantità.
 7. Condizioni: soggiorno minimo, cauzione, pulizie, biancheria, check-in/out dal JSON.
 8. Marketing: titolo e descrizione dal JSON, mai testo inventato.
@@ -20,7 +20,7 @@ Ogni proprietà avrà un JSON diverso con servizi diversi. Gli uploader si adatt
 | Chiave JSON | Label CaseVacanza |
 |-------------|-------------------|
 | `aria_condizionata` | Aria condizionata |
-| `piscina` | Piscina (in comune) |
+| `piscina` | Piscina (privata) o Piscina (in comune) — in base a `piscina_tipo` |
 | `terrazza` | Terrazza |
 | `tv` | TV |
 | parcheggio (da `altro_dotazioni`) | Parcheggio |
@@ -65,7 +65,9 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
     "cap": "...", "comune": "...", "provincia": "...", "regione": "...",
     "residence_complesso": "...",
     "interno": "...", "piano": "...",
-    "cin": "...", "cir": "..."
+    "cin": "...", "cir": "...",
+    "codice_proprieta": "...",
+    "coordinate": {"latitudine": 40.913928, "longitudine": 8.203492}
   },
   "composizione": {
     "max_ospiti": 4, "camere": 1, "posti_letto": 4, "bagni": 1,
@@ -88,13 +90,18 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
     "biancheria": "...",
     "check_in": "15:00 - 20:00",
     "check_out": "entro le 10:00",
-    "regole_casa": "..."
+    "regole_casa": "...",
+    "listino_prezzi": [{"da": "28-mar", "a": "04-apr", "prezzo_notte": 137}],
+    "ical_url": "https://..."
   },
   "marketing": {
+    "titolo": "...",
     "descrizione_breve": "...",
     "descrizione_lunga": "...",
     "punti_forza": ["...", "..."],
-    "distanze": [{"luogo": "...", "km": 3, "tempo": "..."}]
+    "distanze": [{"luogo": "...", "km": 3, "tempo": "..."}],
+    "servizi_vicinanze": [{"nome": "...", "indirizzo": "...", "km": 8.4}],
+    "keywords": ["...", "..."]
   }
 }
 ```
@@ -108,6 +115,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 | File | Descrizione |
 |------|-------------|
 | `Il_Faro_Badesi_DATI.json` | Dati completi della proprietà "Il Faro" a Badesi (SS). Fonte unica: tutti gli uploader leggono da qui. |
+| `Villa_La_Vela_DATI.json` | Dati completi della proprietà "Villa La Vela" a Stintino (SS). Villa con piscina privata, 6 ospiti. Include coordinate GPS, listino multi-periodo e iCal. |
 
 ### Uploader
 
@@ -122,6 +130,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 |------|---------|---------|
 | `.github/workflows/upload.yml` | Push su `main` (se cambia `casevacanza_uploader.py` o il JSON) + manual | Esegue `casevacanza_uploader.py` con xvfb. Artifact: `screenshots/`. |
 | `.github/workflows/booking_upload.yml` | Push su `main` (se cambia `booking_uploader.py` o il JSON) + manual | Esegue `booking_uploader.py` con xvfb e stealth. Artifact: `screenshots_booking/`. |
+| `.github/workflows/upload_villa_la_vela.yml` | Push su `main` (se cambia uploader o `Villa_La_Vela_DATI.json`) + manual | Esegue `casevacanza_uploader.py` con `PROPERTY_DATA=Villa_La_Vela_DATI.json`. Artifact: `villa-la-vela-debug-screenshots/`. |
 | `.github/workflows/booking_explore.yml` | Solo manual | Script esplorativo inline per Booking.com. Non usa il JSON. |
 
 ### Altro

@@ -32,6 +32,16 @@ DESCRIPTION = PROP["marketing"]["descrizione_lunga"]
 # "Servizi popolari" di CaseVacanza.it. Alcune hanno specificazioni
 # tra parentesi (es. "Lavatrice (privata)", "Piscina (in comune)").
 # ---------------------------------------------------------------------------
+
+
+def _get_piscina_label():
+    """Return the correct CaseVacanza pool label based on piscina_tipo in JSON."""
+    tipo = PROP.get("dotazioni", {}).get("piscina_tipo", "")
+    if "privata" in tipo.lower():
+        return "Piscina (privata)"
+    return "Piscina (in comune)"
+
+
 DOTAZIONI_MAP = {
     "tv": "TV",
     "piano_cottura": "Piano cottura",
@@ -47,7 +57,7 @@ DOTAZIONI_MAP = {
     "ferro_stiro": "Ferro da stiro",
     "terrazza": "Terrazza",
     "giardino": "Giardino",
-    "piscina": "Piscina (in comune)",
+    "piscina": _get_piscina_label(),
     "arredi_esterno": "Arredi da esterno",
     "barbecue": "Griglia per barbecue",
     "culla": "Culla",
@@ -394,10 +404,68 @@ def insert_property(page):
     click_save(page)
     screenshot(page, "dopo_indirizzo")
 
-    # --- Step 7: Mappa — Continua senza modificare pin ---
-    print("Step 7: Mappa — Continua")
-    click_save(page)
-    screenshot(page, "dopo_mappa")
+    # --- Step 7: Mappa — Imposta coordinate GPS se presenti nel JSON ---
+    print("Step 7: Mappa")
+
+    def do_step7():
+        screenshot(page, "mappa_pagina")
+        save_html(page, "step7_mappa")
+        coords = PROP.get("identificativi", {}).get("coordinate")
+        if coords and coords.get("latitudine") and coords.get("longitudine"):
+            lat = coords["latitudine"]
+            lng = coords["longitudine"]
+            moved = page.evaluate("""({lat, lng}) => {
+                // Strategy 1: hidden lat/lng input fields
+                const latFields = document.querySelectorAll(
+                    'input[name*="lat"], input[name*="latitude"]'
+                );
+                const lngFields = document.querySelectorAll(
+                    'input[name*="lng"], input[name*="lon"], input[name*="longitude"]'
+                );
+                if (latFields.length > 0 && lngFields.length > 0) {
+                    latFields[0].value = lat;
+                    latFields[0].dispatchEvent(new Event('input', {bubbles: true}));
+                    lngFields[0].value = lng;
+                    lngFields[0].dispatchEvent(new Event('input', {bubbles: true}));
+                    return 'hidden-inputs';
+                }
+                // Strategy 2: Google Maps
+                if (window.google && window.google.maps) {
+                    const mapEls = document.querySelectorAll('[class*="map"], [id*="map"]');
+                    for (const el of mapEls) {
+                        if (el.__gm_map && el.__gm_map.setCenter) {
+                            const pos = new google.maps.LatLng(lat, lng);
+                            el.__gm_map.setCenter(pos);
+                            return 'google-maps';
+                        }
+                    }
+                }
+                // Strategy 3: Leaflet
+                if (window.L) {
+                    const containers = document.querySelectorAll('.leaflet-container');
+                    for (const c of containers) {
+                        if (c._leaflet_map) {
+                            c._leaflet_map.setView([lat, lng], 15);
+                            c._leaflet_map.eachLayer(function(layer) {
+                                if (layer.setLatLng) layer.setLatLng([lat, lng]);
+                            });
+                            return 'leaflet';
+                        }
+                    }
+                }
+                return null;
+            }""", {"lat": lat, "lng": lng})
+            if moved:
+                print(f"  Coordinate impostate ({lat}, {lng}) via {moved}")
+            else:
+                print(f"  [WARN] Coordinate ({lat}, {lng}) nel JSON ma mappa non manipolabile")
+        else:
+            print("  Nessuna coordinata nel JSON — skip posizionamento mappa")
+
+        click_save(page)
+        screenshot(page, "dopo_mappa")
+
+    try_step(page, "step7_mappa", do_step7)
 
     # --- Step 8: Ospiti e camere (data-test counters) ---
     comp = PROP["composizione"]
@@ -775,7 +843,7 @@ def insert_property(page):
     print("Step 17: Titolo e descrizione")
 
     def do_step17():
-        titolo = PROP["identificativi"]["nome_struttura"]
+        titolo = PROP.get("marketing", {}).get("titolo") or PROP["identificativi"]["nome_struttura"]
 
         titolo_field = page.get_by_label("Titolo")
         if titolo_field.count() > 0:
@@ -810,10 +878,27 @@ def insert_property(page):
         screenshot(page, "prezzo_pagina")
         save_html(page, "step19_prezzo")
 
+        listino = PROP.get("condizioni", {}).get("listino_prezzi", [])
         prezzo = PROP.get("condizioni", {}).get("prezzo_notte")
-        if prezzo is None:
-            print("  Prezzo non presente nel JSON — lascio vuoto")
-        else:
+
+        if listino:
+            # Multi-period pricing: use median as base price for the wizard.
+            # Detailed per-period pricing is managed post-creation via calendar.
+            prezzi = [p["prezzo_notte"] for p in listino if p.get("prezzo_notte")]
+            base_prezzo = sorted(prezzi)[len(prezzi) // 2] if prezzi else None
+            if base_prezzo:
+                prezzo_str = str(base_prezzo)
+                prezzo_field = page.get_by_label("Prezzo")
+                if prezzo_field.count() > 0:
+                    prezzo_field.fill(prezzo_str)
+                else:
+                    page.locator(
+                        "input[type='number'], input[name*='prezz'], input[name*='price']"
+                    ).first.fill(prezzo_str)
+                print(f"  Prezzo base: {prezzo_str} EUR/notte (mediana di {len(prezzi)} periodi)")
+            else:
+                print("  Listino presente ma nessun prezzo valido — lascio vuoto")
+        elif prezzo is not None:
             prezzo_str = str(prezzo)
             prezzo_field = page.get_by_label("Prezzo")
             if prezzo_field.count() > 0:
@@ -823,6 +908,8 @@ def insert_property(page):
                     "input[type='number'], input[name*='prezz'], input[name*='price']"
                 ).first.fill(prezzo_str)
             print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
+        else:
+            print("  Prezzo non presente nel JSON — lascio vuoto")
 
         wait(page)
         screenshot(page, "prezzo")
@@ -846,7 +933,13 @@ def insert_property(page):
         save_html(page, "step21_prezzi_avanzati")
 
         # Prova a compilare il campo cauzione/deposito
-        cauzione = str(PROP["condizioni"]["cauzione_euro"])
+        cauzione_val = PROP.get("condizioni", {}).get("cauzione_euro")
+        if cauzione_val is None:
+            print("  Cauzione non presente nel JSON — skip")
+            click_save(page)
+            screenshot(page, "dopo_prezzi_avanzati")
+            return
+        cauzione = str(cauzione_val)
         try:
             cauzione_field = page.get_by_label("Cauzione")
             if cauzione_field.count() > 0:
@@ -1081,6 +1174,51 @@ def insert_property(page):
     def do_step26():
         screenshot(page, "calendario_pagina")
         save_html(page, "step26_calendario")
+
+        ical_url = PROP.get("condizioni", {}).get("ical_url")
+        if ical_url:
+            imported = False
+            for btn_text in ["Importa", "Sincronizza", "iCal", "Import", "Sync",
+                             "Importa calendario", "Collega calendario"]:
+                try:
+                    btn = page.get_by_text(btn_text)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        wait(page, 2000)
+                        print(f"  Cliccato '{btn_text}' sulla pagina calendario")
+                        screenshot(page, "ical_dialog")
+
+                        url_field = page.locator(
+                            "input[type='url'], input[name*='ical'], input[name*='url'], "
+                            "input[placeholder*='http'], input[placeholder*='ical'], "
+                            "input[placeholder*='URL']"
+                        )
+                        if url_field.count() > 0:
+                            url_field.first.fill(ical_url)
+                            print(f"  iCal URL inserito: {ical_url}")
+                            for confirm_text in ["Importa", "Salva", "Conferma", "OK",
+                                                 "Import", "Save"]:
+                                try:
+                                    confirm = page.get_by_role("button", name=confirm_text)
+                                    if confirm.count() > 0:
+                                        confirm.first.click()
+                                        wait(page, 3000)
+                                        print(f"  Confermato import iCal ({confirm_text})")
+                                        imported = True
+                                        break
+                                except Exception:
+                                    continue
+                        if imported:
+                            break
+                except Exception:
+                    continue
+
+            if not imported:
+                print(f"  [WARN] iCal URL nel JSON ({ical_url}) ma import non trovato")
+                print("  L'URL iCal dovra essere inserito manualmente post-creazione")
+        else:
+            print("  Nessun iCal URL nel JSON — skip import calendario")
+
         click_save(page)
         screenshot(page, "dopo_calendario")
 
