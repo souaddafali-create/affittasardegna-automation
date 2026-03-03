@@ -20,7 +20,7 @@ Ogni proprietà avrà un JSON diverso con servizi diversi. Gli uploader si adatt
 | Chiave JSON | Label CaseVacanza |
 |-------------|-------------------|
 | `aria_condizionata` | Aria condizionata |
-| `piscina` | Piscina (in comune) |
+| `piscina` | Piscina (in comune) o Piscina (privata) — in base a `piscina_tipo` |
 | `terrazza` | Terrazza |
 | `tv` | TV |
 | parcheggio (da `altro_dotazioni`) | Parcheggio |
@@ -65,7 +65,8 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
     "cap": "...", "comune": "...", "provincia": "...", "regione": "...",
     "residence_complesso": "...",
     "interno": "...", "piano": "...",
-    "cin": "...", "cir": "..."
+    "cin": "...", "cir": "...",
+    "latitudine": 40.913928, "longitudine": 8.203492
   },
   "composizione": {
     "max_ospiti": 4, "camere": 1, "posti_letto": 4, "bagni": 1,
@@ -90,11 +91,17 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
     "check_out": "entro le 10:00",
     "regole_casa": "..."
   },
+  "listino_prezzi": [
+    {"dal": "2026-03-28", "al": "2026-04-04", "prezzo_notte": 137}
+  ],
+  "ical_url": "https://ical.example.com/...",
   "marketing": {
+    "titolo": "Titolo annuncio (se diverso da nome_struttura)",
     "descrizione_breve": "...",
     "descrizione_lunga": "...",
     "punti_forza": ["...", "..."],
-    "distanze": [{"luogo": "...", "km": 3, "tempo": "..."}]
+    "distanze": [{"luogo": "...", "km": 3, "tempo": "..."}],
+    "keywords": "parola1, parola2, ..."
   }
 }
 ```
@@ -108,6 +115,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 | File | Descrizione |
 |------|-------------|
 | `Il_Faro_Badesi_DATI.json` | Dati completi della proprietà "Il Faro" a Badesi (SS). Fonte unica: tutti gli uploader leggono da qui. |
+| `Villa_La_Vela_Stintino_DATI.json` | Dati completi della proprietà "Villa La Vela" a Stintino (SS). Villa con piscina privata, vista mare, 6 posti letto. Include coordinate GPS, listino prezzi stagionale, link iCal e keywords. |
 
 ### Uploader
 

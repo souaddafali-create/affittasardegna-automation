@@ -47,7 +47,8 @@ DOTAZIONI_MAP = {
     "ferro_stiro": "Ferro da stiro",
     "terrazza": "Terrazza",
     "giardino": "Giardino",
-    "piscina": "Piscina (in comune)",
+    # "piscina" è gestita dinamicamente in _build_servizi() in base a piscina_tipo
+    # "piscina": "Piscina (in comune)" o "Piscina (privata)",
     "arredi_esterno": "Arredi da esterno",
     "barbecue": "Griglia per barbecue",
     "culla": "Culla",
@@ -64,6 +65,13 @@ def _build_servizi():
     for key, label in DOTAZIONI_MAP.items():
         if dot.get(key) is True:
             servizi.append(label)
+    # Piscina: label dinamica in base a piscina_tipo (privata vs in comune)
+    if dot.get("piscina") is True:
+        piscina_tipo = dot.get("piscina_tipo", "in comune")
+        if "privat" in piscina_tipo.lower():
+            servizi.append("Piscina (privata)")
+        else:
+            servizi.append("Piscina (in comune)")
     # Parcheggio: controlla flag diretto O la stringa in altro_dotazioni
     if dot.get("parcheggio_privato") is True or \
        "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
@@ -394,10 +402,49 @@ def insert_property(page):
     click_save(page)
     screenshot(page, "dopo_indirizzo")
 
-    # --- Step 7: Mappa — Continua senza modificare pin ---
-    print("Step 7: Mappa — Continua")
-    click_save(page)
-    screenshot(page, "dopo_mappa")
+    # --- Step 7: Mappa — Imposta coordinate GPS se disponibili ---
+    print("Step 7: Mappa")
+
+    def do_step7():
+        screenshot(page, "mappa_pagina")
+        save_html(page, "step7_mappa")
+
+        lat = ident.get("latitudine")
+        lng = ident.get("longitudine")
+        if lat is not None and lng is not None:
+            # Prova a impostare le coordinate tramite campi input
+            try:
+                lat_field = page.locator(
+                    "input[name*='lat'], input[name*='latitude'], "
+                    "input[placeholder*='lat'], input[data-test*='lat']"
+                )
+                lng_field = page.locator(
+                    "input[name*='lng'], input[name*='lon'], input[name*='longitude'], "
+                    "input[placeholder*='lon'], input[data-test*='lon']"
+                )
+                if lat_field.count() > 0 and lng_field.count() > 0:
+                    lat_field.first.fill(str(lat))
+                    lng_field.first.fill(str(lng))
+                    print(f"  Coordinate GPS impostate: {lat}, {lng}")
+                else:
+                    # Fallback: usa JavaScript per spostare il marker sulla mappa
+                    print(f"  Campi lat/lng non trovati, provo JS per coordinate: {lat}, {lng}")
+                    page.evaluate(f"""() => {{
+                        // Prova Google Maps API
+                        if (typeof google !== 'undefined' && google.maps) {{
+                            const maps = document.querySelectorAll('[class*="map"], [id*="map"]');
+                            console.log('Maps found:', maps.length);
+                        }}
+                    }}""")
+            except Exception as e:
+                print(f"  Coordinate GPS: errore {e}")
+        else:
+            print("  Coordinate GPS non presenti nel JSON, skip")
+
+        click_save(page)
+        screenshot(page, "dopo_mappa")
+
+    try_step(page, "step7_mappa", do_step7)
 
     # --- Step 8: Ospiti e camere (data-test counters) ---
     comp = PROP["composizione"]
@@ -775,21 +822,82 @@ def insert_property(page):
     print("Step 17: Titolo e descrizione")
 
     def do_step17():
-        titolo = PROP["identificativi"]["nome_struttura"]
+        # Usa marketing.titolo se disponibile, altrimenti nome_struttura
+        titolo = PROP.get("marketing", {}).get("titolo") or PROP["identificativi"]["nome_struttura"]
 
         titolo_field = page.get_by_label("Titolo")
         if titolo_field.count() > 0:
             titolo_field.fill(titolo)
         else:
             page.locator("input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']").first.fill(titolo)
+        print(f"  Titolo: {titolo}")
         wait(page, 1000)
 
+        # Descrizione lunga
         desc_field = page.get_by_label("Descrizione")
         if desc_field.count() > 0:
             desc_field.fill(DESCRIPTION)
         else:
             page.locator("textarea").first.fill(DESCRIPTION)
         wait(page, 1000)
+
+        # Descrizione breve (se presente nel JSON)
+        desc_breve = PROP.get("marketing", {}).get("descrizione_breve", "")
+        if desc_breve:
+            try:
+                short_field = page.get_by_label("Descrizione breve")
+                if short_field.count() > 0:
+                    short_field.fill(desc_breve)
+                    print("  Descrizione breve compilata (label)")
+                else:
+                    short_field = page.get_by_label("Short description")
+                    if short_field.count() > 0:
+                        short_field.fill(desc_breve)
+                        print("  Descrizione breve compilata (label EN)")
+                    else:
+                        # Cerca il secondo textarea (il primo è la descrizione lunga)
+                        textareas = page.locator("textarea")
+                        if textareas.count() > 1:
+                            textareas.nth(1).fill(desc_breve)
+                            print("  Descrizione breve compilata (secondo textarea)")
+                        else:
+                            print("  Campo descrizione breve non trovato, skip")
+            except Exception as e:
+                print(f"  Descrizione breve errore: {e}")
+        wait(page, 1000)
+
+        # Keywords/tags (se presenti nel JSON)
+        keywords = PROP.get("marketing", {}).get("keywords", "")
+        if keywords:
+            try:
+                kw_field = None
+                for label in ["Keywords", "Tag", "Parole chiave", "Tags"]:
+                    try:
+                        field = page.get_by_label(label)
+                        if field.count() > 0:
+                            kw_field = field.first
+                            print(f"  Keywords campo trovato (label '{label}')")
+                            break
+                    except Exception:
+                        continue
+                if kw_field is None:
+                    kw_field_loc = page.locator(
+                        "input[name*='keyword'], input[name*='tag'], "
+                        "textarea[name*='keyword'], textarea[name*='tag']"
+                    )
+                    if kw_field_loc.count() > 0:
+                        kw_field = kw_field_loc.first
+                        print("  Keywords campo trovato (name)")
+
+                if kw_field is not None:
+                    kw_field.fill(keywords)
+                    print("  Keywords inserite")
+                else:
+                    print("  Campo keywords non trovato, skip")
+            except Exception as e:
+                print(f"  Keywords errore: {e}")
+            wait(page, 1000)
+
         screenshot(page, "titolo_descrizione")
 
     try_step(page, "step17_titolo_desc", do_step17)
@@ -810,10 +918,13 @@ def insert_property(page):
         screenshot(page, "prezzo_pagina")
         save_html(page, "step19_prezzo")
 
+        # Prezzo singolo (condizioni.prezzo_notte) — per proprietà con tariffa fissa
         prezzo = PROP.get("condizioni", {}).get("prezzo_notte")
-        if prezzo is None:
-            print("  Prezzo non presente nel JSON — lascio vuoto")
-        else:
+
+        # Listino prezzi stagionale — se presente, usa il prezzo più basso come base
+        listino = PROP.get("listino_prezzi", [])
+
+        if prezzo is not None:
             prezzo_str = str(prezzo)
             prezzo_field = page.get_by_label("Prezzo")
             if prezzo_field.count() > 0:
@@ -823,6 +934,23 @@ def insert_property(page):
                     "input[type='number'], input[name*='prezz'], input[name*='price']"
                 ).first.fill(prezzo_str)
             print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
+        elif listino:
+            # Usa il prezzo minimo del listino come prezzo base
+            prezzo_min = min(p["prezzo_notte"] for p in listino)
+            prezzo_str = str(prezzo_min)
+            try:
+                prezzo_field = page.get_by_label("Prezzo")
+                if prezzo_field.count() > 0:
+                    prezzo_field.fill(prezzo_str)
+                else:
+                    page.locator(
+                        "input[type='number'], input[name*='prezz'], input[name*='price']"
+                    ).first.fill(prezzo_str)
+                print(f"  Prezzo base: {prezzo_str} EUR/notte (minimo da listino)")
+            except Exception as e:
+                print(f"  Errore prezzo base da listino: {e}")
+        else:
+            print("  Prezzo non presente nel JSON — lascio vuoto")
 
         wait(page)
         screenshot(page, "prezzo")
@@ -1075,12 +1203,102 @@ def insert_property(page):
 
     try_step(page, "step25_continua_regole", do_step25)
 
-    # --- Step 26: Calendario ---
+    # --- Step 26: Calendario, listino prezzi e iCal ---
     print("Step 26: Calendario")
 
     def do_step26():
         screenshot(page, "calendario_pagina")
         save_html(page, "step26_calendario")
+
+        # Inserisci link iCal se presente nel JSON
+        ical_url = PROP.get("ical_url", "")
+        if ical_url:
+            try:
+                ical_field = page.locator(
+                    "input[name*='ical'], input[name*='iCal'], input[name*='ICAL'], "
+                    "input[placeholder*='ical'], input[placeholder*='iCal'], "
+                    "input[placeholder*='http'], input[name*='sync'], "
+                    "input[name*='calendar_url'], input[name*='import']"
+                )
+                if ical_field.count() > 0:
+                    ical_field.first.fill(ical_url)
+                    print(f"  iCal URL inserito: {ical_url}")
+                else:
+                    # Prova tramite label
+                    for label in ["iCal", "Importa calendario", "URL calendario",
+                                  "Sincronizza", "Import", "Calendar URL"]:
+                        try:
+                            field = page.get_by_label(label)
+                            if field.count() > 0:
+                                field.first.fill(ical_url)
+                                print(f"  iCal URL inserito (label '{label}')")
+                                break
+                        except Exception:
+                            continue
+                    else:
+                        print("  Campo iCal non trovato, skip")
+            except Exception as e:
+                print(f"  iCal errore: {e}")
+            wait(page, 2000)
+
+        # Inserisci listino prezzi stagionale se presente
+        listino = PROP.get("listino_prezzi", [])
+        if listino:
+            print(f"  Listino prezzi: {len(listino)} periodi da inserire")
+            # Il listino verrà gestito nella sezione tariffe/calendario del portale
+            # Cerchiamo i campi per le tariffe periodiche
+            try:
+                # Prova a trovare un pulsante per aggiungere tariffe/periodi
+                for btn_text in ["Aggiungi tariffa", "Aggiungi periodo", "Nuova tariffa",
+                                 "Add rate", "Aggiungi", "Modifica tariffe"]:
+                    try:
+                        btn = page.get_by_text(btn_text)
+                        if btn.count() > 0:
+                            print(f"  Trovato bottone '{btn_text}' per tariffe")
+                            break
+                    except Exception:
+                        continue
+
+                # Inserisci ciascun periodo del listino
+                for i, periodo in enumerate(listino):
+                    try:
+                        dal = periodo["dal"]
+                        al = periodo["al"]
+                        prezzo = str(periodo["prezzo_notte"])
+
+                        # Cerca campi data e prezzo per questo periodo
+                        date_from = page.locator(
+                            "input[name*='from'], input[name*='start'], "
+                            "input[name*='dal'], input[name*='date_from']"
+                        )
+                        date_to = page.locator(
+                            "input[name*='to'], input[name*='end'], "
+                            "input[name*='al'], input[name*='date_to']"
+                        )
+                        price_field = page.locator(
+                            "input[name*='price'], input[name*='prezz'], "
+                            "input[name*='rate'], input[name*='tariff']"
+                        )
+
+                        if date_from.count() > 0 and date_to.count() > 0 and price_field.count() > 0:
+                            date_from.last.fill(dal)
+                            date_to.last.fill(al)
+                            price_field.last.fill(prezzo)
+                            print(f"  Periodo {i+1}: {dal} > {al} = {prezzo} EUR")
+                            page.wait_for_timeout(500)
+                        else:
+                            if i == 0:
+                                print("  Campi tariffe periodiche non trovati, skip listino")
+                            break
+                    except Exception as e:
+                        if i == 0:
+                            print(f"  Errore inserimento listino: {e}")
+                        break
+            except Exception as e:
+                print(f"  Listino prezzi errore: {e}")
+
+            screenshot(page, "listino_prezzi")
+
         click_save(page)
         screenshot(page, "dopo_calendario")
 
