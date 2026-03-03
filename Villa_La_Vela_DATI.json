@@ -70,15 +70,24 @@
     "rilevatore_gas_co": false
   },
   "condizioni": {
-    "soggiorno_minimo_bassa": {"notti": 7, "periodo": null},
-    "soggiorno_minimo_alta": {"notti": 7, "periodo": null},
+    "soggiorno_minimo_bassa": {"notti": 5, "periodo": "bassa stagione"},
+    "soggiorno_minimo_alta": {"notti": 7, "periodo": "alta stagione"},
+    "soggiorno_minimo_dettaglio": [
+      {"da": "29-mar", "a": "11-lug", "notti": 5, "vincolo_giorno": null},
+      {"da": "11-lug", "a": "08-ago", "notti": 5, "vincolo_giorno": "sabato-sabato"},
+      {"da": "08-ago", "a": "22-ago", "notti": 7, "vincolo_giorno": "sabato-sabato"},
+      {"da": "22-ago", "a": "29-ago", "notti": 5, "vincolo_giorno": "sabato-sabato"},
+      {"da": "29-ago", "a": "31-ott", "notti": 5, "vincolo_giorno": null}
+    ],
     "soggiorno_massimo_giorni": null,
     "cauzione_euro": 500,
     "prezzo_notte": null,
-    "pulizia_finale": "200 EUR a carico ospite",
-    "biancheria": "20 EUR a persona a settimana",
-    "check_in": "17:00 - 20:00",
-    "check_out": "entro le 10:00",
+    "pulizia_finale": "250 EUR a soggiorno obbligatoria",
+    "biancheria": null,
+    "asciugamani": "20 EUR a persona a soggiorno obbligatoria",
+    "lenzuola": "20 EUR a persona a soggiorno obbligatoria",
+    "check_in": "17:00 - 21:00",
+    "check_out": "10:00 - 11:00",
     "regole_casa": null,
     "listino_prezzi": [
       {"da": "28-mar", "a": "04-apr", "prezzo_notte": 137},
@@ -116,6 +125,7 @@
     "ical_url": "https://ical.krossbooking.com/ical/g/affittasardegna/62e70316a7cbe49c30f98940f02eb710.ics"
   },
   "marketing": {
+    "foto": [],
     "titolo": "Villa La Vela - Piscina privata e vista mare a Stintino",
     "descrizione_breve": "Villa La Vela e una villa indipendente con piscina privata e vista mare nel Country Village di Stintino, zona Punta su Turrione. Ospita fino a 6 persone con 2 camere da letto, soggiorno con divano letto e cucina attrezzata. L'esterno e il punto forte: piscina esclusiva, terrazza panoramica e ampio giardino. Aria condizionata, WiFi, lavatrice e posto auto inclusi. A pochi minuti dal borgo di Stintino (8,2 km) e dalle spiagge piu belle del nord Sardegna: La Pelosa (11,1 km), Cala dell'Ancora (9,9 km) e La Pelosetta (11,4 km). Nel villaggio trovi supermercato, ristoranti e agenzie escursioni per l'Asinara. Spazio, privacy e mare: tutto il necessario per una vacanza sarda autentica.",
     "descrizione_lunga": "Una villa con piscina privata, vista mare e lo spazio che ti meriti: Villa La Vela si trova nel Country Village di Stintino, in zona Punta su Turrione, dove la tranquillita non e un optional ma la regola.\n\nQui il mare lo vedi dalla terrazza, dalla piscina, persino mentre cucini. Non serve inseguirlo: ti viene incontro. La piscina ad uso esclusivo e il centro di tutto - mattine silenziose con il caffe a bordo vasca, pomeriggi di tuffi, aperitivi con il sole che scende sul Golfo dell'Asinara. Niente condivisione, niente orari: e tutta tua.\n\nDentro la villa trovi una camera matrimoniale luminosa, una camera doppia e un soggiorno-cucina open space con divano letto che porta la capienza a 6 persone. Cucina completamente attrezzata con lavastoviglie, un bagno finestrato con vasca, aria condizionata nelle camere e WiFi. Tutto quello che serve, senza fronzoli inutili.\n\nL'esterno e il vero protagonista. Terrazza panoramica, giardino privato ampio, piscina esclusiva e posto auto. Qui le cene le organizzi fuori, con il mare davanti e nessun vicino che ti disturba.\n\nIl Country Village offre servizi a portata di mano: supermercato, ristoranti, pizzerie, gelateria e botteghe di prodotti locali. Ci sono anche agenzie escursioni per l'Asinara, diving e la fermata bus per il borgo di Stintino e le spiagge.\n\nLe distanze parlano chiaro: il centro di Stintino e a 8,2 km, Spiaggia La Pelosa a 11,1 km, Cala dell'Ancora a 9,9 km, La Pelosetta a 11,4 km, Spiaggia Il Gabbiano a 10,7 km. L'aeroporto di Alghero dista 46 km, Porto Torres e a 26,6 km.\n\nDa qui puoi organizzare una giornata all'Asinara in barca, esplorare Castelsardo (68 km), visitare il centro storico di Alghero (56 km) o semplicemente non fare niente - che a volte e il piano migliore.\n\nVilla La Vela e per chi vuole la Sardegna vera: spazio, privacy, vista mare e la liberta di goderti la vacanza ai tuoi ritmi. AJO!",

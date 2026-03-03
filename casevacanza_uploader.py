@@ -116,17 +116,34 @@ def click_save(page):
     wait(page)
 
 
-def download_placeholder_photos(count=5):
-    """Download placeholder photos from picsum.photos."""
+def load_photo_paths():
+    """Load photo paths from JSON (marketing.foto) or download placeholders."""
+    foto_json = PROP.get("marketing", {}).get("foto", [])
+    if foto_json:
+        # Resolve paths relative to the JSON file location
+        json_dir = os.path.dirname(os.path.abspath(DATA_FILE))
+        paths = []
+        for f in foto_json:
+            p = f if os.path.isabs(f) else os.path.join(json_dir, f)
+            if os.path.isfile(p):
+                paths.append(p)
+                print(f"  Foto dal JSON: {p}")
+            else:
+                print(f"  [WARN] Foto non trovata: {p}")
+        if paths:
+            return paths
+        print("  Nessuna foto valida nel JSON — scarico placeholder")
+
+    # Fallback: placeholder photos
     paths = []
     tmp_dir = tempfile.mkdtemp()
-    for i in range(count):
+    for i in range(5):
         path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
         urllib.request.urlretrieve(
             f"https://picsum.photos/800/600?random={i+1}", path
         )
         paths.append(path)
-        print(f"  Foto scaricata: {path}")
+        print(f"  Foto placeholder scaricata: {path}")
     return paths
 
 
@@ -345,7 +362,7 @@ def try_step(page, step_name, func):
 
 def insert_property(page):
     """Complete the full property insertion wizard."""
-    photo_paths = download_placeholder_photos(5)
+    photo_paths = load_photo_paths()
 
     # --- Step 1: Click "Proprietà a unità singola" ---
     print("Step 1: Proprietà a unità singola")
@@ -932,7 +949,6 @@ def insert_property(page):
         screenshot(page, "prezzi_avanzati_pagina")
         save_html(page, "step21_prezzi_avanzati")
 
-        # Prova a compilare il campo cauzione/deposito
         cauzione_val = PROP.get("condizioni", {}).get("cauzione_euro")
         if cauzione_val is None:
             print("  Cauzione non presente nel JSON — skip")
@@ -940,23 +956,73 @@ def insert_property(page):
             screenshot(page, "dopo_prezzi_avanzati")
             return
         cauzione = str(cauzione_val)
-        try:
-            cauzione_field = page.get_by_label("Cauzione")
-            if cauzione_field.count() > 0:
-                cauzione_field.fill(cauzione)
-                print(f"  Cauzione impostata: {cauzione} EUR (label)")
-            else:
-                cauzione_field = page.locator(
-                    "input[name*='cauzione'], input[name*='deposit'], "
-                    "input[name*='Cauzione']"
-                )
-                if cauzione_field.count() > 0:
-                    cauzione_field.first.fill(cauzione)
-                    print(f"  Cauzione impostata: {cauzione} EUR (name)")
-                else:
-                    print("  Campo cauzione non trovato, skip")
-        except Exception as e:
-            print(f"  Errore cauzione: {e}")
+
+        filled = False
+        # Strategia 1: label Playwright
+        for lbl in ["Cauzione", "Deposito cauzionale", "Deposito", "Deposit"]:
+            try:
+                f = page.get_by_label(lbl)
+                if f.count() > 0:
+                    f.first.fill(cauzione)
+                    filled = True
+                    print(f"  Cauzione: {cauzione} EUR (label '{lbl}')")
+                    break
+            except Exception:
+                continue
+
+        # Strategia 2: selettori CSS (input e select)
+        if not filled:
+            for sel in [
+                "input[name*='cauzione']", "input[name*='deposit']",
+                "input[name*='Cauzione']", "input[name*='Deposit']",
+                "select[name*='cauzione']", "select[name*='deposit']",
+            ]:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0:
+                        tag = f.first.evaluate("el => el.tagName")
+                        if tag == "SELECT":
+                            f.first.select_option(value=cauzione)
+                        else:
+                            f.first.fill(cauzione)
+                        filled = True
+                        print(f"  Cauzione: {cauzione} EUR (CSS '{sel}')")
+                        break
+                except Exception:
+                    continue
+
+        # Strategia 3: JS — cerca input/select il cui contenitore menzioni cauzione
+        if not filled:
+            filled = page.evaluate("""(val) => {
+                const inputs = document.querySelectorAll('input, select');
+                for (const inp of inputs) {
+                    const container = inp.closest('label') || inp.closest('.form-group')
+                        || inp.closest('[class*="field"]') || inp.parentElement;
+                    const text = (container?.textContent || '').toLowerCase();
+                    if (text.includes('cauzione') || text.includes('deposito')
+                        || text.includes('deposit')) {
+                        if (inp.tagName === 'SELECT') {
+                            for (const opt of inp.options) {
+                                if (opt.value === val || opt.text.includes(val)) {
+                                    inp.value = opt.value;
+                                    inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return true;
+                                }
+                            }
+                        } else {
+                            inp.value = val;
+                            inp.dispatchEvent(new Event('input', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""", cauzione)
+            if filled:
+                print(f"  Cauzione: {cauzione} EUR (JS)")
+
+        if not filled:
+            print(f"  [WARN] Campo cauzione non trovato — {cauzione} EUR da inserire manualmente")
 
         wait(page, 1000)
         click_save(page)
@@ -967,6 +1033,81 @@ def insert_property(page):
     # --- Step 22: Pulizie, biancheria, soggiorno minimo ---
     print("Step 22: Condizioni — pulizie, biancheria, soggiorno minimo")
 
+    def _fill_field(value, labels, css_selectors, field_name):
+        """Helper: compila un campo con strategia 3-livelli (label/CSS/JS)."""
+        if not value:
+            return
+        filled = False
+        # Strategia 1: label Playwright
+        for lbl in labels:
+            try:
+                f = page.get_by_label(lbl)
+                if f.count() > 0:
+                    tag = f.first.evaluate("el => el.tagName")
+                    if tag == "SELECT":
+                        try:
+                            f.first.select_option(label=value)
+                        except Exception:
+                            f.first.select_option(value=value)
+                    else:
+                        f.first.fill(value)
+                    filled = True
+                    print(f"  {field_name}: {value} (label '{lbl}')")
+                    break
+            except Exception:
+                continue
+        # Strategia 2: selettori CSS
+        if not filled:
+            for sel in css_selectors:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0:
+                        tag = f.first.evaluate("el => el.tagName")
+                        if tag == "SELECT":
+                            try:
+                                f.first.select_option(label=value)
+                            except Exception:
+                                f.first.select_option(value=value)
+                        else:
+                            f.first.fill(value)
+                        filled = True
+                        print(f"  {field_name}: {value} (CSS '{sel}')")
+                        break
+                except Exception:
+                    continue
+        # Strategia 3: JS — cerca input il cui contenitore contenga keyword
+        if not filled:
+            keywords = [l.lower() for l in labels]
+            filled = page.evaluate("""({val, keywords}) => {
+                const fields = document.querySelectorAll('input, textarea, select');
+                for (const f of fields) {
+                    const container = f.closest('label') || f.closest('.form-group')
+                        || f.closest('[class*="field"]') || f.parentElement;
+                    const text = (container?.textContent || '').toLowerCase();
+                    if (keywords.some(k => text.includes(k))) {
+                        if (f.tagName === 'SELECT') {
+                            for (const opt of f.options) {
+                                if (opt.value === val || opt.text.includes(val)) {
+                                    f.value = opt.value;
+                                    f.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return true;
+                                }
+                            }
+                        } else {
+                            f.value = val;
+                            f.dispatchEvent(new Event('input', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""", {"val": value, "keywords": keywords})
+            if filled:
+                print(f"  {field_name}: {value} (JS)")
+        if not filled:
+            print(f"  [WARN] {field_name} non trovato — {value}")
+        wait(page, 1000)
+
     def do_step22():
         screenshot(page, "condizioni_pagina")
         save_html(page, "step22_condizioni")
@@ -974,91 +1115,53 @@ def insert_property(page):
         cond = PROP["condizioni"]
 
         # Pulizia finale
-        pulizia = cond.get("pulizia_finale", "")
-        if pulizia:
-            for label in ["Pulizia finale", "Pulizie", "Cleaning", "Pulizia"]:
-                try:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(pulizia)
-                        print(f"  Pulizia finale: {pulizia}")
-                        break
-                except Exception:
-                    continue
-            else:
-                # Fallback: cerca campo per name/placeholder
-                pf = page.locator(
-                    "input[name*='puliz'], input[name*='clean'], "
-                    "textarea[name*='puliz'], textarea[name*='clean']"
-                )
-                if pf.count() > 0:
-                    pf.first.fill(pulizia)
-                    print(f"  Pulizia finale (fallback): {pulizia}")
-                else:
-                    print(f"  Campo pulizia non trovato, provo click etichetta")
-                    try:
-                        btn = page.get_by_text("A carico dell'ospite")
-                        if btn.count() > 0:
-                            btn.first.click()
-                            print("  Pulizia: selezionato 'A carico dell'ospite'")
-                    except Exception:
-                        print("  Skip pulizia finale")
+        _fill_field(
+            cond.get("pulizia_finale", ""),
+            ["Pulizia finale", "Pulizie", "Cleaning", "Pulizia"],
+            ["input[name*='puliz']", "textarea[name*='puliz']",
+             "input[name*='clean']", "textarea[name*='clean']"],
+            "Pulizia finale"
+        )
 
-        wait(page, 1000)
+        # Asciugamani
+        _fill_field(
+            cond.get("asciugamani", ""),
+            ["Asciugamani", "Towels"],
+            ["input[name*='asciugam']", "textarea[name*='asciugam']",
+             "input[name*='towel']"],
+            "Asciugamani"
+        )
 
-        # Biancheria
-        biancheria = cond.get("biancheria", "")
-        if biancheria:
-            for label in ["Biancheria", "Linen", "Biancheria da letto"]:
-                try:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(biancheria)
-                        print(f"  Biancheria: {biancheria}")
-                        break
-                except Exception:
-                    continue
-            else:
-                bf = page.locator(
-                    "input[name*='bianch'], input[name*='linen'], "
-                    "textarea[name*='bianch'], textarea[name*='linen']"
-                )
-                if bf.count() > 0:
-                    bf.first.fill(biancheria)
-                    print(f"  Biancheria (fallback): {biancheria}")
-                else:
-                    print("  Campo biancheria non trovato, skip")
+        # Lenzuola
+        _fill_field(
+            cond.get("lenzuola", ""),
+            ["Lenzuola", "Bed linen", "Sheets"],
+            ["input[name*='lenzuol']", "textarea[name*='lenzuol']",
+             "input[name*='linen']", "input[name*='sheet']"],
+            "Lenzuola"
+        )
 
-        wait(page, 1000)
+        # Biancheria (legacy, per retrocompatibilita con Il Faro)
+        _fill_field(
+            cond.get("biancheria", ""),
+            ["Biancheria", "Linen", "Biancheria da letto"],
+            ["input[name*='bianch']", "textarea[name*='bianch']"],
+            "Biancheria"
+        )
 
-        # Soggiorno minimo bassa stagione
+        # Soggiorno minimo — usa il valore piu basso tra i periodi
         sog_bassa = cond.get("soggiorno_minimo_bassa", {})
         sog_alta = cond.get("soggiorno_minimo_alta", {})
-
-        for label in ["Soggiorno minimo", "Notti minime", "Minimum stay"]:
-            try:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    # Usa il valore più basso come default
-                    notti = str(sog_bassa.get("notti", sog_alta.get("notti", 1)))
-                    field.first.fill(notti)
-                    print(f"  Soggiorno minimo: {notti} notti")
-                    break
-            except Exception:
-                continue
-        else:
-            sf = page.locator(
-                "input[name*='soggiorno'], input[name*='minim'], "
-                "input[name*='stay']"
+        notti = str(sog_bassa.get("notti", sog_alta.get("notti", "")))
+        if notti:
+            _fill_field(
+                notti,
+                ["Soggiorno minimo", "Notti minime", "Minimum stay"],
+                ["input[name*='soggiorno']", "input[name*='minim']",
+                 "input[name*='stay']", "select[name*='soggiorno']"],
+                "Soggiorno minimo"
             )
-            if sf.count() > 0:
-                notti = str(sog_bassa.get("notti", sog_alta.get("notti", 1)))
-                sf.first.fill(notti)
-                print(f"  Soggiorno minimo (fallback): {notti} notti")
-            else:
-                print("  Campo soggiorno minimo non trovato, skip")
 
-        wait(page, 1000)
         screenshot(page, "condizioni_compilate")
 
     try_step(page, "step22_condizioni", do_step22)
@@ -1082,79 +1185,34 @@ def insert_property(page):
         cond = PROP["condizioni"]
 
         # Check-in
-        check_in = cond.get("check_in", "")
-        if check_in:
-            for label in ["Check-in", "Check in", "Orario arrivo", "Arrivo"]:
-                try:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(check_in)
-                        print(f"  Check-in: {check_in}")
-                        break
-                except Exception:
-                    continue
-            else:
-                ci = page.locator(
-                    "input[name*='check_in'], input[name*='checkin'], "
-                    "input[name*='arriv']"
-                )
-                if ci.count() > 0:
-                    ci.first.fill(check_in)
-                    print(f"  Check-in (fallback): {check_in}")
-                else:
-                    print("  Campo check-in non trovato, skip")
-
-        wait(page, 1000)
+        _fill_field(
+            cond.get("check_in", ""),
+            ["Check-in", "Check in", "Orario arrivo", "Arrivo"],
+            ["input[name*='check_in']", "input[name*='checkin']",
+             "select[name*='check_in']", "select[name*='checkin']",
+             "input[name*='arriv']"],
+            "Check-in"
+        )
 
         # Check-out
-        check_out = cond.get("check_out", "")
-        if check_out:
-            for label in ["Check-out", "Check out", "Orario partenza", "Partenza"]:
-                try:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(check_out)
-                        print(f"  Check-out: {check_out}")
-                        break
-                except Exception:
-                    continue
-            else:
-                co = page.locator(
-                    "input[name*='check_out'], input[name*='checkout'], "
-                    "input[name*='parten']"
-                )
-                if co.count() > 0:
-                    co.first.fill(check_out)
-                    print(f"  Check-out (fallback): {check_out}")
-                else:
-                    print("  Campo check-out non trovato, skip")
-
-        wait(page, 1000)
+        _fill_field(
+            cond.get("check_out", ""),
+            ["Check-out", "Check out", "Orario partenza", "Partenza"],
+            ["input[name*='check_out']", "input[name*='checkout']",
+             "select[name*='check_out']", "select[name*='checkout']",
+             "input[name*='parten']"],
+            "Check-out"
+        )
 
         # Regole della casa
-        regole = cond.get("regole_casa", "")
-        if regole:
-            for label in ["Regole", "Regole della casa", "House rules", "Regolamento"]:
-                try:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(regole)
-                        print("  Regole casa compilate")
-                        break
-                except Exception:
-                    continue
-            else:
-                rf = page.locator(
-                    "textarea[name*='regol'], textarea[name*='rule'], "
-                    "textarea[name*='house']"
-                )
-                if rf.count() > 0:
-                    rf.first.fill(regole)
-                    print("  Regole casa (fallback) compilate")
-                else:
-                    print("  Campo regole non trovato, skip")
+        _fill_field(
+            cond.get("regole_casa", ""),
+            ["Regole", "Regole della casa", "House rules", "Regolamento"],
+            ["textarea[name*='regol']", "textarea[name*='rule']",
+             "textarea[name*='house']"],
+            "Regole casa"
+        )
 
-        wait(page, 1000)
         screenshot(page, "regole_compilate")
 
     try_step(page, "step24_regole", do_step24)
