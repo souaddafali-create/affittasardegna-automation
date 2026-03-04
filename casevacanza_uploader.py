@@ -131,14 +131,13 @@ def step_done(page, name):
 
 
 def dismiss_overlay(page):
-    """Close any modal/overlay: Escape, button clicks, then JS DOM removal."""
+    """Close any modal/overlay: Escape, button clicks, then JS hide."""
     # 1) Press Escape
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
 
     # 2) Try close buttons inside known modal containers
-    for selector in [".react-modal-portal-v2", ".ReactModal__Overlay",
-                     "[class*='modal-portal']", "[class*='ReactModal']"]:
+    for selector in [".react-modal-portal-v2", ".ReactModal__Overlay"]:
         try:
             modal = page.locator(selector)
             if modal.count() > 0 and modal.first.is_visible():
@@ -160,25 +159,20 @@ def dismiss_overlay(page):
     except Exception:
         pass
 
-    # 4) Nuclear option: remove blocking overlays from DOM via JS
-    removed = page.evaluate("""() => {
+    # 4) Hide (NOT remove!) blocking overlays via JS — removing breaks React
+    hidden = page.evaluate("""() => {
         let count = 0;
-        const selectors = [
-            '.react-modal-portal-v2',
-            '.ReactModal__Overlay',
-            '[class*="modal-portal"]',
-            '[class*="ReactModal"]',
-        ];
-        for (const sel of selectors) {
-            document.querySelectorAll(sel).forEach(el => {
-                el.remove();
-                count++;
-            });
-        }
+        document.querySelectorAll(
+            '.react-modal-portal-v2, .ReactModal__Overlay'
+        ).forEach(el => {
+            el.style.display = 'none';
+            el.style.pointerEvents = 'none';
+            count++;
+        });
         return count;
     }""")
-    if removed:
-        print(f"  Rimossi {removed} overlay dal DOM via JS")
+    if hidden:
+        print(f"  Nascosti {hidden} overlay via JS (display:none)")
         page.wait_for_timeout(500)
 
 
@@ -382,6 +376,7 @@ def navigate_to_add_property(page):
 
     # Dismiss any modal (cookie popup, ReactModal, etc.)
     dismiss_overlay(page)
+    page.wait_for_timeout(3000)  # Let React SPA fully render wizard components
 
     step_done(page, "pagina_iniziale")
     print("Pagina wizard raggiunta.")
@@ -399,7 +394,8 @@ def insert_property(page):
     # --- Step 1: Click [data-test="single"] (Proprietà a unità singola) ---
     print("Step 1: Proprietà a unità singola")
     dismiss_overlay(page)
-    page.locator('[data-test="single"]').click()
+    page.wait_for_timeout(2000)  # Let React finish rendering wizard
+    page.locator('[data-test="single"]').click(force=True)
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(1000)
     step_done(page, "tipo_proprietà")
