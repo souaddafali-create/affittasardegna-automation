@@ -132,6 +132,14 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 | `.github/workflows/booking_upload.yml` | Push su `main` (se cambia `booking_uploader.py` o il JSON) + manual | Esegue `booking_uploader.py` con xvfb e stealth. Artifact: `screenshots_booking/`. |
 | `.github/workflows/upload_villa_la_vela.yml` | Push su `main` (se cambia uploader o `Villa_La_Vela_DATI.json`) + manual | Esegue `casevacanza_uploader.py` con `PROPERTY_DATA=Villa_La_Vela_DATI.json`. Artifact: `villa-la-vela-debug-screenshots/`. |
 | `.github/workflows/booking_explore.yml` | Solo manual | Script esplorativo inline per Booking.com. Non usa il JSON. |
+| `.github/workflows/explore_wizard.yml` | Solo manual | Esegue `explore_wizard.py` per mappare il wizard CaseVacanza. Artifact: `wizard-exploration/`. |
+
+### Esplorazione e documentazione
+
+| File | Descrizione |
+|------|-------------|
+| `explore_wizard.py` | Script esplorativo: login + navigazione wizard CaseVacanza step-by-step SENZA compilare. Cattura screenshot, HTML e struttura form di ogni step. Salva `WIZARD_MAP.json`. |
+| `PROCESSO.md` | Documentazione stato progetto: cosa funziona, cosa è rotto, selettori noti, prossimi passi. Aggiornato ad ogni sessione. |
 
 ### Altro
 

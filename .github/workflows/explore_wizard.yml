@@ -1,0 +1,36 @@
+name: Explore CaseVacanza Wizard
+
+on:
+  workflow_dispatch:
+
+jobs:
+  explore:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Explore wizard
+        env:
+          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
+          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
+        run: xvfb-run python explore_wizard.py
+
+      - name: Upload exploration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizard-exploration
+          path: screenshots/
