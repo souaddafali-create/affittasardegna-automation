@@ -985,14 +985,76 @@ def insert_property(page):
         base_prezzo = calculate_base_price()
         if base_prezzo is not None:
             prezzo_str = str(base_prezzo)
-            prezzo_field = page.get_by_label("Prezzo")
-            if prezzo_field.count() > 0:
-                prezzo_field.fill(prezzo_str)
-            else:
-                page.locator(
-                    "input[type='number'], input[name*='prezz'], input[name*='price']"
-                ).first.fill(prezzo_str)
-            print(f"  Prezzo base: {prezzo_str} EUR/notte")
+            filled = False
+
+            # Strategy 1: label "Prezzo per notte" (testo reale sulla pagina)
+            for lbl in ["Prezzo per notte", "Prezzo", "Price per night", "Price"]:
+                try:
+                    f = page.get_by_label(lbl)
+                    if f.count() > 0:
+                        f.first.fill(prezzo_str)
+                        filled = True
+                        print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
+                        break
+                except Exception:
+                    continue
+
+            # Strategy 2: placeholder text
+            if not filled:
+                try:
+                    f = page.locator(
+                        "input[placeholder*='Prezzo'], input[placeholder*='prezzo'], "
+                        "input[placeholder*='notte']"
+                    )
+                    if f.count() > 0:
+                        f.first.fill(prezzo_str)
+                        filled = True
+                        print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder)")
+                except Exception:
+                    pass
+
+            # Strategy 3: CSS selectors
+            if not filled:
+                try:
+                    f = page.locator(
+                        "input[type='number'], input[name*='prezz'], input[name*='price']"
+                    )
+                    if f.count() > 0:
+                        f.first.fill(prezzo_str)
+                        filled = True
+                        print(f"  Prezzo: {prezzo_str} EUR/notte (CSS)")
+                except Exception:
+                    pass
+
+            # Strategy 4: JS — find input near "Prezzo" or "notte" text
+            if not filled:
+                filled = page.evaluate("""(val) => {
+                    const inputs = document.querySelectorAll('input');
+                    for (const inp of inputs) {
+                        // Walk up to find a container with "prezzo" text
+                        let container = inp;
+                        for (let i = 0; i < 5; i++) {
+                            container = container.parentElement;
+                            if (!container) break;
+                            const text = container.textContent.toLowerCase();
+                            if (text.includes('prezzo') && text.includes('notte')) {
+                                const nativeSet = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value'
+                                ).set;
+                                nativeSet.call(inp, val);
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }""", prezzo_str)
+                if filled:
+                    print(f"  Prezzo: {prezzo_str} EUR/notte (JS)")
+
+            if not filled:
+                print(f"  [WARN] Campo prezzo non trovato — {prezzo_str} EUR/notte")
         else:
             print("  Prezzo non presente nel JSON — lascio vuoto")
 
