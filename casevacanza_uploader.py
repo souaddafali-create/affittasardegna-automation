@@ -99,16 +99,24 @@ def screenshot(page, name):
     global step_counter
     step_counter += 1
     path = f"{SCREENSHOT_DIR}/step{step_counter:02d}_{name}.png"
-    page.screenshot(path=path, full_page=True)
-    print(f"  Screenshot: {path}")
+    try:
+        page.wait_for_load_state("load", timeout=10_000)
+        page.screenshot(path=path, full_page=True)
+        print(f"  Screenshot: {path}")
+    except Exception as e:
+        print(f"  [WARN] Screenshot fallita ({name}): {e}")
 
 
 def save_html(page, name):
     """Save full HTML of current page for debugging."""
     path = f"{SCREENSHOT_DIR}/{name}.html"
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(page.content())
-    print(f"  HTML salvato: {path}")
+    try:
+        html = page.content()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"  HTML salvato: {path}")
+    except Exception as e:
+        print(f"  [WARN] HTML save fallito ({name}): {e}")
 
 
 def step_done(page, name):
@@ -296,6 +304,7 @@ def login(page):
     print("Login CaseVacanza.it...")
     page.goto("https://my.casevacanza.it", timeout=60_000)
     page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(2000)  # Extra wait for Keycloak redirect to settle
     screenshot(page, "login_page")
 
     # Close cookie popup if present
