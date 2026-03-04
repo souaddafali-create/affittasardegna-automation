@@ -439,12 +439,14 @@ def click_room_counter(page, label_text, clicks):
         // Strategy: find elements containing the label text,
         // then walk up to find a container with at least 2 buttons (- and +)
         const allElements = document.querySelectorAll('div, span, label, p, h3, h4');
+        const labelLower = label.toLowerCase();
         for (const el of allElements) {
             const text = el.textContent.trim();
-            if (!text.includes(label)) continue;
+            const textLower = text.toLowerCase();
+            if (!textLower.includes(labelLower)) continue;
 
             // Skip if this element contains too much text (it's a parent container)
-            if (text.length > label.length * 3) continue;
+            if (text.length > label.length * 4) continue;
 
             // Walk up the DOM to find a container with buttons
             let container = el;
@@ -721,6 +723,10 @@ def insert_property(page):
         if bath_target > 0:
             click_room_counter(page, "Bagno", bath_target)
             print(f"  Bagni target: {comp['bagni']}")
+
+        # Kitchen — default is 0, every property has at least 1 kitchen
+        click_room_counter(page, "Cucina", 1)
+        print("  Cucina: 1")
 
         step_done(page, "ospiti_camere")
 
