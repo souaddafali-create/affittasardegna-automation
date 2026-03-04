@@ -770,30 +770,56 @@ def insert_property(page):
             print(f"    Label: '{c['label']}' buttons: {c['buttonTexts']} "
                   f"dataTest: '{c['dataTest']}' parentDT: '{c['parentDataTest']}'")
 
-        # Guest count — [data-test="guest-count"] works, default is 1
-        for _ in range(comp["max_ospiti"] - 1):
-            page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
+        # --- POSITIONAL APPROACH ---
+        # All counters on this page use [data-test="counter-add-btn"] for +
+        # Order: 0=Ospiti, 1=Camera da letto, 2=Bagno, 3=Cucina, 4=Soggiorno
+        all_add_btns = page.locator('[data-test="counter-add-btn"]')
+        total_btns = all_add_btns.count()
+        print(f"  DEBUG: {total_btns} bottoni [data-test='counter-add-btn'] trovati")
+
+        if total_btns >= 4:
+            # Positional approach — reliable, no label matching needed
+            # Index 0: Ospiti — default is 1, click (max_ospiti - 1) times
+            for _ in range(comp["max_ospiti"] - 1):
+                all_add_btns.nth(0).click()
+                page.wait_for_timeout(300)
+            print(f"  Ospiti: {comp['max_ospiti']}")
+
+            # Index 1: Camera da letto — default is 1, click (camere - 1) times
+            bedroom_extra = comp["camere"] - 1
+            for _ in range(bedroom_extra):
+                all_add_btns.nth(1).click()
+                page.wait_for_timeout(300)
+            print(f"  Camere: {comp['camere']}")
+
+            # Index 2: Bagno — default is 0, click bagni times
+            for _ in range(comp["bagni"]):
+                all_add_btns.nth(2).click()
+                page.wait_for_timeout(300)
+            print(f"  Bagni: {comp['bagni']}")
+
+            # Index 3: Cucina — default is 0, click 1 time
+            all_add_btns.nth(3).click()
             page.wait_for_timeout(300)
-        print(f"  Ospiti: {comp['max_ospiti']}")
+            print("  Cucina: 1")
 
-        # Room counters — these do NOT have data-test attributes!
-        # Use click_room_counter() which finds buttons by label text via JS
+        else:
+            # Fallback: use guest-count data-test for ospiti,
+            # then try label-based for the rest
+            print(f"  [WARN] Solo {total_btns} counter-add-btn trovati, uso fallback")
 
-        # Bedrooms — default is 1, need (camere - 1) clicks
-        bedroom_target = comp["camere"] - 1
-        if bedroom_target > 0:
-            click_room_counter(page, "Camera da letto", bedroom_target)
-            print(f"  Camere target: {comp['camere']}")
+            # Ospiti via data-test (always works)
+            for _ in range(comp["max_ospiti"] - 1):
+                page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
+                page.wait_for_timeout(300)
+            print(f"  Ospiti: {comp['max_ospiti']}")
 
-        # Bathrooms — default is 0
-        bath_target = comp["bagni"]
-        if bath_target > 0:
-            click_room_counter(page, "Bagno", bath_target)
-            print(f"  Bagni target: {comp['bagni']}")
-
-        # Kitchen — default is 0, every property has at least 1 kitchen
-        click_room_counter(page, "Cucina", 1)
-        print("  Cucina: 1")
+            # Try label-based for the rest
+            bedroom_target = comp["camere"] - 1
+            if bedroom_target > 0:
+                click_room_counter(page, "Camera da letto", bedroom_target)
+            click_room_counter(page, "Bagno", comp["bagni"])
+            click_room_counter(page, "Cucina", 1)
 
         step_done(page, "ospiti_camere")
 
