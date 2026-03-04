@@ -120,8 +120,12 @@ def save_html(page, name):
 
 
 def step_done(page, name):
-    """Standard post-step: wait for network idle, take screenshot + HTML."""
-    page.wait_for_load_state("networkidle")
+    """Standard post-step: wait for DOM ready, take screenshot + HTML."""
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=10_000)
+    except Exception:
+        pass
+    page.wait_for_timeout(1000)
     screenshot(page, name)
     save_html(page, name)
 
@@ -342,7 +346,8 @@ def login(page):
     """Login su CaseVacanza.it via Keycloak SSO."""
     print("Login CaseVacanza.it...")
     page.goto("https://my.casevacanza.it", timeout=60_000)
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     page.wait_for_timeout(2000)  # Extra wait for Keycloak redirect to settle
     screenshot(page, "login_page")
 
@@ -361,7 +366,8 @@ def login(page):
     page.fill("#password", PASSWORD)
     screenshot(page, "login_credenziali")
     page.click("#kc-login")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     step_done(page, "dopo_login")
     print(f"  URL dopo login: {page.url}")
     print("Login effettuato.")
@@ -371,7 +377,8 @@ def navigate_to_add_property(page):
     """Navigate directly to the add-property wizard URL."""
     print("Navigazione a add-property...")
     page.goto("https://my.casevacanza.it/listing/add-property", timeout=30_000)
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
 
     # Dismiss any modal (cookie popup, ReactModal, etc.)
     dismiss_overlay(page)
@@ -393,7 +400,8 @@ def insert_property(page):
     print("Step 1: Proprietà a unità singola")
     dismiss_overlay(page)
     page.locator('[data-test="single"]').click()
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     step_done(page, "tipo_proprietà")
 
     # --- Step 2: Seleziona tipo struttura dal dropdown ---
@@ -422,7 +430,8 @@ def insert_property(page):
     # --- Step 4: Continua (tipo proprietà) ---
     print("Step 4: Continua (tipo proprietà)")
     page.locator('[data-test="save-button"]').click()
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     step_done(page, "dopo_tipo")
 
     # --- Step 5: Compila indirizzo (modalità manuale) ---
@@ -430,7 +439,8 @@ def insert_property(page):
 
     def do_step5():
         page.get_by_text("Inseriscilo manualmente").click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
 
         ident = PROP["identificativi"]
         addr_parts = ident["indirizzo"].rsplit(" ", 1)
@@ -454,7 +464,8 @@ def insert_property(page):
     # --- Step 6: Continua (indirizzo) ---
     print("Step 6: Continua (indirizzo)")
     page.locator('[data-test="save-button"]').click()
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     step_done(page, "dopo_indirizzo")
 
     # --- Step 7: Mappa — Imposta coordinate GPS se presenti nel JSON ---
@@ -514,7 +525,8 @@ def insert_property(page):
             print("  Nessuna coordinata nel JSON — skip posizionamento mappa")
 
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_mappa")
 
     try_step(page, "step7_mappa", do_step7)
@@ -574,7 +586,8 @@ def insert_property(page):
 
     def do_step9():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_ospiti")
 
     try_step(page, "step9_continua_ospiti", do_step9)
@@ -614,7 +627,8 @@ def insert_property(page):
 
     def do_step11():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_letti")
 
     try_step(page, "step11_continua_letti", do_step11)
@@ -676,7 +690,8 @@ def insert_property(page):
 
     def do_step13():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_foto")
 
     try_step(page, "step13_continua_foto", do_step13)
@@ -803,7 +818,8 @@ def insert_property(page):
 
     def do_step15():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_servizi")
 
     try_step(page, "step15_continua_servizi", do_step15)
@@ -813,7 +829,8 @@ def insert_property(page):
 
     def do_step16():
         page.get_by_text("Li scrivo io").click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "li_scrivo_io")
 
     try_step(page, "step16_li_scrivo_io", do_step16)
@@ -850,7 +867,8 @@ def insert_property(page):
 
     def do_step18():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_titolo_desc")
 
     try_step(page, "step18_continua_titolo", do_step18)
@@ -882,7 +900,8 @@ def insert_property(page):
 
     def do_step20():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_prezzo")
 
     try_step(page, "step20_continua_prezzo", do_step20)
@@ -895,7 +914,8 @@ def insert_property(page):
         if cauzione_val is None:
             print("  Cauzione non presente nel JSON — skip")
             page.locator('[data-test="save-button"]').click()
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(1000)
             step_done(page, "dopo_cauzione_skip")
             return
         cauzione = str(cauzione_val)
@@ -967,7 +987,8 @@ def insert_property(page):
             print(f"  [WARN] Campo cauzione non trovato — {cauzione} EUR da inserire manualmente")
 
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_cauzione")
 
     try_step(page, "step21_cauzione", do_step21)
@@ -1038,7 +1059,8 @@ def insert_property(page):
 
     def do_step23():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_condizioni")
 
     try_step(page, "step23_continua_condizioni", do_step23)
@@ -1085,7 +1107,8 @@ def insert_property(page):
 
     def do_step25():
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_regole")
 
     try_step(page, "step25_continua_regole", do_step25)
@@ -1103,7 +1126,8 @@ def insert_property(page):
                     btn = page.get_by_text(btn_text)
                     if btn.count() > 0:
                         btn.first.click()
-                        page.wait_for_load_state("networkidle")
+                        page.wait_for_load_state("domcontentloaded")
+                        page.wait_for_timeout(1000)
                         print(f"  Cliccato '{btn_text}' sulla pagina calendario")
 
                         url_field = page.locator(
@@ -1120,7 +1144,8 @@ def insert_property(page):
                                     confirm = page.get_by_role("button", name=confirm_text)
                                     if confirm.count() > 0:
                                         confirm.first.click()
-                                        page.wait_for_load_state("networkidle")
+                                        page.wait_for_load_state("domcontentloaded")
+                                        page.wait_for_timeout(1000)
                                         print(f"  Confermato import iCal ({confirm_text})")
                                         imported = True
                                         break
@@ -1138,7 +1163,8 @@ def insert_property(page):
             print("  Nessun iCal URL nel JSON — skip import calendario")
 
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_calendario")
 
     try_step(page, "step26_calendario", do_step26)
@@ -1151,7 +1177,8 @@ def insert_property(page):
         if not cin:
             print("  CIN non presente nel JSON — skip")
             page.locator('[data-test="save-button"]').click()
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(1000)
             step_done(page, "dopo_requisiti_skip")
             return
 
@@ -1193,14 +1220,16 @@ def insert_property(page):
             print(f"  [WARN] Campo CIN non trovato — {cin}")
 
         page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
         step_done(page, "dopo_requisiti")
 
     try_step(page, "step27_requisiti", do_step27)
 
     # --- Step 28: Pagina finale — solo screenshot, NON inviare ---
     print("\nStep 28: Pagina finale — SOLO screenshot")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1000)
     step_done(page, "pagina_finale")
     print("Flusso completato! NON inviato per la verifica.")
 
