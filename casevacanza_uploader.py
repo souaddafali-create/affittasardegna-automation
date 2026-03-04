@@ -127,9 +127,33 @@ def step_done(page, name):
 
 
 def dismiss_overlay(page):
-    """Close any modal/overlay by pressing Escape, then check for Ok button."""
+    """Close any modal/overlay: Escape, ReactModal portals, Ok button."""
+    # 1) Press Escape
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
+
+    # 2) Close react-modal-portal-v2 and ReactModal overlays
+    for selector in [".react-modal-portal-v2", ".ReactModal__Overlay",
+                     "[class*='modal-portal']", "[class*='ReactModal']"]:
+        try:
+            modal = page.locator(selector)
+            if modal.count() > 0 and modal.first.is_visible():
+                # Try close button inside modal
+                close_btn = modal.locator("button").first
+                if close_btn.count() > 0:
+                    close_btn.click()
+                    page.wait_for_timeout(500)
+                    print(f"  Modal chiuso ({selector} -> button)")
+                    return
+                # Try clicking outside (top-left corner of overlay)
+                modal.click(position={"x": 5, "y": 5})
+                page.wait_for_timeout(500)
+                print(f"  Modal chiuso ({selector} -> click outside)")
+                return
+        except Exception:
+            pass
+
+    # 3) Ok button fallback
     try:
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
@@ -334,14 +358,8 @@ def navigate_to_add_property(page):
     page.goto("https://my.casevacanza.it/listing/add-property", timeout=30_000)
     page.wait_for_load_state("networkidle")
 
-    # Close any popup after navigation
-    try:
-        ok_btn = page.locator("button", has_text="Ok")
-        if ok_btn.count() > 0 and ok_btn.first.is_visible():
-            ok_btn.first.click()
-            page.wait_for_timeout(1000)
-    except Exception:
-        pass
+    # Dismiss any modal (cookie popup, ReactModal, etc.)
+    dismiss_overlay(page)
 
     step_done(page, "pagina_iniziale")
     print("Pagina wizard raggiunta.")
@@ -358,6 +376,7 @@ def insert_property(page):
 
     # --- Step 1: Click [data-test="single"] (Proprietà a unità singola) ---
     print("Step 1: Proprietà a unità singola")
+    dismiss_overlay(page)
     page.locator('[data-test="single"]').click()
     page.wait_for_load_state("networkidle")
     step_done(page, "tipo_proprietà")
