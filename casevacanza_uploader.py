@@ -81,14 +81,17 @@ SCREENSHOT_DIR = "screenshots"
 
 # Mappa tipo letto JSON → indice bottone CaseVacanza
 # CaseVacanza ordina: 0=Divano letto, 1=Matrimoniale, 2=Francese, 3=Singolo
-LETTO_INDEX = {
-    "matrimoniale": 1,
-    "francese": 2,
-    "singolo": 3,
-    "divano_letto": 0,
+LETTO_LABEL = {
+    "matrimoniale": "Letto matrimoniale",
+    "singolo": "Letto singolo",
+    "divano_letto": "Divano letto",
+    "francese": "Letto Queen-size",
+    "king": "Letto King-size",
+    "castello": "Letto a castello",
 }
 
 step_counter = 0
+step_errors = []
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +190,7 @@ def try_step(page, step_name, func):
         func()
         print(f"  OK: {step_name}")
     except Exception as e:
+        step_errors.append((step_name, str(e)))
         print(f"  ERRORE in {step_name}: {e}")
         screenshot(page, f"errore_{step_name}")
         save_html(page, f"errore_{step_name}")
@@ -210,18 +214,32 @@ def load_photo_paths():
             return paths
         print("  Nessuna foto valida nel JSON — scarico placeholder")
 
-    # Fallback: download 5 placeholder photos (min 768px width required by site)
-    print("  Download 5 foto placeholder (1024x768)...")
+    # Fallback: generate 5 placeholder photos locally (min 768px width required by site)
+    print("  Genero 5 foto placeholder locali (1024x768)...")
     paths = []
     tmp_dir = tempfile.mkdtemp()
     for i in range(5):
         path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
-        urllib.request.urlretrieve(
-            f"https://picsum.photos/1024/768?random={i+1}", path
-        )
+        _generate_placeholder_jpeg(path, 1024, 768, color_index=i)
         paths.append(path)
-        print(f"  Foto placeholder scaricata: {path}")
+        print(f"  Foto placeholder generata: {path}")
     return paths
+
+
+def _generate_placeholder_jpeg(path, width, height, color_index=0):
+    """Generate a solid-color JPEG placeholder image."""
+    try:
+        from PIL import Image
+        colors = [(70, 130, 180), (60, 179, 113), (255, 165, 0),
+                  (147, 112, 219), (220, 20, 60)]
+        color = colors[color_index % len(colors)]
+        img = Image.new("RGB", (width, height), color)
+        img.save(path, "JPEG", quality=85)
+    except ImportError:
+        # Fallback: download from picsum if PIL not available
+        urllib.request.urlretrieve(
+            f"https://picsum.photos/{width}/{height}?random={color_index + 1}", path
+        )
 
 
 def calculate_base_price():
@@ -316,34 +334,6 @@ def fill_field(page, value, labels, css_selectors, field_name):
         print(f"  [WARN] {field_name} non trovato — {val}")
     return filled
 
-
-def click_counter_by_label(page, label, times):
-    """Find a counter widget associated with a text label and click + N times.
-    Uses text-based search with JS walk-up to find nearest counter-add-btn."""
-    if times <= 0:
-        return
-    for _ in range(times):
-        clicked = page.evaluate("""(label) => {
-            const walker = document.createTreeWalker(
-                document.body, NodeFilter.SHOW_TEXT, null, false
-            );
-            let node;
-            while (node = walker.nextNode()) {
-                if (node.textContent.trim().includes(label)) {
-                    let el = node.parentElement;
-                    for (let i = 0; i < 10 && el; i++) {
-                        const btn = el.querySelector('[data-test="counter-add-btn"]');
-                        if (btn) { btn.click(); return true; }
-                        el = el.parentElement;
-                    }
-                }
-            }
-            return false;
-        }""", label)
-        if not clicked:
-            print(f"  [WARN] Counter per '{label}' non trovato")
-            return
-        page.wait_for_timeout(300)
 
 
 # ---------------------------------------------------------------------------
@@ -552,41 +542,59 @@ def insert_property(page):
         for _ in range(comp["max_ospiti"] - 1):
             page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
             page.wait_for_timeout(300)
+        print(f"  Ospiti: {comp['max_ospiti']}")
 
-        # Bedrooms — try data-test first, fallback to text-based
-        bedroom_filled = False
-        try:
-            loc = page.locator('[data-test="bedroom"] [data-test="counter-add-btn"]')
-            if loc.count() > 0:
-                for _ in range(comp["camere"] - 1):
-                    loc.click()
+        # Bedrooms — default is 1, need (camere - 1) clicks
+        bedroom_target = comp["camere"] - 1
+        if bedroom_target > 0:
+            try:
+                row = page.locator("div", has_text="Camera da letto").filter(
+                    has=page.locator('[data-test="counter-add-btn"]')
+                ).first
+                btn = row.locator('[data-test="counter-add-btn"]')
+                for _ in range(bedroom_target):
+                    btn.click()
                     page.wait_for_timeout(300)
-                bedroom_filled = True
-                print(f"  Camere: {comp['camere']} (data-test)")
-        except Exception:
-            pass
+                print(f"  Camere: {comp['camere']}")
+            except Exception as e:
+                print(f"  [WARN] Camere click Playwright fallito: {e}, provo JS")
+                page.evaluate("""(n) => {
+                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+                    for (const btn of btns) {
+                        const row = btn.closest('div[class]')?.closest('div[class]') || btn.parentElement?.parentElement;
+                        if (row && row.textContent.includes('Camera da letto') && !row.textContent.includes('ospiti')) {
+                            for (let i = 0; i < n; i++) btn.click();
+                            return;
+                        }
+                    }
+                }""", bedroom_target)
+                print(f"  Camere: {comp['camere']} (JS fallback)")
 
-        if not bedroom_filled:
-            click_counter_by_label(page, "Camera da letto", comp["camere"] - 1)
-            if comp["camere"] > 1:
-                print(f"  Camere: {comp['camere']} (text-based)")
-
-        # Bathrooms — try data-test first, fallback to text-based
-        bathroom_filled = False
-        try:
-            loc = page.locator('[data-test="bath_room"] [data-test="counter-add-btn"]')
-            if loc.count() > 0:
-                for _ in range(comp["bagni"]):
-                    loc.click()
+        # Bathrooms — default is 0
+        bath_target = comp["bagni"]
+        if bath_target > 0:
+            try:
+                row = page.locator("div", has_text="Bagno").filter(
+                    has=page.locator('[data-test="counter-add-btn"]')
+                ).first
+                btn = row.locator('[data-test="counter-add-btn"]')
+                for _ in range(bath_target):
+                    btn.click()
                     page.wait_for_timeout(300)
-                bathroom_filled = True
-                print(f"  Bagni: {comp['bagni']} (data-test)")
-        except Exception:
-            pass
-
-        if not bathroom_filled:
-            click_counter_by_label(page, "Bagno", comp["bagni"])
-            print(f"  Bagni: {comp['bagni']} (text-based)")
+                print(f"  Bagni: {comp['bagni']}")
+            except Exception as e:
+                print(f"  [WARN] Bagni click Playwright fallito: {e}, provo JS")
+                page.evaluate("""(n) => {
+                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+                    for (const btn of btns) {
+                        const row = btn.closest('div[class]')?.closest('div[class]') || btn.parentElement?.parentElement;
+                        if (row && row.textContent.includes('Bagno') && !row.textContent.includes('Camera')) {
+                            for (let i = 0; i < n; i++) btn.click();
+                            return;
+                        }
+                    }
+                }""", bath_target)
+                print(f"  Bagni: {comp['bagni']} (JS fallback)")
 
         step_done(page, "ospiti_camere")
 
@@ -607,27 +615,31 @@ def insert_property(page):
     print("Step 10: Configura letti")
 
     def do_step10():
-        add_btns = page.locator('[data-test="counter-add-btn"]')
-        count = add_btns.count()
-        print(f"  Trovati {count} counter-add-btn")
-
         letti = comp.get("letti", [])
         if not letti:
             print("  ATTENZIONE: nessun dato letti nel JSON, skip")
+            step_done(page, "letti_configurati")
+            return
+
         for letto in letti:
-            tipo_letto = letto["tipo"]
-            quantita = letto["quantita"]
-            idx = LETTO_INDEX.get(tipo_letto)
-            if idx is None:
-                print(f"  Tipo letto sconosciuto: {tipo_letto}, skip")
+            tipo = letto["tipo"]
+            qty = letto["quantita"]
+            label = LETTO_LABEL.get(tipo)
+            if not label:
+                print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
-            if idx >= count:
-                print(f"  Indice {idx} fuori range ({count} bottoni), skip {tipo_letto}")
-                continue
-            for _ in range(quantita):
-                add_btns.nth(idx).click()
-                page.wait_for_timeout(300)
-            print(f"  {tipo_letto}: +{quantita} (indice {idx})")
+
+            try:
+                row = page.locator("div", has_text=label).filter(
+                    has=page.locator('[data-test="counter-add-btn"]')
+                ).first
+                btn = row.locator('[data-test="counter-add-btn"]')
+                for _ in range(qty):
+                    btn.click()
+                    page.wait_for_timeout(300)
+                print(f"  {tipo}: +{qty} (label: {label})")
+            except Exception as e:
+                print(f"  [WARN] Letto {tipo} ({label}) non trovato: {e}")
 
         step_done(page, "letti_configurati")
 
@@ -1268,6 +1280,15 @@ def main():
                 save_html(page, "final_state")
             except Exception:
                 pass
+            # Error summary
+            if step_errors:
+                print("\n" + "=" * 60)
+                print(f"RIEPILOGO ERRORI: {len(step_errors)} step falliti:")
+                for name, err in step_errors:
+                    print(f"  - {name}: {err}")
+                print("=" * 60)
+            else:
+                print("\nTutti gli step completati con successo!")
             context.close()
             browser.close()
 
