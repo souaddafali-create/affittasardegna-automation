@@ -703,6 +703,73 @@ def insert_property(page):
           f"{comp['camere']} cam, {comp['bagni']} bagni)")
 
     def do_step8():
+        # DEBUG: dump DOM BEFORE any interaction to understand counter structure
+        save_html(page, "step8_BEFORE_clicks")
+        screenshot(page, "step8_BEFORE_clicks")
+        counter_debug = page.evaluate("""() => {
+            const results = [];
+            const seen = new Set();
+            const allButtons = document.querySelectorAll('button');
+            for (const btn of allButtons) {
+                const parent = btn.parentElement;
+                if (!parent) continue;
+                const key = parent.outerHTML.substring(0, 100);
+                if (seen.has(key)) continue;
+                const siblings = parent.querySelectorAll('button');
+                if (siblings.length >= 2) {
+                    seen.add(key);
+                    const container = parent;
+                    let labelText = '';
+                    let searchEl = container;
+                    for (let i = 0; i < 5; i++) {
+                        searchEl = searchEl.parentElement;
+                        if (!searchEl) break;
+                        const texts = searchEl.querySelectorAll('span, div, label, p, h3, h4');
+                        for (const t of texts) {
+                            const txt = t.textContent.trim();
+                            if (txt.length > 1 && txt.length < 40
+                                && !txt.includes('+') && !txt.includes('-')
+                                && !/^\\d+$/.test(txt)) {
+                                labelText = txt;
+                                break;
+                            }
+                        }
+                        if (labelText) break;
+                    }
+                    results.push({
+                        label: labelText,
+                        buttonCount: siblings.length,
+                        buttonTexts: Array.from(siblings).map(b => b.textContent.trim()),
+                        containerHTML: container.outerHTML.substring(0, 500),
+                        containerTag: container.tagName,
+                        containerClasses: (container.className || '').toString(),
+                        dataTest: container.getAttribute('data-test') || '',
+                        parentDataTest: (container.parentElement?.getAttribute('data-test')) || '',
+                    });
+                }
+            }
+            const dataTestCounters = [];
+            document.querySelectorAll('[data-test*="counter"], [data-test*="count"]').forEach(el => {
+                dataTestCounters.push({
+                    dataTest: el.getAttribute('data-test'),
+                    tag: el.tagName,
+                    text: el.textContent.trim().substring(0, 100),
+                    outerHTML: el.outerHTML.substring(0, 300),
+                });
+            });
+            return { buttonPairContainers: results, dataTestElements: dataTestCounters };
+        }""")
+        import json as _json
+        debug_path = f"{SCREENSHOT_DIR}/step8_counter_debug.json"
+        with open(debug_path, "w") as _f:
+            _json.dump(counter_debug, _f, indent=2, ensure_ascii=False)
+        print(f"  DEBUG: counter structure -> {debug_path}")
+        print(f"  DEBUG: {len(counter_debug.get('buttonPairContainers', []))} button-pair containers")
+        print(f"  DEBUG: {len(counter_debug.get('dataTestElements', []))} data-test counter elements")
+        for c in counter_debug.get('buttonPairContainers', []):
+            print(f"    Label: '{c['label']}' buttons: {c['buttonTexts']} "
+                  f"dataTest: '{c['dataTest']}' parentDT: '{c['parentDataTest']}'")
+
         # Guest count — [data-test="guest-count"] works, default is 1
         for _ in range(comp["max_ospiti"] - 1):
             page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
