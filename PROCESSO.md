@@ -118,31 +118,52 @@ I selettori per prezzo, cauzione, pulizie, biancheria, check-in/out, calendario 
 
 ---
 
-## 5. Prossimi passi
+## 5. Funzionalità implementate
 
-### Fase 1: Esplorazione (ADESSO)
+### 5.1 Verifica avanzamento wizard (`click_save_and_verify`)
 
-1. **Eseguire** il workflow `Explore CaseVacanza Wizard` da GitHub Actions (manual trigger)
-2. **Scaricare** l'artifact `wizard-exploration` con screenshot, HTML e `WIZARD_MAP.json`
-3. **Analizzare** `WIZARD_MAP.json` per:
-   - Quanti step ha realmente il wizard
-   - Nome/heading di ogni step
-   - Selettori reali per ogni campo (`data-test`, `name`, `id`, `role`)
-   - Struttura dei counter (camere, bagni, ospiti, letti)
-   - Struttura upload foto (input file o drag-and-drop)
-   - Struttura checkbox servizi
+Dopo ogni click su `[data-test="save-button"]`, il codice:
+- Confronta URL e heading prima/dopo il click
+- Se il wizard NON avanza, logga gli errori di validazione trovati sulla pagina
+- Questo evita la "cascata di errori" dove step successivi operano sulla pagina sbagliata
 
-### Fase 2: Riscrittura uploader
+### 5.2 Tariffe stagionali post-wizard
 
-4. **Aggiornare** questa tabella (sezione 2) con i selettori reali trovati
-5. **Riscrivere** gli step rotti nell'uploader con i selettori corretti
-6. **Aggiungere** generazione foto placeholder con Pillow (no dipendenza da picsum.photos)
-7. **Aggiungere** verifica avanzamento wizard (detect se la pagina è cambiata dopo click_save)
+Dopo il wizard, se `condizioni.listino_prezzi` contiene periodi, il codice:
+1. **Consolida** le entry settimanali in stagioni contigue (stesso prezzo) → `consolidate_seasonal_prices()`
+2. **Naviga** alla lista proprietà → apre la proprietà appena creata
+3. **Apre** il tab "Tariffe e disponibilità"
+4. Per ogni stagione, clicca "Aggiungi prezzo stagionale" e compila: date, prezzo, soggiorno minimo
 
-### Fase 3: Test
+Per Villa La Vela → 12 stagioni consolidate (da 29 entry settimanali):
+| Periodo | Prezzo | Min notti |
+|---------|--------|-----------|
+| 28 mar → 25 apr | €137 | 5 |
+| 25 apr → 30 mag | €171 | 5 |
+| 30 mag → 13 giu | €206 | 5 |
+| 13 giu → 27 giu | €240 | 5 |
+| 27 giu → 11 lug | €274 | 5 |
+| 11 lug → 25 lug | €309 | 5 |
+| 25 lug → 01 ago | €343 | 5 |
+| 01 ago → 22 ago | €377 | 7 |
+| 22 ago → 29 ago | €343 | 5 |
+| 29 ago → 12 set | €240 | 5 |
+| 12 set → 26 set | €206 | 5 |
+| 26 set → 31 ott | €171 | 5 |
 
-8. **Eseguire** l'uploader per Villa La Vela e verificare con screenshot
-9. **Eseguire** l'uploader per Il Faro per confermare retrocompatibilità
+### 5.3 Step critici
+
+Step 1 (unità singola) e Step 2 (tipo struttura) sono marcati `critical=True`:
+se falliscono, il wizard si ferma subito invece di continuare alla cieca.
+
+---
+
+## 6. Prossimi passi
+
+1. **Eseguire** il workflow Villa La Vela e verificare con gli screenshot
+2. **Verificare** selettori reali dai screenshot/HTML di debug
+3. **Aggiustare** eventuali selettori sbagliati
+4. **Eseguire** l'uploader per Il Faro per confermare retrocompatibilità
 
 ---
 

@@ -181,9 +181,12 @@ def dismiss_overlay(page):
         page.wait_for_timeout(500)
 
 
-def try_step(page, step_name, func):
+def try_step(page, step_name, func, critical=False):
     """Execute a step wrapped in try/except. Dismiss overlays before,
-    always capture state after (success or failure)."""
+    always capture state after (success or failure).
+
+    If critical=True, re-raise the exception to stop the wizard
+    (used for steps where continuing makes no sense if they fail)."""
     print(f"\n--- {step_name} ---")
     dismiss_overlay(page)
     try:
@@ -194,6 +197,47 @@ def try_step(page, step_name, func):
         print(f"  ERRORE in {step_name}: {e}")
         screenshot(page, f"errore_{step_name}")
         save_html(page, f"errore_{step_name}")
+        if critical:
+            raise
+
+
+def click_save_and_verify(page, step_name):
+    """Click save-button and verify the wizard actually advanced.
+    Returns True if advanced, False if stuck on same page."""
+    url_before = page.url
+    heading_before = page.evaluate("""() => {
+        const h = document.querySelector('h1, h2, h3, [data-test*="title"], [class*="heading"]');
+        return h ? h.textContent.trim() : '';
+    }""")
+
+    page.locator('[data-test="save-button"]').click()
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(1500)
+
+    url_after = page.url
+    heading_after = page.evaluate("""() => {
+        const h = document.querySelector('h1, h2, h3, [data-test*="title"], [class*="heading"]');
+        return h ? h.textContent.trim() : '';
+    }""")
+
+    advanced = (url_after != url_before) or (heading_after != heading_before)
+    if not advanced:
+        # Check for validation errors on the page
+        errors = page.evaluate("""() => {
+            const errEls = document.querySelectorAll(
+                '[class*="error"], [class*="Error"], [role="alert"], .invalid-feedback'
+            );
+            return Array.from(errEls).map(e => e.textContent.trim()).filter(t => t).slice(0, 3);
+        }""")
+        if errors:
+            print(f"  [WARN] Wizard NON avanzato — errori validazione: {errors}")
+        else:
+            print(f"  [WARN] Wizard potrebbe non essere avanzato (URL/heading invariati)")
+    else:
+        print(f"  Wizard avanzato: {step_name}")
+
+    step_done(page, f"dopo_{step_name}")
+    return advanced
 
 
 def load_photo_paths():
@@ -250,6 +294,52 @@ def calculate_base_price():
         prezzi = sorted(p["prezzo_notte"] for p in listino if p.get("prezzo_notte"))
         return prezzi[len(prezzi) // 2] if prezzi else None
     return PROP.get("condizioni", {}).get("prezzo_notte")
+
+
+def consolidate_seasonal_prices():
+    """Consolidate weekly listino_prezzi entries into contiguous seasons
+    with the same price. Returns list of {da, a, prezzo_notte, notti_min}.
+    Example: 4 weeks at €137 become one season 28-mar → 25-apr at €137."""
+    listino = PROP.get("condizioni", {}).get("listino_prezzi") or []
+    if not listino:
+        return []
+
+    # Get min-stay details for matching periods
+    sog_dettaglio = PROP.get("condizioni", {}).get("soggiorno_minimo_dettaglio", [])
+    sog_bassa = PROP.get("condizioni", {}).get("soggiorno_minimo_bassa", {})
+    default_min = sog_bassa.get("notti", 5)
+
+    def get_min_stay(da_str):
+        """Find the min-stay for a given start date from soggiorno_minimo_dettaglio."""
+        for sog in sog_dettaglio:
+            if sog.get("da") == da_str:
+                return sog.get("notti", default_min)
+        return default_min
+
+    # Consolidate: merge adjacent entries with same price
+    seasons = []
+    current = None
+    for entry in listino:
+        prezzo = entry.get("prezzo_notte")
+        if not prezzo:
+            continue
+        if current and current["prezzo_notte"] == prezzo:
+            # Extend current season
+            current["a"] = entry["a"]
+        else:
+            # Start new season
+            if current:
+                seasons.append(current)
+            current = {
+                "da": entry["da"],
+                "a": entry["a"],
+                "prezzo_notte": prezzo,
+                "notti_min": get_min_stay(entry["da"]),
+            }
+    if current:
+        seasons.append(current)
+
+    return seasons
 
 
 def fill_field(page, value, labels, css_selectors, field_name):
@@ -400,10 +490,19 @@ def insert_property(page):
     print("Step 1: Proprietà a unità singola")
     dismiss_overlay(page)
     page.wait_for_timeout(2000)  # Let React finish rendering wizard
-    page.locator('[data-test="single"]').click(force=True)
-    page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
-    step_done(page, "tipo_proprietà")
+
+    def do_step1():
+        # Try data-test first, then text fallback
+        single = page.locator('[data-test="single"]')
+        if single.count() > 0:
+            single.click(force=True)
+        else:
+            page.get_by_text("Proprietà a unità singola", exact=False).click()
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(1000)
+        step_done(page, "tipo_proprietà")
+
+    try_step(page, "step1_unità_singola", do_step1, critical=True)
 
     # --- Step 2: Seleziona tipo struttura dal dropdown ---
     tipo = PROP["identificativi"]["tipo_struttura"]
@@ -412,12 +511,27 @@ def insert_property(page):
     def do_step2():
         select = page.locator("select")
         if select.count() > 0:
-            select.first.select_option(label=tipo)
+            try:
+                select.first.select_option(label=tipo)
+            except Exception:
+                # Prova con value se label non corrisponde
+                options = select.first.evaluate("""el => {
+                    return Array.from(el.options).map(o => ({value: o.value, text: o.text}));
+                }""")
+                print(f"  Opzioni dropdown: {options}")
+                # Cerca match parziale
+                for opt in options:
+                    if tipo.lower() in opt["text"].lower():
+                        select.first.select_option(value=opt["value"])
+                        print(f"  Selezionato '{opt['text']}' (match parziale)")
+                        break
+                else:
+                    print(f"  [WARN] '{tipo}' non trovato nel dropdown, opzioni: {[o['text'] for o in options]}")
         else:
             page.get_by_text(tipo).click()
-        step_done(page, "appartamento_selezionato")
+        step_done(page, "tipo_struttura_selezionato")
 
-    try_step(page, "step2_tipo_struttura", do_step2)
+    try_step(page, "step2_tipo_struttura", do_step2, critical=True)
 
     # --- Step 3: Click "Intero alloggio" ---
     print("Step 3: Intero alloggio")
@@ -430,10 +544,7 @@ def insert_property(page):
 
     # --- Step 4: Continua (tipo proprietà) ---
     print("Step 4: Continua (tipo proprietà)")
-    page.locator('[data-test="save-button"]').click()
-    page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
-    step_done(page, "dopo_tipo")
+    click_save_and_verify(page, "tipo_proprietà")
 
     # --- Step 5: Compila indirizzo (modalità manuale) ---
     print("Step 5: Indirizzo")
@@ -464,10 +575,7 @@ def insert_property(page):
 
     # --- Step 6: Continua (indirizzo) ---
     print("Step 6: Continua (indirizzo)")
-    page.locator('[data-test="save-button"]').click()
-    page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
-    step_done(page, "dopo_indirizzo")
+    click_save_and_verify(page, "indirizzo")
 
     # --- Step 7: Mappa — Imposta coordinate GPS se presenti nel JSON ---
     print("Step 7: Mappa")
@@ -602,14 +710,7 @@ def insert_property(page):
 
     # --- Step 9: Continua (ospiti) ---
     print("Step 9: Continua (ospiti)")
-
-    def do_step9():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_ospiti")
-
-    try_step(page, "step9_continua_ospiti", do_step9)
+    click_save_and_verify(page, "ospiti")
 
     # --- Step 10: Configura letti (dal JSON composizione.letti) ---
     print("Step 10: Configura letti")
@@ -647,14 +748,7 @@ def insert_property(page):
 
     # --- Step 11: Continua (letti) ---
     print("Step 11: Continua (letti)")
-
-    def do_step11():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_letti")
-
-    try_step(page, "step11_continua_letti", do_step11)
+    click_save_and_verify(page, "letti")
 
     # --- Step 12: Upload foto ---
     print("Step 12: Upload foto")
@@ -710,14 +804,7 @@ def insert_property(page):
 
     # --- Step 13: Continua (foto) ---
     print("Step 13: Continua (foto)")
-
-    def do_step13():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_foto")
-
-    try_step(page, "step13_continua_foto", do_step13)
+    click_save_and_verify(page, "foto")
 
     # --- Step 14: Seleziona servizi (SOLO quelli true nel JSON) ---
     print("Step 14: Servizi")
@@ -838,14 +925,7 @@ def insert_property(page):
 
     # --- Step 15: Continua (servizi) ---
     print("Step 15: Continua (servizi)")
-
-    def do_step15():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_servizi")
-
-    try_step(page, "step15_continua_servizi", do_step15)
+    click_save_and_verify(page, "servizi")
 
     # --- Step 16: Click "Li scrivo io" ---
     print("Step 16: Li scrivo io")
@@ -887,14 +967,7 @@ def insert_property(page):
 
     # --- Step 18: Continua (titolo/descrizione) ---
     print("Step 18: Continua (titolo/descrizione)")
-
-    def do_step18():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_titolo_desc")
-
-    try_step(page, "step18_continua_titolo", do_step18)
+    click_save_and_verify(page, "titolo_desc")
 
     # --- Step 19: Prezzo ---
     print("Step 19: Prezzo")
@@ -920,14 +993,7 @@ def insert_property(page):
 
     # --- Step 20: Continua (prezzo) ---
     print("Step 20: Continua (prezzo)")
-
-    def do_step20():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_prezzo")
-
-    try_step(page, "step20_continua_prezzo", do_step20)
+    click_save_and_verify(page, "prezzo")
 
     # --- Step 21: Cauzione ---
     print("Step 21: Cauzione")
@@ -1079,14 +1145,7 @@ def insert_property(page):
 
     # --- Step 23: Continua (condizioni) ---
     print("Step 23: Continua (condizioni)")
-
-    def do_step23():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_condizioni")
-
-    try_step(page, "step23_continua_condizioni", do_step23)
+    click_save_and_verify(page, "condizioni")
 
     # --- Step 24: Regole check-in / check-out ---
     print("Step 24: Regole — check-in, check-out, regole casa")
@@ -1127,14 +1186,7 @@ def insert_property(page):
 
     # --- Step 25: Continua (regole) ---
     print("Step 25: Continua (regole)")
-
-    def do_step25():
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_regole")
-
-    try_step(page, "step25_continua_regole", do_step25)
+    click_save_and_verify(page, "regole")
 
     # --- Step 26: Calendario (iCal import) ---
     print("Step 26: Calendario")
@@ -1258,6 +1310,242 @@ def insert_property(page):
 
 
 # ---------------------------------------------------------------------------
+# Post-wizard: Seasonal pricing
+# ---------------------------------------------------------------------------
+
+
+def _parse_date_it(date_str, year=2025):
+    """Parse Italian short date like '28-mar' into 'YYYY-MM-DD' string."""
+    mesi = {
+        "gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6,
+        "lug": 7, "ago": 8, "set": 9, "ott": 10, "nov": 11, "dic": 12,
+    }
+    parts = date_str.strip().split("-")
+    day = int(parts[0])
+    month = mesi.get(parts[1].lower(), 1)
+    return f"{year}-{month:02d}-{day:02d}"
+
+
+def add_seasonal_prices(page):
+    """Navigate to the property dashboard and add seasonal prices.
+
+    This runs AFTER the wizard completes and the property exists.
+    It goes to the property's 'Tariffe e disponibilità' tab and
+    adds each consolidated seasonal price period.
+    """
+    seasons = consolidate_seasonal_prices()
+    if not seasons:
+        print("\nNessun listino prezzi nel JSON — skip tariffe stagionali")
+        return
+
+    print(f"\n{'='*60}")
+    print(f"TARIFFE STAGIONALI: {len(seasons)} stagioni da inserire")
+    print("=" * 60)
+    for s in seasons:
+        print(f"  {s['da']} → {s['a']}: €{s['prezzo_notte']}/notte (min {s['notti_min']} notti)")
+
+    # Navigate to the property list to find the newly created property
+    print("\nNavigazione alla lista proprietà...")
+    page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(3000)
+    step_done(page, "lista_proprietà")
+
+    # Find and click the property name to go to its dashboard
+    nome = PROP["identificativi"]["nome_struttura"]
+    print(f"Cerco proprietà '{nome}'...")
+
+    found = False
+    # Strategy 1: click exact property name link
+    try:
+        link = page.get_by_text(nome, exact=False)
+        if link.count() > 0:
+            link.first.click()
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(2000)
+            found = True
+            print(f"  Proprietà trovata e aperta: {nome}")
+    except Exception as e:
+        print(f"  [WARN] Click nome proprietà fallito: {e}")
+
+    # Strategy 2: click the first property card/link (if just created, it should be first)
+    if not found:
+        try:
+            prop_link = page.locator("a[href*='/listing/properties/']").first
+            if prop_link.count() > 0:
+                prop_link.click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                found = True
+                print("  Aperta prima proprietà dalla lista")
+        except Exception as e:
+            print(f"  [WARN] Fallback prima proprietà fallito: {e}")
+
+    if not found:
+        print("  [ERRORE] Proprietà non trovata nella lista — skip tariffe stagionali")
+        step_done(page, "proprietà_non_trovata")
+        return
+
+    step_done(page, "dashboard_proprietà")
+
+    # Navigate to "Tariffe e disponibilità" tab
+    print("Navigazione tab 'Tariffe e disponibilità'...")
+    tab_found = False
+    for tab_text in ["Tariffe e disponibilità", "Tariffe", "Prezzi", "Rates"]:
+        try:
+            tab = page.get_by_text(tab_text, exact=False)
+            if tab.count() > 0:
+                tab.first.click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                tab_found = True
+                print(f"  Tab '{tab_text}' aperta")
+                break
+        except Exception:
+            continue
+
+    # Strategy 2: click tab via href/data attribute
+    if not tab_found:
+        try:
+            tab_link = page.locator(
+                "a[href*='rate'], a[href*='tariff'], a[href*='price'], "
+                "[data-test*='rate'], [data-test*='tariff']"
+            )
+            if tab_link.count() > 0:
+                tab_link.first.click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                tab_found = True
+                print("  Tab tariffe aperta (CSS fallback)")
+        except Exception as e:
+            print(f"  [WARN] Tab tariffe CSS fallback fallito: {e}")
+
+    if not tab_found:
+        print("  [ERRORE] Tab 'Tariffe e disponibilità' non trovata — skip")
+        step_done(page, "tab_tariffe_non_trovata")
+        return
+
+    step_done(page, "tab_tariffe")
+
+    # Add each seasonal price
+    for i, season in enumerate(seasons):
+        print(f"\nStagione {i+1}/{len(seasons)}: "
+              f"{season['da']} → {season['a']} = €{season['prezzo_notte']}")
+
+        # Click "Aggiungi prezzo stagionale"
+        add_clicked = False
+        for btn_text in ["Aggiungi prezzo stagionale", "Aggiungi stagione",
+                         "Aggiungi prezzo", "Add seasonal price", "Add season"]:
+            try:
+                btn = page.get_by_text(btn_text, exact=False)
+                if btn.count() > 0:
+                    btn.first.click()
+                    page.wait_for_timeout(2000)
+                    add_clicked = True
+                    print(f"  Cliccato '{btn_text}'")
+                    break
+            except Exception:
+                continue
+
+        if not add_clicked:
+            # Try button/link with "aggiungi" + any price-related text
+            try:
+                btn = page.locator(
+                    "button:has-text('Aggiungi'), a:has-text('Aggiungi')"
+                ).last
+                if btn.count() > 0:
+                    btn.click()
+                    page.wait_for_timeout(2000)
+                    add_clicked = True
+                    print("  Cliccato bottone 'Aggiungi' (fallback)")
+            except Exception:
+                pass
+
+        if not add_clicked:
+            print(f"  [ERRORE] Bottone 'Aggiungi prezzo stagionale' non trovato — skip")
+            continue
+
+        # Fill the seasonal price form
+        # Date fields: "da" and "a" (from/to)
+        da_date = _parse_date_it(season["da"])
+        a_date = _parse_date_it(season["a"])
+
+        # Fill start date
+        fill_field(
+            page, da_date,
+            ["Da", "Dal", "Data inizio", "Inizio", "From", "Start"],
+            ["input[name*='start'], input[name*='from'], input[name*='da']",
+             "input[type='date']:first-of-type"],
+            f"Data inizio stagione {i+1}"
+        )
+
+        # Fill end date
+        fill_field(
+            page, a_date,
+            ["A", "Al", "Data fine", "Fine", "To", "End"],
+            ["input[name*='end'], input[name*='to'], input[name*='a']",
+             "input[type='date']:last-of-type"],
+            f"Data fine stagione {i+1}"
+        )
+
+        # Fill price
+        prezzo_str = str(season["prezzo_notte"])
+        fill_field(
+            page, prezzo_str,
+            ["Prezzo", "Prezzo a notte", "Price", "Nightly rate"],
+            ["input[name*='prezz'], input[name*='price'], input[name*='rate']",
+             "input[type='number']"],
+            f"Prezzo stagione {i+1}"
+        )
+
+        # Fill min stay if available
+        notti_min = str(season.get("notti_min", ""))
+        if notti_min:
+            fill_field(
+                page, notti_min,
+                ["Soggiorno minimo", "Min", "Notti minime", "Minimum stay"],
+                ["input[name*='min'], select[name*='min']"],
+                f"Soggiorno min stagione {i+1}"
+            )
+
+        # Save/confirm the seasonal price
+        saved = False
+        for save_text in ["Salva", "Conferma", "Aggiungi", "Save", "OK", "Ok"]:
+            try:
+                save_btn = page.get_by_role("button", name=save_text)
+                if save_btn.count() > 0:
+                    save_btn.first.click()
+                    page.wait_for_load_state("domcontentloaded")
+                    page.wait_for_timeout(2000)
+                    saved = True
+                    print(f"  Salvata stagione {i+1} ('{save_text}')")
+                    break
+            except Exception:
+                continue
+
+        if not saved:
+            # Try data-test save button
+            try:
+                save_btn = page.locator('[data-test="save-button"]')
+                if save_btn.count() > 0:
+                    save_btn.first.click()
+                    page.wait_for_load_state("domcontentloaded")
+                    page.wait_for_timeout(2000)
+                    saved = True
+                    print(f"  Salvata stagione {i+1} (data-test save)")
+            except Exception:
+                pass
+
+        if not saved:
+            print(f"  [WARN] Salvataggio stagione {i+1} non confermato")
+
+        step_done(page, f"stagione_{i+1}")
+
+    print(f"\nTariffe stagionali completate: {len(seasons)} stagioni processate")
+    step_done(page, "tariffe_stagionali_completate")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1274,6 +1562,17 @@ def main():
             login(page)
             navigate_to_add_property(page)
             insert_property(page)
+
+            # Post-wizard: add seasonal prices if listino_prezzi exists
+            if PROP.get("condizioni", {}).get("listino_prezzi"):
+                print("\n" + "=" * 60)
+                print("WIZARD COMPLETATO — Avvio inserimento tariffe stagionali")
+                print("=" * 60)
+                try:
+                    add_seasonal_prices(page)
+                except Exception as e:
+                    print(f"\n[ERRORE] Tariffe stagionali fallite: {e}")
+                    step_errors.append(("tariffe_stagionali", str(e)))
         finally:
             try:
                 screenshot(page, "final_state")
