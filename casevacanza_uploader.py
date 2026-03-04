@@ -127,33 +127,27 @@ def step_done(page, name):
 
 
 def dismiss_overlay(page):
-    """Close any modal/overlay: Escape, ReactModal portals, Ok button."""
+    """Close any modal/overlay: Escape, button clicks, then JS DOM removal."""
     # 1) Press Escape
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
 
-    # 2) Close react-modal-portal-v2 and ReactModal overlays
+    # 2) Try close buttons inside known modal containers
     for selector in [".react-modal-portal-v2", ".ReactModal__Overlay",
                      "[class*='modal-portal']", "[class*='ReactModal']"]:
         try:
             modal = page.locator(selector)
             if modal.count() > 0 and modal.first.is_visible():
-                # Try close button inside modal
                 close_btn = modal.locator("button").first
                 if close_btn.count() > 0:
                     close_btn.click()
                     page.wait_for_timeout(500)
                     print(f"  Modal chiuso ({selector} -> button)")
                     return
-                # Try clicking outside (top-left corner of overlay)
-                modal.click(position={"x": 5, "y": 5})
-                page.wait_for_timeout(500)
-                print(f"  Modal chiuso ({selector} -> click outside)")
-                return
         except Exception:
             pass
 
-    # 3) Ok button fallback
+    # 3) Ok button
     try:
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
@@ -161,6 +155,27 @@ def dismiss_overlay(page):
             page.wait_for_timeout(500)
     except Exception:
         pass
+
+    # 4) Nuclear option: remove blocking overlays from DOM via JS
+    removed = page.evaluate("""() => {
+        let count = 0;
+        const selectors = [
+            '.react-modal-portal-v2',
+            '.ReactModal__Overlay',
+            '[class*="modal-portal"]',
+            '[class*="ReactModal"]',
+        ];
+        for (const sel of selectors) {
+            document.querySelectorAll(sel).forEach(el => {
+                el.remove();
+                count++;
+            });
+        }
+        return count;
+    }""")
+    if removed:
+        print(f"  Rimossi {removed} overlay dal DOM via JS")
+        page.wait_for_timeout(500)
 
 
 def try_step(page, step_name, func):
