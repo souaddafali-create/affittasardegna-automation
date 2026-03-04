@@ -703,30 +703,123 @@ def insert_property(page):
           f"{comp['camere']} cam, {comp['bagni']} bagni)")
 
     def do_step8():
-        # Guest count — [data-test="guest-count"] works, default is 1
-        for _ in range(comp["max_ospiti"] - 1):
-            page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
+        # DEBUG: dump DOM BEFORE any interaction to understand counter structure
+        save_html(page, "step8_BEFORE_clicks")
+        screenshot(page, "step8_BEFORE_clicks")
+        counter_debug = page.evaluate("""() => {
+            const results = [];
+            const seen = new Set();
+            const allButtons = document.querySelectorAll('button');
+            for (const btn of allButtons) {
+                const parent = btn.parentElement;
+                if (!parent) continue;
+                const key = parent.outerHTML.substring(0, 100);
+                if (seen.has(key)) continue;
+                const siblings = parent.querySelectorAll('button');
+                if (siblings.length >= 2) {
+                    seen.add(key);
+                    const container = parent;
+                    let labelText = '';
+                    let searchEl = container;
+                    for (let i = 0; i < 5; i++) {
+                        searchEl = searchEl.parentElement;
+                        if (!searchEl) break;
+                        const texts = searchEl.querySelectorAll('span, div, label, p, h3, h4');
+                        for (const t of texts) {
+                            const txt = t.textContent.trim();
+                            if (txt.length > 1 && txt.length < 40
+                                && !txt.includes('+') && !txt.includes('-')
+                                && !/^\\d+$/.test(txt)) {
+                                labelText = txt;
+                                break;
+                            }
+                        }
+                        if (labelText) break;
+                    }
+                    results.push({
+                        label: labelText,
+                        buttonCount: siblings.length,
+                        buttonTexts: Array.from(siblings).map(b => b.textContent.trim()),
+                        containerHTML: container.outerHTML.substring(0, 500),
+                        containerTag: container.tagName,
+                        containerClasses: (container.className || '').toString(),
+                        dataTest: container.getAttribute('data-test') || '',
+                        parentDataTest: (container.parentElement?.getAttribute('data-test')) || '',
+                    });
+                }
+            }
+            const dataTestCounters = [];
+            document.querySelectorAll('[data-test*="counter"], [data-test*="count"]').forEach(el => {
+                dataTestCounters.push({
+                    dataTest: el.getAttribute('data-test'),
+                    tag: el.tagName,
+                    text: el.textContent.trim().substring(0, 100),
+                    outerHTML: el.outerHTML.substring(0, 300),
+                });
+            });
+            return { buttonPairContainers: results, dataTestElements: dataTestCounters };
+        }""")
+        import json as _json
+        debug_path = f"{SCREENSHOT_DIR}/step8_counter_debug.json"
+        with open(debug_path, "w") as _f:
+            _json.dump(counter_debug, _f, indent=2, ensure_ascii=False)
+        print(f"  DEBUG: counter structure -> {debug_path}")
+        print(f"  DEBUG: {len(counter_debug.get('buttonPairContainers', []))} button-pair containers")
+        print(f"  DEBUG: {len(counter_debug.get('dataTestElements', []))} data-test counter elements")
+        for c in counter_debug.get('buttonPairContainers', []):
+            print(f"    Label: '{c['label']}' buttons: {c['buttonTexts']} "
+                  f"dataTest: '{c['dataTest']}' parentDT: '{c['parentDataTest']}'")
+
+        # --- POSITIONAL APPROACH ---
+        # All counters on this page use [data-test="counter-add-btn"] for +
+        # Order: 0=Ospiti, 1=Camera da letto, 2=Bagno, 3=Cucina, 4=Soggiorno
+        all_add_btns = page.locator('[data-test="counter-add-btn"]')
+        total_btns = all_add_btns.count()
+        print(f"  DEBUG: {total_btns} bottoni [data-test='counter-add-btn'] trovati")
+
+        if total_btns >= 4:
+            # Positional approach — reliable, no label matching needed
+            # Index 0: Ospiti — default is 1, click (max_ospiti - 1) times
+            for _ in range(comp["max_ospiti"] - 1):
+                all_add_btns.nth(0).click()
+                page.wait_for_timeout(300)
+            print(f"  Ospiti: {comp['max_ospiti']}")
+
+            # Index 1: Camera da letto — default is 1, click (camere - 1) times
+            bedroom_extra = comp["camere"] - 1
+            for _ in range(bedroom_extra):
+                all_add_btns.nth(1).click()
+                page.wait_for_timeout(300)
+            print(f"  Camere: {comp['camere']}")
+
+            # Index 2: Bagno — default is 0, click bagni times
+            for _ in range(comp["bagni"]):
+                all_add_btns.nth(2).click()
+                page.wait_for_timeout(300)
+            print(f"  Bagni: {comp['bagni']}")
+
+            # Index 3: Cucina — default is 0, click 1 time
+            all_add_btns.nth(3).click()
             page.wait_for_timeout(300)
-        print(f"  Ospiti: {comp['max_ospiti']}")
+            print("  Cucina: 1")
 
-        # Room counters — these do NOT have data-test attributes!
-        # Use click_room_counter() which finds buttons by label text via JS
+        else:
+            # Fallback: use guest-count data-test for ospiti,
+            # then try label-based for the rest
+            print(f"  [WARN] Solo {total_btns} counter-add-btn trovati, uso fallback")
 
-        # Bedrooms — default is 1, need (camere - 1) clicks
-        bedroom_target = comp["camere"] - 1
-        if bedroom_target > 0:
-            click_room_counter(page, "Camera da letto", bedroom_target)
-            print(f"  Camere target: {comp['camere']}")
+            # Ospiti via data-test (always works)
+            for _ in range(comp["max_ospiti"] - 1):
+                page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]').click()
+                page.wait_for_timeout(300)
+            print(f"  Ospiti: {comp['max_ospiti']}")
 
-        # Bathrooms — default is 0
-        bath_target = comp["bagni"]
-        if bath_target > 0:
-            click_room_counter(page, "Bagno", bath_target)
-            print(f"  Bagni target: {comp['bagni']}")
-
-        # Kitchen — default is 0, every property has at least 1 kitchen
-        click_room_counter(page, "Cucina", 1)
-        print("  Cucina: 1")
+            # Try label-based for the rest
+            bedroom_target = comp["camere"] - 1
+            if bedroom_target > 0:
+                click_room_counter(page, "Camera da letto", bedroom_target)
+            click_room_counter(page, "Bagno", comp["bagni"])
+            click_room_counter(page, "Cucina", 1)
 
         step_done(page, "ospiti_camere")
 
