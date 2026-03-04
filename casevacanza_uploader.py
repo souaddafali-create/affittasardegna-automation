@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import tempfile
+import urllib.request
 
 from playwright.sync_api import sync_playwright
 
@@ -192,20 +194,33 @@ def try_step(page, step_name, func):
 
 def load_photo_paths():
     """Load photo paths from JSON (marketing.foto).
-    If no valid photos found, return empty list (NO placeholder download)."""
+    If no valid photos, download 5 placeholders (1024x768)."""
     foto_json = PROP.get("marketing", {}).get("foto", [])
-    if not foto_json:
-        print("  Nessuna foto nel JSON — skip upload foto")
-        return []
-    json_dir = os.path.dirname(os.path.abspath(DATA_FILE))
+    if foto_json:
+        json_dir = os.path.dirname(os.path.abspath(DATA_FILE))
+        paths = []
+        for f in foto_json:
+            p = f if os.path.isabs(f) else os.path.join(json_dir, f)
+            if os.path.isfile(p):
+                paths.append(p)
+                print(f"  Foto dal JSON: {p}")
+            else:
+                print(f"  [WARN] Foto non trovata: {p}")
+        if paths:
+            return paths
+        print("  Nessuna foto valida nel JSON — scarico placeholder")
+
+    # Fallback: download 5 placeholder photos (min 768px width required by site)
+    print("  Download 5 foto placeholder (1024x768)...")
     paths = []
-    for f in foto_json:
-        p = f if os.path.isabs(f) else os.path.join(json_dir, f)
-        if os.path.isfile(p):
-            paths.append(p)
-            print(f"  Foto dal JSON: {p}")
-        else:
-            print(f"  [WARN] Foto non trovata: {p}")
+    tmp_dir = tempfile.mkdtemp()
+    for i in range(5):
+        path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
+        urllib.request.urlretrieve(
+            f"https://picsum.photos/1024/768?random={i+1}", path
+        )
+        paths.append(path)
+        print(f"  Foto placeholder scaricata: {path}")
     return paths
 
 
