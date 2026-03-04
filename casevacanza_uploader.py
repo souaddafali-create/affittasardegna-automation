@@ -770,36 +770,40 @@ def insert_property(page):
             print(f"    Label: '{c['label']}' buttons: {c['buttonTexts']} "
                   f"dataTest: '{c['dataTest']}' parentDT: '{c['parentDataTest']}'")
 
-        # --- POSITIONAL APPROACH ---
-        # All counters on this page use [data-test="counter-add-btn"] for +
+        # --- STABLE TAGGING APPROACH ---
+        # Playwright locators are lazy (re-query on each use). Clicking ospiti "+"
+        # can add new buttons to the DOM, shifting nth() indices.
+        # Fix: tag each button with a static data-auto-idx BEFORE any clicks.
         # Order: 0=Ospiti, 1=Camera da letto, 2=Bagno, 3=Cucina, 4=Soggiorno
-        all_add_btns = page.locator('[data-test="counter-add-btn"]')
-        total_btns = all_add_btns.count()
-        print(f"  DEBUG: {total_btns} bottoni [data-test='counter-add-btn'] trovati")
+        page.evaluate("""() => {
+            const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+            btns.forEach((btn, i) => btn.setAttribute('data-auto-idx', String(i)));
+        }""")
+        total_btns = page.locator('[data-auto-idx]').count()
+        print(f"  DEBUG: {total_btns} bottoni taggati con data-auto-idx")
 
         if total_btns >= 4:
-            # Positional approach — reliable, no label matching needed
             # Index 0: Ospiti — default is 1, click (max_ospiti - 1) times
             for _ in range(comp["max_ospiti"] - 1):
-                all_add_btns.nth(0).click()
+                page.locator('[data-auto-idx="0"]').click()
                 page.wait_for_timeout(300)
             print(f"  Ospiti: {comp['max_ospiti']}")
 
             # Index 1: Camera da letto — default is 1, click (camere - 1) times
             bedroom_extra = comp["camere"] - 1
             for _ in range(bedroom_extra):
-                all_add_btns.nth(1).click()
+                page.locator('[data-auto-idx="1"]').click()
                 page.wait_for_timeout(300)
             print(f"  Camere: {comp['camere']}")
 
             # Index 2: Bagno — default is 0, click bagni times
             for _ in range(comp["bagni"]):
-                all_add_btns.nth(2).click()
+                page.locator('[data-auto-idx="2"]').click()
                 page.wait_for_timeout(300)
             print(f"  Bagni: {comp['bagni']}")
 
             # Index 3: Cucina — default is 0, click 1 time
-            all_add_btns.nth(3).click()
+            page.locator('[data-auto-idx="3"]').click()
             page.wait_for_timeout(300)
             print("  Cucina: 1")
 
