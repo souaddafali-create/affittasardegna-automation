@@ -9,6 +9,10 @@ on:
       - 'casevacanza_uploader.py'
       - 'Villa_La_Vela_DATI.json'
 
+concurrency:
+  group: casevacanza-villa-la-vela
+  cancel-in-progress: true
+
 jobs:
   upload:
     runs-on: ubuntu-latest

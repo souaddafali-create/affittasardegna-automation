@@ -9,6 +9,10 @@ on:
       - 'casevacanza_uploader.py'
       - 'Il_Faro_Badesi_DATI.json'
 
+concurrency:
+  group: casevacanza-il-faro
+  cancel-in-progress: true
+
 jobs:
   upload:
     runs-on: ubuntu-latest
