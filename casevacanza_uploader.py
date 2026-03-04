@@ -425,6 +425,61 @@ def fill_field(page, value, labels, css_selectors, field_name):
     return filled
 
 
+def click_room_counter(page, label_text, clicks):
+    """Click the + button N times for a counter row identified by label text.
+
+    Room/bed counters on CaseVacanza do NOT have data-test attributes.
+    This function uses JS to find the row by label text, walk up the DOM
+    to find the container with [-] and [+] buttons, and click + N times.
+    """
+    if clicks <= 0:
+        return True
+
+    result = page.evaluate("""({label, n}) => {
+        // Strategy: find elements containing the label text,
+        // then walk up to find a container with at least 2 buttons (- and +)
+        const allElements = document.querySelectorAll('div, span, label, p, h3, h4');
+        for (const el of allElements) {
+            const text = el.textContent.trim();
+            if (!text.includes(label)) continue;
+
+            // Skip if this element contains too much text (it's a parent container)
+            if (text.length > label.length * 3) continue;
+
+            // Walk up the DOM to find a container with buttons
+            let container = el;
+            for (let i = 0; i < 6; i++) {
+                const buttons = container.querySelectorAll('button');
+                if (buttons.length >= 2) {
+                    // Found container with - and + buttons
+                    // The + button is the last one in the row
+                    const addBtn = buttons[buttons.length - 1];
+                    for (let j = 0; j < n; j++) {
+                        addBtn.click();
+                    }
+                    return {
+                        found: true,
+                        label: label,
+                        btnText: addBtn.textContent.trim(),
+                        clicks: n
+                    };
+                }
+                if (!container.parentElement) break;
+                container = container.parentElement;
+            }
+        }
+        return {found: false, label: label};
+    }""", {"label": label_text, "n": clicks})
+
+    if result.get("found"):
+        page.wait_for_timeout(500)
+        print(f"  {label_text}: +{clicks} (JS row-based, btn='{result.get('btnText', '?')}')")
+        return True
+    else:
+        print(f"  [WARN] {label_text}: bottone + non trovato sulla pagina")
+        return False
+
+
 
 # ---------------------------------------------------------------------------
 # Login and navigation
@@ -652,57 +707,20 @@ def insert_property(page):
             page.wait_for_timeout(300)
         print(f"  Ospiti: {comp['max_ospiti']}")
 
+        # Room counters — these do NOT have data-test attributes!
+        # Use click_room_counter() which finds buttons by label text via JS
+
         # Bedrooms — default is 1, need (camere - 1) clicks
         bedroom_target = comp["camere"] - 1
         if bedroom_target > 0:
-            try:
-                row = page.locator("div", has_text="Camera da letto").filter(
-                    has=page.locator('[data-test="counter-add-btn"]')
-                ).first
-                btn = row.locator('[data-test="counter-add-btn"]')
-                for _ in range(bedroom_target):
-                    btn.click()
-                    page.wait_for_timeout(300)
-                print(f"  Camere: {comp['camere']}")
-            except Exception as e:
-                print(f"  [WARN] Camere click Playwright fallito: {e}, provo JS")
-                page.evaluate("""(n) => {
-                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
-                    for (const btn of btns) {
-                        const row = btn.closest('div[class]')?.closest('div[class]') || btn.parentElement?.parentElement;
-                        if (row && row.textContent.includes('Camera da letto') && !row.textContent.includes('ospiti')) {
-                            for (let i = 0; i < n; i++) btn.click();
-                            return;
-                        }
-                    }
-                }""", bedroom_target)
-                print(f"  Camere: {comp['camere']} (JS fallback)")
+            click_room_counter(page, "Camera da letto", bedroom_target)
+            print(f"  Camere target: {comp['camere']}")
 
         # Bathrooms — default is 0
         bath_target = comp["bagni"]
         if bath_target > 0:
-            try:
-                row = page.locator("div", has_text="Bagno").filter(
-                    has=page.locator('[data-test="counter-add-btn"]')
-                ).first
-                btn = row.locator('[data-test="counter-add-btn"]')
-                for _ in range(bath_target):
-                    btn.click()
-                    page.wait_for_timeout(300)
-                print(f"  Bagni: {comp['bagni']}")
-            except Exception as e:
-                print(f"  [WARN] Bagni click Playwright fallito: {e}, provo JS")
-                page.evaluate("""(n) => {
-                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
-                    for (const btn of btns) {
-                        const row = btn.closest('div[class]')?.closest('div[class]') || btn.parentElement?.parentElement;
-                        if (row && row.textContent.includes('Bagno') && !row.textContent.includes('Camera')) {
-                            for (let i = 0; i < n; i++) btn.click();
-                            return;
-                        }
-                    }
-                }""", bath_target)
-                print(f"  Bagni: {comp['bagni']} (JS fallback)")
+            click_room_counter(page, "Bagno", bath_target)
+            print(f"  Bagni target: {comp['bagni']}")
 
         step_done(page, "ospiti_camere")
 
@@ -730,17 +748,8 @@ def insert_property(page):
                 print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
 
-            try:
-                row = page.locator("div", has_text=label).filter(
-                    has=page.locator('[data-test="counter-add-btn"]')
-                ).first
-                btn = row.locator('[data-test="counter-add-btn"]')
-                for _ in range(qty):
-                    btn.click()
-                    page.wait_for_timeout(300)
-                print(f"  {tipo}: +{qty} (label: {label})")
-            except Exception as e:
-                print(f"  [WARN] Letto {tipo} ({label}) non trovato: {e}")
+            # Bed counters also don't have data-test — use click_room_counter
+            click_room_counter(page, label, qty)
 
         step_done(page, "letti_configurati")
 
