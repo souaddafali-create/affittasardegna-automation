@@ -597,8 +597,46 @@ def login(page):
 
 
 def navigate_to_add_property(page):
-    """Navigate directly to the add-property wizard URL."""
-    print("Navigazione a add-property...")
+    """Navigate to add-property wizard, or resume an incomplete property if one exists."""
+    print("Controllo proprietà incomplete...")
+
+    # First check if there's an incomplete property to resume
+    page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(3000)
+
+    property_name = PROP.get("marketing", {}).get("titolo", "")
+    # Look for "Da completare" / "Completa e pubblica" button for this property
+    try:
+        # Find property cards with "Da completare" status
+        incomplete_cards = page.locator("text=Da completare")
+        if incomplete_cards.count() > 0:
+            print(f"  Trovate {incomplete_cards.count()} proprietà incomplete")
+
+            # Try to find one matching our property name
+            if property_name:
+                matching = page.locator(f"text={property_name}")
+                if matching.count() > 0:
+                    # Find the "Completa e pubblica" button near this property
+                    # Navigate up to the card container, then find the button
+                    complete_btn = page.get_by_role("link", name="Completa e pubblica")
+                    if complete_btn.count() == 0:
+                        complete_btn = page.get_by_text("Completa e pubblica", exact=False)
+
+                    if complete_btn.count() > 0:
+                        # Click the first matching one
+                        complete_btn.first.click()
+                        page.wait_for_load_state("domcontentloaded")
+                        page.wait_for_timeout(3000)
+                        print(f"  Ripresa proprietà incompleta: {property_name}")
+                        dismiss_overlay(page)
+                        step_done(page, "ripresa_proprietà")
+                        return
+    except Exception as e:
+        print(f"  [WARN] Controllo proprietà incomplete fallito: {e}")
+
+    # No incomplete property found — create new
+    print("Nessuna proprietà incompleta trovata — creo nuova")
     page.goto("https://my.casevacanza.it/listing/add-property", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(1000)
@@ -617,8 +655,18 @@ def navigate_to_add_property(page):
 
 
 def insert_property(page):
-    """Complete the full property insertion wizard."""
+    """Complete the full property insertion wizard.
+    Handles both new properties and resuming incomplete ones."""
     photo_paths = load_photo_paths()
+
+    # Detect if we're resuming (page is NOT on add-property start)
+    current_url = page.url
+    is_resuming = "add-property" not in current_url or "/edit/" in current_url or "/price" in current_url or "/calendar" in current_url
+    if is_resuming:
+        print(f"  Riprendo proprietà da: {current_url}")
+        # Detect current wizard step from URL or page content
+        page_text = page.evaluate("() => document.body?.innerText?.substring(0, 500) || ''")
+        print(f"  Contenuto pagina: {page_text[:200]}...")
 
     # --- Step 1: Click [data-test="single"] (Proprietà a unità singola) ---
     print("Step 1: Proprietà a unità singola")
@@ -636,7 +684,8 @@ def insert_property(page):
         page.wait_for_timeout(1000)
         step_done(page, "tipo_proprietà")
 
-    try_step(page, "step1_unità_singola", do_step1, critical=True)
+    # When resuming, step1 is not critical (we're past it already)
+    try_step(page, "step1_unità_singola", do_step1, critical=not is_resuming)
 
     # --- Step 2: Seleziona tipo struttura dal dropdown ---
     tipo = PROP["identificativi"]["tipo_struttura"]
@@ -1163,19 +1212,36 @@ def insert_property(page):
             prezzo_str = str(base_prezzo)
             filled = False
 
-            # Strategy 1: label "Prezzo per notte" (testo reale sulla pagina)
-            for lbl in ["Prezzo per notte", "Prezzo", "Price per night", "Price"]:
+            # Strategy 0: get_by_placeholder (most reliable — matches visible text)
+            for ph in ["Prezzo per notte", "Prezzo", "notte"]:
                 try:
-                    f = page.get_by_label(lbl)
+                    f = page.get_by_placeholder(ph, exact=False)
                     if f.count() > 0:
+                        f.first.click()
+                        page.wait_for_timeout(300)
                         f.first.fill(prezzo_str)
                         filled = True
-                        print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
+                        print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder '{ph}')")
                         break
                 except Exception:
                     continue
 
-            # Strategy 2: placeholder text
+            # Strategy 1: label "Prezzo per notte"
+            if not filled:
+                for lbl in ["Prezzo per notte", "Prezzo", "Price per night", "Price"]:
+                    try:
+                        f = page.get_by_label(lbl)
+                        if f.count() > 0:
+                            f.first.click()
+                            page.wait_for_timeout(300)
+                            f.first.fill(prezzo_str)
+                            filled = True
+                            print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
+                            break
+                    except Exception:
+                        continue
+
+            # Strategy 2: CSS placeholder attribute
             if not filled:
                 try:
                     f = page.locator(
@@ -1183,9 +1249,11 @@ def insert_property(page):
                         "input[placeholder*='notte']"
                     )
                     if f.count() > 0:
+                        f.first.click()
+                        page.wait_for_timeout(300)
                         f.first.fill(prezzo_str)
                         filled = True
-                        print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder)")
+                        print(f"  Prezzo: {prezzo_str} EUR/notte (CSS placeholder)")
                 except Exception:
                     pass
 
