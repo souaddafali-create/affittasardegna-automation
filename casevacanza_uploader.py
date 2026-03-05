@@ -217,6 +217,9 @@ def try_step(page, step_name, func, critical=False):
 def click_save_and_verify(page, step_name):
     """Click save-button and verify the wizard actually advanced.
     Returns True if advanced, False if stuck on same page."""
+    # Dismiss any modal/overlay that might block the save button
+    dismiss_overlay(page)
+
     url_before = page.url
     heading_before = page.evaluate("""() => {
         const h = document.querySelector('h1, h2, h3, [data-test*="title"], [class*="heading"]');
