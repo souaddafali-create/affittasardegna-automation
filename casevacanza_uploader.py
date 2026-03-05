@@ -177,12 +177,21 @@ def dismiss_overlay(page):
     except Exception:
         pass
 
-    # 4) Hide (NOT remove!) blocking overlays via JS — removing breaks React
+    # 4) Hide blocking overlays via JS — set display:none AND pointerEvents:none
+    #    on the overlay AND its parent portal container
     hidden = page.evaluate("""() => {
         let count = 0;
         document.querySelectorAll(
-            '.react-modal-portal-v2, .ReactModal__Overlay'
+            '.react-modal-portal-v2, .ReactModal__Overlay, .ReactModal__Content'
         ).forEach(el => {
+            el.style.display = 'none';
+            el.style.pointerEvents = 'none';
+            el.style.visibility = 'hidden';
+            el.style.zIndex = '-1';
+            count++;
+        });
+        // Also neutralize any portal container that wraps modals
+        document.querySelectorAll('[class*="modal-portal"], [class*="ModalPortal"]').forEach(el => {
             el.style.display = 'none';
             el.style.pointerEvents = 'none';
             count++;
@@ -190,7 +199,7 @@ def dismiss_overlay(page):
         return count;
     }""")
     if hidden:
-        print(f"  Nascosti {hidden} overlay via JS (display:none)")
+        print(f"  Nascosti {hidden} overlay via JS (display:none + zIndex:-1)")
         page.wait_for_timeout(500)
 
 
@@ -226,7 +235,12 @@ def click_save_and_verify(page, step_name):
         return h ? h.textContent.trim() : '';
     }""")
 
-    page.locator('[data-test="save-button"]').click()
+    try:
+        page.locator('[data-test="save-button"]').click(timeout=10000)
+    except Exception:
+        print(f"  [WARN] Click normale bloccato da overlay — retry con force=True")
+        dismiss_overlay(page)
+        page.locator('[data-test="save-button"]').click(force=True, timeout=10000)
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(1500)
 
