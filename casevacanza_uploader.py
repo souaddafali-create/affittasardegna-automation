@@ -232,8 +232,26 @@ def click_save_and_verify(page, step_name):
         return h ? h.textContent.trim() : '';
     }""")
 
+    # Scroll to bottom to make save button visible
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    page.wait_for_timeout(500)
+
+    # Diagnostic: check if save-button exists in DOM
+    save_exists = page.evaluate("""() => {
+        const btn = document.querySelector('[data-test="save-button"]');
+        if (!btn) return 'not in DOM';
+        const rect = btn.getBoundingClientRect();
+        const style = window.getComputedStyle(btn);
+        return `in DOM, display=${style.display}, visibility=${style.visibility}, `
+             + `opacity=${style.opacity}, rect=${JSON.stringify(rect)}, `
+             + `disabled=${btn.disabled}, text="${btn.textContent.trim()}"`;
+    }""")
+    print(f"  [DIAG] save-button: {save_exists}")
+
     try:
-        page.locator('[data-test="save-button"]').click(timeout=10000)
+        save_btn = page.locator('[data-test="save-button"]')
+        save_btn.scroll_into_view_if_needed(timeout=3000)
+        save_btn.click(timeout=10000)
     except Exception:
         print(f"  [WARN] Click save-button fallito — provo fallback")
         dismiss_overlay(page)
@@ -243,10 +261,11 @@ def click_save_and_verify(page, step_name):
             # Fallback: try "Continua" button (visible at bottom of page)
             print(f"  [WARN] save-button non trovato — provo 'Continua'")
             clicked = False
-            for btn_text in ["Continua", "Avanti", "Salva e continua", "Save"]:
+            for btn_text in ["Continua", "Avanti", "Salva e continua", "Save", "Salva"]:
                 try:
                     btn = page.get_by_role("button", name=btn_text)
-                    if btn.count() > 0 and btn.first.is_visible():
+                    if btn.count() > 0:
+                        btn.first.scroll_into_view_if_needed()
                         btn.first.click()
                         clicked = True
                         print(f"  Click fallback su '{btn_text}'")
@@ -255,14 +274,41 @@ def click_save_and_verify(page, step_name):
                     continue
             if not clicked:
                 # Last resort: JS click on any submit/save button
-                page.evaluate("""() => {
-                    const btn = document.querySelector('[data-test="save-button"]')
-                        || document.querySelector('button[type="submit"]')
-                        || document.querySelector('button.bg-primary-normal-gradient');
-                    if (btn) { btn.click(); return true; }
+                js_clicked = page.evaluate("""() => {
+                    // Try multiple selectors
+                    const selectors = [
+                        '[data-test="save-button"]',
+                        'button[type="submit"]',
+                        'button.bg-primary-normal-gradient',
+                        'button[class*="save"]',
+                        'button[class*="continue"]',
+                        'button[class*="primary"]'
+                    ];
+                    for (const sel of selectors) {
+                        const btn = document.querySelector(sel);
+                        if (btn && btn.offsetParent !== null) {
+                            btn.scrollIntoView();
+                            btn.click();
+                            return sel;
+                        }
+                    }
+                    // Try any visible button with save/continue text
+                    const buttons = document.querySelectorAll('button');
+                    for (const btn of buttons) {
+                        const text = btn.textContent.toLowerCase().trim();
+                        if ((text.includes('continua') || text.includes('salva') || text.includes('avanti'))
+                            && btn.offsetParent !== null) {
+                            btn.scrollIntoView();
+                            btn.click();
+                            return `text:"${btn.textContent.trim()}"`;
+                        }
+                    }
                     return false;
                 }""")
-                print(f"  Click JS fallback su save/submit button")
+                if js_clicked:
+                    print(f"  Click JS fallback: {js_clicked}")
+                else:
+                    print(f"  [WARN] Nessun bottone save/continua trovato!")
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(1500)
 
@@ -1212,13 +1258,36 @@ def insert_property(page):
             prezzo_str = str(base_prezzo)
             filled = False
 
-            # Strategy 0: get_by_placeholder (most reliable — matches visible text)
-            for ph in ["Prezzo per notte", "Prezzo", "notte"]:
+            # Wait for the price page to fully load
+            try:
+                page.get_by_text("Impostiamo il prezzo", exact=False).wait_for(timeout=8000)
+                print("  Pagina prezzo caricata")
+            except Exception:
+                print("  [WARN] Heading 'Impostiamo il prezzo' non trovato, continuo comunque")
+            page.wait_for_timeout(2000)
+
+            # Diagnostic: log all input elements on the page
+            diag = page.evaluate("""() => {
+                const inputs = document.querySelectorAll('input');
+                return Array.from(inputs).map(inp => ({
+                    type: inp.type,
+                    name: inp.name,
+                    placeholder: inp.placeholder,
+                    id: inp.id,
+                    visible: inp.offsetParent !== null,
+                    value: inp.value
+                }));
+            }""")
+            print(f"  [DIAG] Input trovati sulla pagina: {diag}")
+
+            # Strategy 0: get_by_placeholder — try with and without € symbol
+            for ph in ["Prezzo per notte", "€ Prezzo per notte", "Prezzo", "notte"]:
                 try:
                     f = page.get_by_placeholder(ph, exact=False)
                     if f.count() > 0:
+                        f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(500)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder '{ph}')")
@@ -1230,10 +1299,11 @@ def insert_property(page):
             if not filled:
                 for lbl in ["Prezzo per notte", "Prezzo", "Price per night", "Price"]:
                     try:
-                        f = page.get_by_label(lbl)
+                        f = page.get_by_label(lbl, exact=False)
                         if f.count() > 0:
+                            f.first.scroll_into_view_if_needed()
                             f.first.click()
-                            page.wait_for_timeout(300)
+                            page.wait_for_timeout(500)
                             f.first.fill(prezzo_str)
                             filled = True
                             print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
@@ -1241,36 +1311,59 @@ def insert_property(page):
                     except Exception:
                         continue
 
-            # Strategy 2: CSS placeholder attribute
+            # Strategy 2: CSS placeholder attribute (including € prefix)
             if not filled:
                 try:
                     f = page.locator(
                         "input[placeholder*='Prezzo'], input[placeholder*='prezzo'], "
-                        "input[placeholder*='notte']"
+                        "input[placeholder*='notte'], input[placeholder*='€']"
                     )
                     if f.count() > 0:
+                        f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(500)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS placeholder)")
                 except Exception:
                     pass
 
-            # Strategy 3: CSS selectors
+            # Strategy 3: CSS selectors — number input or name containing price
             if not filled:
                 try:
                     f = page.locator(
-                        "input[type='number'], input[name*='prezz'], input[name*='price']"
+                        "input[type='number'], input[name*='prezz'], input[name*='price'], "
+                        "input[name*='rate'], input[name*='tariff']"
                     )
                     if f.count() > 0:
+                        f.first.scroll_into_view_if_needed()
+                        f.first.click()
+                        page.wait_for_timeout(500)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS)")
                 except Exception:
                     pass
 
-            # Strategy 4: JS — find input near "Prezzo" or "notte" text
+            # Strategy 4: find ANY visible text input on this page
+            # On the price page there is typically only one input field
+            if not filled:
+                try:
+                    visible_inputs = page.locator("input:visible").all()
+                    for inp in visible_inputs:
+                        inp_type = inp.get_attribute("type") or "text"
+                        if inp_type in ("text", "number", "tel", ""):
+                            inp.scroll_into_view_if_needed()
+                            inp.click()
+                            page.wait_for_timeout(500)
+                            inp.fill(prezzo_str)
+                            filled = True
+                            print(f"  Prezzo: {prezzo_str} EUR/notte (visible input type={inp_type})")
+                            break
+                except Exception as e:
+                    print(f"  [WARN] Strategy 4 (visible input) fallita: {e}")
+
+            # Strategy 5: JS — find input near "Prezzo" or "notte" text
             if not filled:
                 filled = page.evaluate("""(val) => {
                     const inputs = document.querySelectorAll('input');
@@ -1282,12 +1375,14 @@ def insert_property(page):
                             if (!container) break;
                             const text = container.textContent.toLowerCase();
                             if (text.includes('prezzo') && text.includes('notte')) {
+                                inp.focus();
                                 const nativeSet = Object.getOwnPropertyDescriptor(
                                     window.HTMLInputElement.prototype, 'value'
                                 ).set;
                                 nativeSet.call(inp, val);
                                 inp.dispatchEvent(new Event('input', {bubbles: true}));
                                 inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                inp.dispatchEvent(new Event('blur', {bubbles: true}));
                                 return true;
                             }
                         }
@@ -1297,8 +1392,36 @@ def insert_property(page):
                 if filled:
                     print(f"  Prezzo: {prezzo_str} EUR/notte (JS)")
 
+            # Strategy 6: JS — last resort, any empty visible input
+            if not filled:
+                filled = page.evaluate("""(val) => {
+                    const inputs = document.querySelectorAll('input');
+                    for (const inp of inputs) {
+                        if (inp.offsetParent === null) continue;  // skip hidden
+                        const t = inp.type || 'text';
+                        if (['text','number','tel',''].includes(t) && !inp.value) {
+                            inp.focus();
+                            const nativeSet = Object.getOwnPropertyDescriptor(
+                                window.HTMLInputElement.prototype, 'value'
+                            ).set;
+                            nativeSet.call(inp, val);
+                            inp.dispatchEvent(new Event('input', {bubbles: true}));
+                            inp.dispatchEvent(new Event('change', {bubbles: true}));
+                            inp.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                }""", prezzo_str)
+                if filled:
+                    print(f"  Prezzo: {prezzo_str} EUR/notte (JS any empty input)")
+
             if not filled:
                 print(f"  [WARN] Campo prezzo non trovato — {prezzo_str} EUR/notte")
+            else:
+                # Verify the value actually stuck
+                page.wait_for_timeout(500)
+                screenshot(page, "prezzo_filled")
         else:
             print("  Prezzo non presente nel JSON — lascio vuoto")
 
