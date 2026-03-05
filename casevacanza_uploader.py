@@ -741,72 +741,60 @@ def insert_property(page):
           f"{comp['camere']} cam, {comp['bagni']} bagni)")
 
     def do_step8():
-        # DEBUG: dump DOM BEFORE any interaction to understand counter structure
+        # STEP 1: Screenshot and HTML dump BEFORE any interaction
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
-        counter_debug = page.evaluate("""() => {
+
+        # Scroll page to ensure all elements are rendered
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(1000)
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(500)
+
+        # STEP 2: Dump EVERY visible button with coordinates, classes, attributes
+        all_buttons = page.evaluate("""() => {
             const results = [];
-            const seen = new Set();
-            const allButtons = document.querySelectorAll('button');
-            for (const btn of allButtons) {
-                const parent = btn.parentElement;
-                if (!parent) continue;
-                const key = parent.outerHTML.substring(0, 100);
-                if (seen.has(key)) continue;
-                const siblings = parent.querySelectorAll('button');
-                if (siblings.length >= 2) {
-                    seen.add(key);
-                    const container = parent;
-                    let labelText = '';
-                    let searchEl = container;
-                    for (let i = 0; i < 5; i++) {
-                        searchEl = searchEl.parentElement;
-                        if (!searchEl) break;
-                        const texts = searchEl.querySelectorAll('span, div, label, p, h3, h4');
-                        for (const t of texts) {
-                            const txt = t.textContent.trim();
-                            if (txt.length > 1 && txt.length < 40
-                                && !txt.includes('+') && !txt.includes('-')
-                                && !/^\\d+$/.test(txt)) {
-                                labelText = txt;
-                                break;
-                            }
-                        }
-                        if (labelText) break;
-                    }
-                    results.push({
-                        label: labelText,
-                        buttonCount: siblings.length,
-                        buttonTexts: Array.from(siblings).map(b => b.textContent.trim()),
-                        containerHTML: container.outerHTML.substring(0, 500),
-                        containerTag: container.tagName,
-                        containerClasses: (container.className || '').toString(),
-                        dataTest: container.getAttribute('data-test') || '',
-                        parentDataTest: (container.parentElement?.getAttribute('data-test')) || '',
-                    });
-                }
-            }
-            const dataTestCounters = [];
-            document.querySelectorAll('[data-test*="counter"], [data-test*="count"]').forEach(el => {
-                dataTestCounters.push({
-                    dataTest: el.getAttribute('data-test'),
-                    tag: el.tagName,
-                    text: el.textContent.trim().substring(0, 100),
-                    outerHTML: el.outerHTML.substring(0, 300),
+            document.querySelectorAll('button').forEach((btn, i) => {
+                const rect = btn.getBoundingClientRect();
+                if (rect.width === 0) return;
+                const text = btn.textContent.trim();
+                results.push({
+                    index: i,
+                    text: text.substring(0, 30),
+                    className: btn.className.substring(0, 100),
+                    dataTest: btn.getAttribute('data-test') || '',
+                    ariaLabel: btn.getAttribute('aria-label') || '',
+                    role: btn.getAttribute('role') || '',
+                    type: btn.getAttribute('type') || '',
+                    x: Math.round(rect.x),
+                    y: Math.round(rect.y),
+                    w: Math.round(rect.width),
+                    h: Math.round(rect.height),
+                    parentText: btn.parentElement?.textContent?.trim().substring(0, 60) || '',
+                    grandparentText: btn.parentElement?.parentElement?.textContent?.trim().substring(0, 100) || '',
+                    disabled: btn.disabled
                 });
             });
-            return { buttonPairContainers: results, dataTestElements: dataTestCounters };
+            return results;
         }""")
+
+        print(f"\n  ===== ALL VISIBLE BUTTONS ON STEP 8 ({len(all_buttons)} total) =====")
+        for b in all_buttons:
+            print(f"  BTN[{b['index']}] text='{b['text']}' "
+                  f"data-test='{b['dataTest']}' aria='{b['ariaLabel']}' "
+                  f"pos=({b['x']},{b['y']}) size={b['w']}x{b['h']} "
+                  f"disabled={b['disabled']} "
+                  f"class='{b['className']}'")
+            print(f"    parent='{b['parentText']}'")
+            print(f"    grandparent='{b['grandparentText']}'")
+        print(f"  ===== END BUTTONS =====\n")
+
+        # Save to JSON artifact for detailed analysis
         import json as _json
-        debug_path = f"{SCREENSHOT_DIR}/step8_counter_debug.json"
+        debug_path = f"{SCREENSHOT_DIR}/step8_all_buttons.json"
         with open(debug_path, "w") as _f:
-            _json.dump(counter_debug, _f, indent=2, ensure_ascii=False)
-        print(f"  DEBUG: counter structure -> {debug_path}")
-        print(f"  DEBUG: {len(counter_debug.get('buttonPairContainers', []))} button-pair containers")
-        print(f"  DEBUG: {len(counter_debug.get('dataTestElements', []))} data-test counter elements")
-        for c in counter_debug.get('buttonPairContainers', []):
-            print(f"    Label: '{c['label']}' buttons: {c['buttonTexts']} "
-                  f"dataTest: '{c['dataTest']}' parentDT: '{c['parentDataTest']}'")
+            _json.dump(all_buttons, _f, indent=2, ensure_ascii=False)
+        print(f"  DEBUG: all buttons saved to -> {debug_path}")
 
         # --- OSPITI: use scoped data-test selector (proven to work) ---
         ospiti_btn = page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]')
