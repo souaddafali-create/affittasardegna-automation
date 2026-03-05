@@ -745,50 +745,44 @@ def insert_property(page):
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
 
-        # --- DIAGNOSTIC: find ALL buttons on the page with bounding boxes ---
-        buttons = page.locator('button')
-        total = buttons.count()
-        print(f"\n  ===== ALL BUTTONS ON PAGE: {total} total =====")
-        for i in range(total):
-            btn = buttons.nth(i)
+        # --- TAG all counter "+" buttons with stable data-auto-idx BEFORE any clicks ---
+        # Playwright locators are LAZY: nth(N) re-queries the DOM each time.
+        # Clicking ospiti "+" multiple times can add new DOM elements, shifting indices.
+        # Fix: assign a static attribute to each "+" button NOW, then click by that attribute.
+        total_tagged = page.evaluate("""() => {
+            const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+            btns.forEach((btn, i) => btn.setAttribute('data-auto-idx', String(i)));
+            return btns.length;
+        }""")
+        print(f"\n  Tagged {total_tagged} counter-add-btn with data-auto-idx")
+
+        # Diagnostic: show tagged buttons
+        for i in range(total_tagged):
             try:
-                box = btn.bounding_box()
-                text = btn.inner_text()
-                if box and box['width'] > 0:
-                    print(f"  BTN[{i}] text='{text.strip()[:15]}' "
-                          f"x={int(box['x'])} y={int(box['y'])} "
-                          f"w={int(box['width'])} h={int(box['height'])}")
+                btn = page.locator(f'[data-auto-idx="{i}"]')
+                if btn.count() > 0:
+                    box = btn.bounding_box()
+                    if box:
+                        print(f"  [data-auto-idx={i}] x={int(box['x'])} y={int(box['y'])}")
             except Exception:
                 pass
-        print(f"  ===== END ALL BUTTONS =====\n")
 
-        # --- DIAGNOSTIC: find all "+" buttons specifically ---
-        plus_buttons = page.locator('button:has-text("+")')
-        plus_total = plus_buttons.count()
-        print(f"  ===== PLUS (+) BUTTONS: {plus_total} total =====")
-        for i in range(plus_total):
-            try:
-                box = plus_buttons.nth(i).bounding_box()
-                if box:
-                    print(f"  +[{i}] x={int(box['x'])} y={int(box['y'])} "
-                          f"w={int(box['width'])} h={int(box['height'])}")
-            except Exception:
-                pass
-        print(f"  ===== END PLUS BUTTONS =====\n")
-
-        # --- CLICK OSPITI: use proven scoped selector ---
-        ospiti_btn = page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]')
-        if ospiti_btn.count() > 0:
+        # --- CLICK OSPITI: use data-auto-idx="0" (first counter = Ospiti) ---
+        if total_tagged >= 1:
+            ospiti_btn = page.locator('[data-auto-idx="0"]')
             for _ in range(comp["max_ospiti"] - 1):
                 ospiti_btn.click()
                 page.wait_for_timeout(300)
-            print(f"  Ospiti: {comp['max_ospiti']}")
+            print(f"  Ospiti: {comp['max_ospiti']} (data-auto-idx=0)")
         else:
-            # Fallback: first + button on page
-            for _ in range(comp["max_ospiti"] - 1):
-                plus_buttons.nth(0).click()
-                page.wait_for_timeout(300)
-            print(f"  Ospiti: {comp['max_ospiti']} (fallback via +[0])")
+            # Fallback: scoped selector
+            ospiti_btn = page.locator(
+                '[data-test="guest-count"] [data-test="counter-add-btn"]')
+            if ospiti_btn.count() > 0:
+                for _ in range(comp["max_ospiti"] - 1):
+                    ospiti_btn.click()
+                    page.wait_for_timeout(300)
+                print(f"  Ospiti: {comp['max_ospiti']} (scoped fallback)")
 
         # Bambini ammessi checkbox
         try:
@@ -802,57 +796,44 @@ def insert_property(page):
         # Wait for DOM to settle after ospiti changes
         page.wait_for_timeout(1500)
 
-        # --- RE-SCAN + buttons after ospiti (DOM may have changed) ---
-        plus_buttons = page.locator('button:has-text("+")')
-        plus_total_after = plus_buttons.count()
-        print(f"\n  ===== PLUS (+) BUTTONS AFTER OSPITI: {plus_total_after} total =====")
-        for i in range(plus_total_after):
-            try:
-                box = plus_buttons.nth(i).bounding_box()
-                if box:
-                    print(f"  +[{i}] x={int(box['x'])} y={int(box['y'])} "
-                          f"w={int(box['width'])} h={int(box['height'])}")
-            except Exception:
-                pass
-        print(f"  ===== END PLUS AFTER OSPITI =====\n")
-
-        # --- CLICK ROOM COUNTERS BY INDEX ---
-        # From the screenshot, the + buttons in vertical order are:
-        #   +[0] = Ospiti (already done)
-        #   +[1] = Camera da letto
-        #   +[2] = Soggiorno
-        #   +[3] = Bagno
-        #   +[4] = Cucina
-        # We click by index AFTER the re-scan
+        # --- CLICK ROOM COUNTERS using stable data-auto-idx ---
+        # Index 0: Ospiti (already done)
+        # Index 1: Camera da letto (default 1)
+        # Index 2: Soggiorno (skip)
+        # Index 3: Bagno (default 0)
+        # Index 4: Cucina (default 0)
+        # These indices are FROZEN from before ospiti clicks — won't shift.
 
         # Camera da letto: default=1, need (camere - 1) extra clicks
         bedroom_extra = comp["camere"] - 1
-        if bedroom_extra > 0 and plus_total_after > 1:
+        if bedroom_extra > 0 and total_tagged >= 2:
+            bedroom_btn = page.locator('[data-auto-idx="1"]')
             for _ in range(bedroom_extra):
-                plus_buttons.nth(1).click()
+                bedroom_btn.click()
                 page.wait_for_timeout(400)
-            print(f"  Camera da letto: +{bedroom_extra} via +[1]")
+            print(f"  Camera da letto: +{bedroom_extra} (data-auto-idx=1)")
         else:
-            print(f"  Camera da letto: skip (extra={bedroom_extra}, buttons={plus_total_after})")
+            print(f"  Camera da letto: skip (extra={bedroom_extra}, tagged={total_tagged})")
 
         # Soggiorno: skip (default 0 is fine for most properties)
 
         # Bagno: default=0, need bagni clicks
-        if comp["bagni"] > 0 and plus_total_after > 3:
+        if comp["bagni"] > 0 and total_tagged >= 4:
+            bagno_btn = page.locator('[data-auto-idx="3"]')
             for _ in range(comp["bagni"]):
-                plus_buttons.nth(3).click()
+                bagno_btn.click()
                 page.wait_for_timeout(400)
-            print(f"  Bagno: +{comp['bagni']} via +[3]")
+            print(f"  Bagno: +{comp['bagni']} (data-auto-idx=3)")
         else:
-            print(f"  Bagno: skip (bagni={comp['bagni']}, buttons={plus_total_after})")
+            print(f"  Bagno: skip (bagni={comp['bagni']}, tagged={total_tagged})")
 
         # Cucina: default=0, need 1 click
-        if plus_total_after > 4:
-            plus_buttons.nth(4).click()
+        if total_tagged >= 5:
+            page.locator('[data-auto-idx="4"]').click()
             page.wait_for_timeout(400)
-            print("  Cucina: +1 via +[4]")
+            print("  Cucina: +1 (data-auto-idx=4)")
         else:
-            print(f"  Cucina: skip (buttons={plus_total_after})")
+            print(f"  Cucina: skip (tagged={total_tagged})")
 
         # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
@@ -1193,319 +1174,403 @@ def insert_property(page):
         else:
             print("  Prezzo non presente nel JSON — lascio vuoto")
 
-        step_done(page, "prezzo")
+        # --- COSTI EXTRA: Pulizia, Asciugamani, Biancheria da letto ---
+        # These are "+" buttons on the same page as prezzo.
+        # Clicking opens a form to set the cost amount.
+        cond = PROP["condizioni"]
+        screenshot(page, "prezzo_before_extras")
+
+        # Helper: click a cost-extra button and fill the amount
+        def add_extra_cost(button_label, amount_text):
+            """Click a 'Label +' button on the tariffe page, fill the cost form."""
+            if not amount_text:
+                return
+            # Extract numeric amount from text like "250 EUR a soggiorno obbligatoria"
+            import re as _re
+            match = _re.search(r'(\d+)', str(amount_text))
+            if not match:
+                print(f"  [WARN] Nessun importo numerico in '{amount_text}' per {button_label}")
+                return
+            amount = match.group(1)
+
+            try:
+                # Find the button with label text and "+"
+                btn = page.get_by_text(button_label, exact=False)
+                if btn.count() > 0:
+                    btn.first.click()
+                    page.wait_for_timeout(1500)
+                    print(f"  Cliccato '{button_label}' — apro form costo extra")
+
+                    # Look for the price input that appeared (usually the last visible input)
+                    # Try label-based first
+                    filled = False
+                    for lbl in ["Prezzo", "Costo", "Importo", "Price", "Amount"]:
+                        try:
+                            f = page.get_by_label(lbl)
+                            if f.count() > 0:
+                                f.last.fill(amount)
+                                filled = True
+                                print(f"  {button_label}: €{amount} (label '{lbl}')")
+                                break
+                        except Exception:
+                            continue
+
+                    # Fallback: find input[type=number] or input near the button
+                    if not filled:
+                        try:
+                            inputs = page.locator("input[type='number'], input[inputmode='numeric']")
+                            if inputs.count() > 0:
+                                inputs.last.fill(amount)
+                                filled = True
+                                print(f"  {button_label}: €{amount} (input number)")
+                        except Exception:
+                            pass
+
+                    if not filled:
+                        print(f"  [WARN] Campo importo per '{button_label}' non trovato")
+
+                    # Confirm/save the extra cost if there's a confirm button
+                    for confirm_text in ["Salva", "Conferma", "Aggiungi", "OK", "Ok"]:
+                        try:
+                            confirm = page.get_by_role("button", name=confirm_text)
+                            if confirm.count() > 0 and confirm.last.is_visible():
+                                confirm.last.click()
+                                page.wait_for_timeout(1000)
+                                print(f"  Confermato {button_label} ('{confirm_text}')")
+                                break
+                        except Exception:
+                            continue
+                else:
+                    print(f"  [WARN] Bottone '{button_label}' non trovato sulla pagina")
+            except Exception as e:
+                print(f"  [WARN] Extra cost '{button_label}' fallito: {e}")
+
+        # Add Pulizia
+        add_extra_cost("Pulizia", cond.get("pulizia_finale"))
+
+        # Add Asciugamani
+        add_extra_cost("Asciugamani", cond.get("asciugamani"))
+
+        # Add Biancheria da letto (use lenzuola from JSON)
+        add_extra_cost("Biancheria da letto", cond.get("lenzuola"))
+
+        screenshot(page, "prezzo_after_extras")
+
+        # --- IMPOSTAZIONI PREDEFINITE: click "Modifica" to change defaults ---
+        # Soggiorno minimo, check-in/out are in "Impostazioni predefinite" section
+        try:
+            modifica_btn = page.get_by_text("Modifica", exact=False)
+            if modifica_btn.count() > 0:
+                modifica_btn.first.click()
+                page.wait_for_timeout(2000)
+                print("  Cliccato 'Modifica' impostazioni predefinite")
+                screenshot(page, "impostazioni_predefinite_aperte")
+
+                # Soggiorno minimo
+                sog_bassa = cond.get("soggiorno_minimo_bassa", {})
+                sog_alta = cond.get("soggiorno_minimo_alta", {})
+                notti = str(sog_bassa.get("notti", sog_alta.get("notti", "")))
+                if notti:
+                    fill_field(
+                        page, notti,
+                        ["Soggiorno minimo", "Notti minime", "Minimum stay",
+                         "Lunghezza del soggiorno"],
+                        ["input[name*='soggiorno']", "input[name*='minim']",
+                         "input[name*='stay']", "select[name*='soggiorno']",
+                         "select[name*='min']"],
+                        "Soggiorno minimo"
+                    )
+
+                # Check-in
+                fill_field(
+                    page,
+                    cond.get("check_in", ""),
+                    ["Check-in", "Check in", "Orario arrivo"],
+                    ["input[name*='check_in']", "input[name*='checkin']",
+                     "select[name*='check_in']", "select[name*='checkin']"],
+                    "Check-in"
+                )
+
+                # Check-out
+                fill_field(
+                    page,
+                    cond.get("check_out", ""),
+                    ["Check-out", "Check out", "Orario partenza"],
+                    ["input[name*='check_out']", "input[name*='checkout']",
+                     "select[name*='check_out']", "select[name*='checkout']"],
+                    "Check-out"
+                )
+
+                # Save impostazioni predefinite
+                for save_text in ["Salva", "Conferma", "Save", "OK"]:
+                    try:
+                        save_btn = page.get_by_role("button", name=save_text)
+                        if save_btn.count() > 0 and save_btn.last.is_visible():
+                            save_btn.last.click()
+                            page.wait_for_timeout(2000)
+                            print(f"  Impostazioni predefinite salvate ('{save_text}')")
+                            break
+                    except Exception:
+                        continue
+            else:
+                print("  [INFO] Bottone 'Modifica' non trovato — impostazioni predefinite skip")
+        except Exception as e:
+            print(f"  [WARN] Impostazioni predefinite fallite: {e}")
+
+        step_done(page, "prezzo_e_condizioni")
 
     try_step(page, "step19_prezzo", do_step19)
 
-    # --- Step 20: Continua (prezzo) ---
+    # --- Step 20: Continua (prezzo/tariffe page) ---
     print("Step 20: Continua (prezzo)")
     click_save_and_verify(page, "prezzo")
-
-    # --- Step 21: Cauzione ---
-    print("Step 21: Cauzione")
-
-    def do_step21():
-        cauzione_val = PROP.get("condizioni", {}).get("cauzione_euro")
-        if cauzione_val is None:
-            print("  Cauzione non presente nel JSON — skip")
-            page.locator('[data-test="save-button"]').click()
-            page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(1000)
-            step_done(page, "dopo_cauzione_skip")
-            return
-        cauzione = str(cauzione_val)
-
-        filled = False
-        # Strategy 1: label Playwright
-        for lbl in ["Cauzione", "Deposito cauzionale", "Deposito", "Deposit"]:
-            try:
-                f = page.get_by_label(lbl)
-                if f.count() > 0:
-                    f.first.fill(cauzione)
-                    filled = True
-                    print(f"  Cauzione: {cauzione} EUR (label '{lbl}')")
-                    break
-            except Exception:
-                continue
-
-        # Strategy 2: CSS selectors
-        if not filled:
-            for sel in [
-                "input[name*='cauzione']", "input[name*='deposit']",
-                "select[name*='cauzione']", "select[name*='deposit']",
-            ]:
-                try:
-                    f = page.locator(sel)
-                    if f.count() > 0:
-                        tag = f.first.evaluate("el => el.tagName")
-                        if tag == "SELECT":
-                            f.first.select_option(value=cauzione)
-                        else:
-                            f.first.fill(cauzione)
-                        filled = True
-                        print(f"  Cauzione: {cauzione} EUR (CSS '{sel}')")
-                        break
-                except Exception:
-                    continue
-
-        # Strategy 3: JS
-        if not filled:
-            filled = page.evaluate("""(val) => {
-                const inputs = document.querySelectorAll('input, select');
-                for (const inp of inputs) {
-                    const container = inp.closest('label') || inp.closest('.form-group')
-                        || inp.closest('[class*="field"]') || inp.parentElement;
-                    const text = (container?.textContent || '').toLowerCase();
-                    if (text.includes('cauzione') || text.includes('deposito')
-                        || text.includes('deposit')) {
-                        if (inp.tagName === 'SELECT') {
-                            for (const opt of inp.options) {
-                                if (opt.value === val || opt.text.includes(val)) {
-                                    inp.value = opt.value;
-                                    inp.dispatchEvent(new Event('change', {bubbles: true}));
-                                    return true;
-                                }
-                            }
-                        } else {
-                            inp.value = val;
-                            inp.dispatchEvent(new Event('input', {bubbles: true}));
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }""", cauzione)
-            if filled:
-                print(f"  Cauzione: {cauzione} EUR (JS)")
-
-        if not filled:
-            print(f"  [WARN] Campo cauzione non trovato — {cauzione} EUR da inserire manualmente")
-
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
-        step_done(page, "dopo_cauzione")
-
-    try_step(page, "step21_cauzione", do_step21)
-
-    # --- Step 22: Pulizie, biancheria, soggiorno minimo ---
-    print("Step 22: Condizioni — pulizie, biancheria, soggiorno minimo")
-
-    def do_step22():
-        cond = PROP["condizioni"]
-
-        # Pulizia finale
-        fill_field(
-            page,
-            cond.get("pulizia_finale", ""),
-            ["Pulizia finale", "Pulizie", "Cleaning", "Pulizia"],
-            ["input[name*='puliz']", "textarea[name*='puliz']",
-             "input[name*='clean']", "textarea[name*='clean']"],
-            "Pulizia finale"
-        )
-
-        # Asciugamani
-        fill_field(
-            page,
-            cond.get("asciugamani", ""),
-            ["Asciugamani", "Towels"],
-            ["input[name*='asciugam']", "textarea[name*='asciugam']"],
-            "Asciugamani"
-        )
-
-        # Lenzuola
-        fill_field(
-            page,
-            cond.get("lenzuola", ""),
-            ["Lenzuola", "Bed linen", "Sheets"],
-            ["input[name*='lenzuol']", "textarea[name*='lenzuol']"],
-            "Lenzuola"
-        )
-
-        # Biancheria (legacy, per retrocompatibilità con Il Faro)
-        fill_field(
-            page,
-            cond.get("biancheria", ""),
-            ["Biancheria", "Linen", "Biancheria da letto"],
-            ["input[name*='bianch']", "textarea[name*='bianch']"],
-            "Biancheria"
-        )
-
-        # Soggiorno minimo — usa il valore più basso tra i periodi
-        sog_bassa = cond.get("soggiorno_minimo_bassa", {})
-        sog_alta = cond.get("soggiorno_minimo_alta", {})
-        notti = str(sog_bassa.get("notti", sog_alta.get("notti", "")))
-        if notti:
-            fill_field(
-                page,
-                notti,
-                ["Soggiorno minimo", "Notti minime", "Minimum stay"],
-                ["input[name*='soggiorno']", "input[name*='minim']",
-                 "input[name*='stay']", "select[name*='soggiorno']"],
-                "Soggiorno minimo"
-            )
-
-        step_done(page, "condizioni_compilate")
-
-    try_step(page, "step22_condizioni", do_step22)
-
-    # --- Step 23: Continua (condizioni) ---
-    print("Step 23: Continua (condizioni)")
-    click_save_and_verify(page, "condizioni")
-
-    # --- Step 24: Regole check-in / check-out ---
-    print("Step 24: Regole — check-in, check-out, regole casa")
-
-    def do_step24():
-        cond = PROP["condizioni"]
-
-        fill_field(
-            page,
-            cond.get("check_in", ""),
-            ["Check-in", "Check in", "Orario arrivo", "Arrivo"],
-            ["input[name*='check_in']", "input[name*='checkin']",
-             "select[name*='check_in']", "select[name*='checkin']"],
-            "Check-in"
-        )
-
-        fill_field(
-            page,
-            cond.get("check_out", ""),
-            ["Check-out", "Check out", "Orario partenza", "Partenza"],
-            ["input[name*='check_out']", "input[name*='checkout']",
-             "select[name*='check_out']", "select[name*='checkout']"],
-            "Check-out"
-        )
-
-        fill_field(
-            page,
-            cond.get("regole_casa", ""),
-            ["Regole", "Regole della casa", "House rules", "Regolamento"],
-            ["textarea[name*='regol']", "textarea[name*='rule']",
-             "textarea[name*='house']"],
-            "Regole casa"
-        )
-
-        step_done(page, "regole_compilate")
-
-    try_step(page, "step24_regole", do_step24)
-
-    # --- Step 25: Continua (regole) ---
-    print("Step 25: Continua (regole)")
-    click_save_and_verify(page, "regole")
 
     # --- Step 26: Calendario (iCal import) ---
     print("Step 26: Calendario")
 
     def do_step26():
+        screenshot(page, "calendario_before")
         ical_url = PROP.get("condizioni", {}).get("ical_url")
         if ical_url:
-            imported = False
-            for btn_text in ["Importa", "Sincronizza", "iCal", "Import", "Sync",
-                             "Importa calendario", "Collega calendario"]:
+            # Step 1: Click radio "Sì, utilizzo altre piattaforme o un calendario personale"
+            radio_clicked = False
+            for radio_text in [
+                "Sì, utilizzo altre piattaforme o un calendario personale",
+                "Sì, utilizzo altre piattaforme",
+                "Sì",
+            ]:
                 try:
-                    btn = page.get_by_text(btn_text)
-                    if btn.count() > 0:
-                        btn.first.click()
-                        page.wait_for_load_state("domcontentloaded")
-                        page.wait_for_timeout(1000)
-                        print(f"  Cliccato '{btn_text}' sulla pagina calendario")
-
-                        url_field = page.locator(
-                            "input[type='url'], input[name*='ical'], input[name*='url'], "
-                            "input[placeholder*='http'], input[placeholder*='ical'], "
-                            "input[placeholder*='URL']"
-                        )
-                        if url_field.count() > 0:
-                            url_field.first.fill(ical_url)
-                            print(f"  iCal URL inserito: {ical_url}")
-                            for confirm_text in ["Importa", "Salva", "Conferma", "OK",
-                                                 "Import", "Save"]:
-                                try:
-                                    confirm = page.get_by_role("button", name=confirm_text)
-                                    if confirm.count() > 0:
-                                        confirm.first.click()
-                                        page.wait_for_load_state("domcontentloaded")
-                                        page.wait_for_timeout(1000)
-                                        print(f"  Confermato import iCal ({confirm_text})")
-                                        imported = True
-                                        break
-                                except Exception:
-                                    continue
-                        if imported:
-                            break
+                    radio = page.get_by_text(radio_text, exact=False)
+                    if radio.count() > 0:
+                        radio.first.click()
+                        page.wait_for_timeout(2000)
+                        radio_clicked = True
+                        print(f"  Radio selezionato: '{radio_text}'")
+                        break
                 except Exception:
                     continue
 
-            if not imported:
-                print(f"  [WARN] iCal URL nel JSON ({ical_url}) ma import non trovato")
-                print("  L'URL iCal dovrà essere inserito manualmente post-creazione")
-        else:
-            print("  Nessun iCal URL nel JSON — skip import calendario")
+            # Fallback: click radio input directly
+            if not radio_clicked:
+                try:
+                    radios = page.locator("input[type='radio']")
+                    if radios.count() > 0:
+                        radios.first.click()
+                        page.wait_for_timeout(2000)
+                        radio_clicked = True
+                        print("  Radio selezionato (primo radio input)")
+                except Exception:
+                    pass
 
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
+            if not radio_clicked:
+                print("  [WARN] Radio 'Sì utilizzo altre piattaforme' non trovato")
+
+            screenshot(page, "calendario_after_radio")
+
+            # Step 2: Find URL input field and paste iCal URL
+            url_filled = False
+            for sel in [
+                "input[type='url']", "input[name*='ical']", "input[name*='url']",
+                "input[placeholder*='http']", "input[placeholder*='ical']",
+                "input[placeholder*='URL']", "input[placeholder*='url']",
+                "input[type='text']",
+            ]:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0:
+                        f.last.fill(ical_url)
+                        url_filled = True
+                        print(f"  iCal URL inserito: {ical_url}")
+                        break
+                except Exception:
+                    continue
+
+            if not url_filled:
+                print(f"  [WARN] Campo URL iCal non trovato — URL: {ical_url}")
+
+            # Step 3: Confirm import
+            if url_filled:
+                for confirm_text in ["Importa", "Sincronizza", "Salva", "Conferma",
+                                     "Aggiungi", "OK", "Import", "Save"]:
+                    try:
+                        confirm = page.get_by_role("button", name=confirm_text)
+                        if confirm.count() > 0 and confirm.first.is_visible():
+                            confirm.first.click()
+                            page.wait_for_timeout(2000)
+                            print(f"  Confermato import iCal ('{confirm_text}')")
+                            break
+                    except Exception:
+                        continue
+        else:
+            # No iCal: select "No, gestisco solo le prenotazioni qui"
+            for no_text in [
+                "No, gestisco solo le prenotazioni qui",
+                "No,",
+            ]:
+                try:
+                    radio = page.get_by_text(no_text, exact=False)
+                    if radio.count() > 0:
+                        radio.first.click()
+                        page.wait_for_timeout(1000)
+                        print(f"  Selezionato: '{no_text}'")
+                        break
+                except Exception:
+                    continue
+
         step_done(page, "dopo_calendario")
 
     try_step(page, "step26_calendario", do_step26)
 
-    # --- Step 27: Requisiti regionali — CIN ---
-    print("Step 27: Requisiti regionali (CIN)")
+    # Advance past calendario page
+    print("Continua (calendario)")
+    click_save_and_verify(page, "calendario")
+
+    # --- Step 27: Requisiti regionali — CIN/CIR ---
+    print("Step 27: Requisiti regionali (CIN/CIR)")
 
     def do_step27():
+        screenshot(page, "requisiti_before")
         cin = PROP.get("identificativi", {}).get("cin")
-        if not cin:
-            print("  CIN non presente nel JSON — skip")
-            page.locator('[data-test="save-button"]').click()
-            page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(1000)
+        cir = PROP.get("identificativi", {}).get("cir")
+
+        if not cin and not cir:
+            print("  CIN e CIR non presenti nel JSON — skip")
             step_done(page, "dopo_requisiti_skip")
             return
 
-        filled = False
-        try:
-            cin_field = page.get_by_label("CIN")
-            if cin_field.count() > 0:
-                cin_field.fill(cin)
-                filled = True
-                print(f"  CIN compilato (label): {cin}")
-        except Exception:
-            pass
-
-        if not filled:
+        # --- CIN ---
+        if cin:
+            filled_cin = False
+            # Strategy 1: placeholder text "CIN"
             try:
-                cin_field = page.locator(
-                    "input[name*='cin'], input[name*='CIN'], "
-                    "input[placeholder*='CIN']"
-                )
+                cin_field = page.locator("input[placeholder*='CIN']")
                 if cin_field.count() > 0:
                     cin_field.first.fill(cin)
-                    filled = True
-                    print(f"  CIN compilato (CSS): {cin}")
+                    filled_cin = True
+                    print(f"  CIN compilato: {cin}")
             except Exception:
                 pass
 
-        if not filled:
-            # Last resort: use get_by_text to find nearby input
+            # Strategy 2: label
+            if not filled_cin:
+                try:
+                    cin_field = page.get_by_label("CIN", exact=False)
+                    if cin_field.count() > 0:
+                        cin_field.first.fill(cin)
+                        filled_cin = True
+                        print(f"  CIN compilato (label): {cin}")
+                except Exception:
+                    pass
+
+            # Strategy 3: JS - find input near "CIN" text (but not "CIR")
+            if not filled_cin:
+                filled_cin = page.evaluate("""(val) => {
+                    const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+                    for (const inp of inputs) {
+                        let container = inp;
+                        for (let i = 0; i < 5; i++) {
+                            container = container.parentElement;
+                            if (!container) break;
+                            const text = container.textContent;
+                            if (text.includes('CIN') && !text.includes('CIR')) {
+                                const nativeSet = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value').set;
+                                nativeSet.call(inp, val);
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }""", cin)
+                if filled_cin:
+                    print(f"  CIN compilato (JS): {cin}")
+
+            # Strategy 4: first text input on page
+            if not filled_cin:
+                try:
+                    text_inputs = page.locator("input[type='text'], input:not([type])")
+                    if text_inputs.count() > 0:
+                        text_inputs.first.fill(cin)
+                        filled_cin = True
+                        print(f"  CIN compilato (primo input): {cin}")
+                except Exception:
+                    pass
+
+            if not filled_cin:
+                print(f"  [WARN] Campo CIN non trovato — {cin}")
+
+        # --- CIR ---
+        if cir:
+            filled_cir = False
+            # Strategy 1: placeholder text "CIR"
             try:
-                text_inputs = page.locator("input[type='text']")
-                if text_inputs.count() > 0:
-                    text_inputs.first.fill(cin)
-                    filled = True
-                    print(f"  CIN compilato (primo input text): {cin}")
+                cir_field = page.locator("input[placeholder*='CIR']")
+                if cir_field.count() > 0:
+                    cir_field.first.fill(cir)
+                    filled_cir = True
+                    print(f"  CIR compilato: {cir}")
             except Exception:
                 pass
 
-        if not filled:
-            print(f"  [WARN] Campo CIN non trovato — {cin}")
+            # Strategy 2: label
+            if not filled_cir:
+                try:
+                    cir_field = page.get_by_label("CIR", exact=False)
+                    if cir_field.count() > 0:
+                        cir_field.first.fill(cir)
+                        filled_cir = True
+                        print(f"  CIR compilato (label): {cir}")
+                except Exception:
+                    pass
 
-        page.locator('[data-test="save-button"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
+            # Strategy 3: JS - find input near "CIR" text
+            if not filled_cir:
+                filled_cir = page.evaluate("""(val) => {
+                    const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+                    for (const inp of inputs) {
+                        let container = inp;
+                        for (let i = 0; i < 5; i++) {
+                            container = container.parentElement;
+                            if (!container) break;
+                            const text = container.textContent;
+                            if (text.includes('CIR') && text.includes('Regionale')) {
+                                const nativeSet = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value').set;
+                                nativeSet.call(inp, val);
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }""", cir)
+                if filled_cir:
+                    print(f"  CIR compilato (JS): {cir}")
+
+            # Strategy 4: second text input on page (first is CIN)
+            if not filled_cir:
+                try:
+                    text_inputs = page.locator("input[type='text'], input:not([type])")
+                    if text_inputs.count() > 1:
+                        text_inputs.nth(1).fill(cir)
+                        filled_cir = True
+                        print(f"  CIR compilato (secondo input): {cir}")
+                except Exception:
+                    pass
+
+            if not filled_cir:
+                print(f"  [WARN] Campo CIR non trovato — {cir}")
+
         step_done(page, "dopo_requisiti")
 
     try_step(page, "step27_requisiti", do_step27)
+
+    # Advance past requisiti page
+    print("Continua (requisiti)")
+    click_save_and_verify(page, "requisiti")
 
     # --- Step 28: Pagina finale — solo screenshot, NON inviare ---
     print("\nStep 28: Pagina finale — SOLO screenshot")
