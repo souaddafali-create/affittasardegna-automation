@@ -177,29 +177,26 @@ def dismiss_overlay(page):
     except Exception:
         pass
 
-    # 4) Hide blocking overlays via JS — set display:none AND pointerEvents:none
-    #    on the overlay AND its parent portal container
+    # 4) Neutralize blocking overlays via JS — ONLY pointer-events:none
+    #    NEVER use display:none because it can hide the save-button too!
     hidden = page.evaluate("""() => {
         let count = 0;
+        // Only target the overlay backdrop, NOT the content or portal
         document.querySelectorAll(
-            '.react-modal-portal-v2, .ReactModal__Overlay, .ReactModal__Content'
+            '.ReactModal__Overlay'
         ).forEach(el => {
-            el.style.display = 'none';
             el.style.pointerEvents = 'none';
-            el.style.visibility = 'hidden';
             el.style.zIndex = '-1';
             count++;
-        });
-        // Also neutralize any portal container that wraps modals
-        document.querySelectorAll('[class*="modal-portal"], [class*="ModalPortal"]').forEach(el => {
-            el.style.display = 'none';
-            el.style.pointerEvents = 'none';
-            count++;
+            // Also neutralize children that might intercept clicks
+            el.querySelectorAll('*').forEach(child => {
+                child.style.pointerEvents = 'none';
+            });
         });
         return count;
     }""")
     if hidden:
-        print(f"  Nascosti {hidden} overlay via JS (display:none + zIndex:-1)")
+        print(f"  Nascosti {hidden} overlay via JS (pointer-events:none + zIndex:-1)")
         page.wait_for_timeout(500)
 
 
@@ -238,9 +235,34 @@ def click_save_and_verify(page, step_name):
     try:
         page.locator('[data-test="save-button"]').click(timeout=10000)
     except Exception:
-        print(f"  [WARN] Click normale bloccato da overlay — retry con force=True")
+        print(f"  [WARN] Click save-button fallito — provo fallback")
         dismiss_overlay(page)
-        page.locator('[data-test="save-button"]').click(force=True, timeout=10000)
+        try:
+            page.locator('[data-test="save-button"]').click(force=True, timeout=5000)
+        except Exception:
+            # Fallback: try "Continua" button (visible at bottom of page)
+            print(f"  [WARN] save-button non trovato — provo 'Continua'")
+            clicked = False
+            for btn_text in ["Continua", "Avanti", "Salva e continua", "Save"]:
+                try:
+                    btn = page.get_by_role("button", name=btn_text)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        btn.first.click()
+                        clicked = True
+                        print(f"  Click fallback su '{btn_text}'")
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                # Last resort: JS click on any submit/save button
+                page.evaluate("""() => {
+                    const btn = document.querySelector('[data-test="save-button"]')
+                        || document.querySelector('button[type="submit"]')
+                        || document.querySelector('button.bg-primary-normal-gradient');
+                    if (btn) { btn.click(); return true; }
+                    return false;
+                }""")
+                print(f"  Click JS fallback su save/submit button")
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(1500)
 
