@@ -745,44 +745,59 @@ def insert_property(page):
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
 
-        # --- TAG all counter "+" buttons with stable data-auto-idx BEFORE any clicks ---
-        # Playwright locators are LAZY: nth(N) re-queries the DOM each time.
-        # Clicking ospiti "+" multiple times can add new DOM elements, shifting indices.
-        # Fix: assign a static attribute to each "+" button NOW, then click by that attribute.
-        total_tagged = page.evaluate("""() => {
-            const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
-            btns.forEach((btn, i) => btn.setAttribute('data-auto-idx', String(i)));
-            return btns.length;
-        }""")
-        print(f"\n  Tagged {total_tagged} counter-add-btn with data-auto-idx")
+        # --- STRATEGY: tag each room's "+" button by finding it near the label text ---
+        # The room counter buttons DON'T have data-test attributes like ospiti does.
+        # We use JS to walk from each label (e.g. "Camera da letto") up the DOM tree
+        # until we find a container with a "+" button, then tag it. After tagging,
+        # Playwright clicks the tagged button (real pointer events → React responds).
 
-        # Diagnostic: show tagged buttons
-        for i in range(total_tagged):
-            try:
-                btn = page.locator(f'[data-auto-idx="{i}"]')
-                if btn.count() > 0:
-                    box = btn.bounding_box()
-                    if box:
-                        print(f"  [data-auto-idx={i}] x={int(box['x'])} y={int(box['y'])}")
-            except Exception:
-                pass
+        # Tag room counter "+" buttons by label proximity
+        room_labels = [
+            ("Camera da letto", "room-bedroom"),
+            ("Soggiorno", "room-living"),
+            ("Bagno", "room-bathroom"),
+            ("Cucina", "room-kitchen"),
+        ]
+        for label_text, tag_id in room_labels:
+            tagged = page.evaluate("""({label, tagId}) => {
+                // Find all text nodes containing the label
+                const walker = document.createTreeWalker(
+                    document.body, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode()) {
+                    const txt = walker.currentNode.textContent.trim();
+                    if (txt === label || txt.startsWith(label)) {
+                        // Walk up from the label to find a container with a "+" button
+                        let container = walker.currentNode.parentElement;
+                        for (let depth = 0; depth < 8; depth++) {
+                            if (!container) break;
+                            const btns = container.querySelectorAll('button');
+                            for (const btn of btns) {
+                                if (btn.textContent.trim() === '+') {
+                                    btn.setAttribute('data-room', tagId);
+                                    return true;
+                                }
+                            }
+                            container = container.parentElement;
+                        }
+                    }
+                }
+                return false;
+            }""", {"label": label_text, "tagId": tag_id})
+            if tagged:
+                print(f"  Tagged '{label_text}' → [data-room={tag_id}]")
+            else:
+                print(f"  [WARN] '{label_text}' + button NOT found for tagging")
 
-        # --- CLICK OSPITI: use data-auto-idx="0" (first counter = Ospiti) ---
-        if total_tagged >= 1:
-            ospiti_btn = page.locator('[data-auto-idx="0"]')
+        # --- CLICK OSPITI: use proven scoped selector ---
+        ospiti_btn = page.locator(
+            '[data-test="guest-count"] [data-test="counter-add-btn"]')
+        if ospiti_btn.count() > 0:
             for _ in range(comp["max_ospiti"] - 1):
                 ospiti_btn.click()
                 page.wait_for_timeout(300)
-            print(f"  Ospiti: {comp['max_ospiti']} (data-auto-idx=0)")
+            print(f"  Ospiti: {comp['max_ospiti']}")
         else:
-            # Fallback: scoped selector
-            ospiti_btn = page.locator(
-                '[data-test="guest-count"] [data-test="counter-add-btn"]')
-            if ospiti_btn.count() > 0:
-                for _ in range(comp["max_ospiti"] - 1):
-                    ospiti_btn.click()
-                    page.wait_for_timeout(300)
-                print(f"  Ospiti: {comp['max_ospiti']} (scoped fallback)")
+            print("  [WARN] Ospiti counter-add-btn not found")
 
         # Bambini ammessi checkbox
         try:
@@ -793,47 +808,53 @@ def insert_property(page):
         except Exception:
             pass
 
+        # Animali domestici ammessi
+        if PROP.get("dotazioni", {}).get("animali_ammessi"):
+            try:
+                animali_cb = page.get_by_text("Animali domestici ammessi", exact=False)
+                if animali_cb.count() > 0:
+                    animali_cb.first.click()
+                    print("  Animali domestici: checked")
+            except Exception:
+                pass
+
         # Wait for DOM to settle after ospiti changes
         page.wait_for_timeout(1500)
 
-        # --- CLICK ROOM COUNTERS using stable data-auto-idx ---
-        # Index 0: Ospiti (already done)
-        # Index 1: Camera da letto (default 1)
-        # Index 2: Soggiorno (skip)
-        # Index 3: Bagno (default 0)
-        # Index 4: Cucina (default 0)
-        # These indices are FROZEN from before ospiti clicks — won't shift.
-
+        # --- CLICK ROOM COUNTERS using tagged buttons ---
         # Camera da letto: default=1, need (camere - 1) extra clicks
         bedroom_extra = comp["camere"] - 1
-        if bedroom_extra > 0 and total_tagged >= 2:
-            bedroom_btn = page.locator('[data-auto-idx="1"]')
-            for _ in range(bedroom_extra):
-                bedroom_btn.click()
-                page.wait_for_timeout(400)
-            print(f"  Camera da letto: +{bedroom_extra} (data-auto-idx=1)")
-        else:
-            print(f"  Camera da letto: skip (extra={bedroom_extra}, tagged={total_tagged})")
+        if bedroom_extra > 0:
+            btn = page.locator('[data-room="room-bedroom"]')
+            if btn.count() > 0:
+                for _ in range(bedroom_extra):
+                    btn.click()
+                    page.wait_for_timeout(400)
+                print(f"  Camera da letto: +{bedroom_extra}")
+            else:
+                print(f"  [WARN] Camera da letto button not found (need +{bedroom_extra})")
 
         # Soggiorno: skip (default 0 is fine for most properties)
 
         # Bagno: default=0, need bagni clicks
-        if comp["bagni"] > 0 and total_tagged >= 4:
-            bagno_btn = page.locator('[data-auto-idx="3"]')
-            for _ in range(comp["bagni"]):
-                bagno_btn.click()
-                page.wait_for_timeout(400)
-            print(f"  Bagno: +{comp['bagni']} (data-auto-idx=3)")
-        else:
-            print(f"  Bagno: skip (bagni={comp['bagni']}, tagged={total_tagged})")
+        if comp["bagni"] > 0:
+            btn = page.locator('[data-room="room-bathroom"]')
+            if btn.count() > 0:
+                for _ in range(comp["bagni"]):
+                    btn.click()
+                    page.wait_for_timeout(400)
+                print(f"  Bagno: +{comp['bagni']}")
+            else:
+                print(f"  [WARN] Bagno button not found (need +{comp['bagni']})")
 
         # Cucina: default=0, need 1 click
-        if total_tagged >= 5:
-            page.locator('[data-auto-idx="4"]').click()
+        btn = page.locator('[data-room="room-kitchen"]')
+        if btn.count() > 0:
+            btn.click()
             page.wait_for_timeout(400)
-            print("  Cucina: +1 (data-auto-idx=4)")
+            print("  Cucina: +1")
         else:
-            print(f"  Cucina: skip (tagged={total_tagged})")
+            print("  [WARN] Cucina button not found")
 
         # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
