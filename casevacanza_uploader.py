@@ -741,62 +741,42 @@ def insert_property(page):
           f"{comp['camere']} cam, {comp['bagni']} bagni)")
 
     def do_step8():
-        # STEP 1: Screenshot and HTML dump BEFORE any interaction
+        # Screenshot BEFORE any interaction
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
 
-        # Scroll page to ensure all elements are rendered
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        page.wait_for_timeout(1000)
-        page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(500)
+        # --- DIAGNOSTIC: find ALL buttons on the page with bounding boxes ---
+        buttons = page.locator('button')
+        total = buttons.count()
+        print(f"\n  ===== ALL BUTTONS ON PAGE: {total} total =====")
+        for i in range(total):
+            btn = buttons.nth(i)
+            try:
+                box = btn.bounding_box()
+                text = btn.inner_text()
+                if box and box['width'] > 0:
+                    print(f"  BTN[{i}] text='{text.strip()[:15]}' "
+                          f"x={int(box['x'])} y={int(box['y'])} "
+                          f"w={int(box['width'])} h={int(box['height'])}")
+            except Exception:
+                pass
+        print(f"  ===== END ALL BUTTONS =====\n")
 
-        # STEP 2: Dump EVERY visible button with coordinates, classes, attributes
-        all_buttons = page.evaluate("""() => {
-            const results = [];
-            document.querySelectorAll('button').forEach((btn, i) => {
-                const rect = btn.getBoundingClientRect();
-                if (rect.width === 0) return;
-                const text = btn.textContent.trim();
-                results.push({
-                    index: i,
-                    text: text.substring(0, 30),
-                    className: btn.className.substring(0, 100),
-                    dataTest: btn.getAttribute('data-test') || '',
-                    ariaLabel: btn.getAttribute('aria-label') || '',
-                    role: btn.getAttribute('role') || '',
-                    type: btn.getAttribute('type') || '',
-                    x: Math.round(rect.x),
-                    y: Math.round(rect.y),
-                    w: Math.round(rect.width),
-                    h: Math.round(rect.height),
-                    parentText: btn.parentElement?.textContent?.trim().substring(0, 60) || '',
-                    grandparentText: btn.parentElement?.parentElement?.textContent?.trim().substring(0, 100) || '',
-                    disabled: btn.disabled
-                });
-            });
-            return results;
-        }""")
+        # --- DIAGNOSTIC: find all "+" buttons specifically ---
+        plus_buttons = page.locator('button:has-text("+")')
+        plus_total = plus_buttons.count()
+        print(f"  ===== PLUS (+) BUTTONS: {plus_total} total =====")
+        for i in range(plus_total):
+            try:
+                box = plus_buttons.nth(i).bounding_box()
+                if box:
+                    print(f"  +[{i}] x={int(box['x'])} y={int(box['y'])} "
+                          f"w={int(box['width'])} h={int(box['height'])}")
+            except Exception:
+                pass
+        print(f"  ===== END PLUS BUTTONS =====\n")
 
-        print(f"\n  ===== ALL VISIBLE BUTTONS ON STEP 8 ({len(all_buttons)} total) =====")
-        for b in all_buttons:
-            print(f"  BTN[{b['index']}] text='{b['text']}' "
-                  f"data-test='{b['dataTest']}' aria='{b['ariaLabel']}' "
-                  f"pos=({b['x']},{b['y']}) size={b['w']}x{b['h']} "
-                  f"disabled={b['disabled']} "
-                  f"class='{b['className']}'")
-            print(f"    parent='{b['parentText']}'")
-            print(f"    grandparent='{b['grandparentText']}'")
-        print(f"  ===== END BUTTONS =====\n")
-
-        # Save to JSON artifact for detailed analysis
-        import json as _json
-        debug_path = f"{SCREENSHOT_DIR}/step8_all_buttons.json"
-        with open(debug_path, "w") as _f:
-            _json.dump(all_buttons, _f, indent=2, ensure_ascii=False)
-        print(f"  DEBUG: all buttons saved to -> {debug_path}")
-
-        # --- OSPITI: use scoped data-test selector (proven to work) ---
+        # --- CLICK OSPITI: use proven scoped selector ---
         ospiti_btn = page.locator('[data-test="guest-count"] [data-test="counter-add-btn"]')
         if ospiti_btn.count() > 0:
             for _ in range(comp["max_ospiti"] - 1):
@@ -804,12 +784,11 @@ def insert_property(page):
                 page.wait_for_timeout(300)
             print(f"  Ospiti: {comp['max_ospiti']}")
         else:
-            # Fallback: first counter-add-btn on page
-            first_add = page.locator('[data-test="counter-add-btn"]').first
+            # Fallback: first + button on page
             for _ in range(comp["max_ospiti"] - 1):
-                first_add.click()
+                plus_buttons.nth(0).click()
                 page.wait_for_timeout(300)
-            print(f"  Ospiti: {comp['max_ospiti']} (fallback)")
+            print(f"  Ospiti: {comp['max_ospiti']} (fallback via +[0])")
 
         # Bambini ammessi checkbox
         try:
@@ -823,17 +802,60 @@ def insert_property(page):
         # Wait for DOM to settle after ospiti changes
         page.wait_for_timeout(1500)
 
-        # --- ROOM COUNTERS: find by label, click with Playwright ---
-        # These counters may NOT have data-test attributes, so we use
-        # label-based search + Playwright click (not JS .click())
-        screenshot(page, "step8_before_rooms")
+        # --- RE-SCAN + buttons after ospiti (DOM may have changed) ---
+        plus_buttons = page.locator('button:has-text("+")')
+        plus_total_after = plus_buttons.count()
+        print(f"\n  ===== PLUS (+) BUTTONS AFTER OSPITI: {plus_total_after} total =====")
+        for i in range(plus_total_after):
+            try:
+                box = plus_buttons.nth(i).bounding_box()
+                if box:
+                    print(f"  +[{i}] x={int(box['x'])} y={int(box['y'])} "
+                          f"w={int(box['width'])} h={int(box['height'])}")
+            except Exception:
+                pass
+        print(f"  ===== END PLUS AFTER OSPITI =====\n")
 
+        # --- CLICK ROOM COUNTERS BY INDEX ---
+        # From the screenshot, the + buttons in vertical order are:
+        #   +[0] = Ospiti (already done)
+        #   +[1] = Camera da letto
+        #   +[2] = Soggiorno
+        #   +[3] = Bagno
+        #   +[4] = Cucina
+        # We click by index AFTER the re-scan
+
+        # Camera da letto: default=1, need (camere - 1) extra clicks
         bedroom_extra = comp["camere"] - 1
-        if bedroom_extra > 0:
-            click_room_counter(page, "Camera da letto", bedroom_extra)
+        if bedroom_extra > 0 and plus_total_after > 1:
+            for _ in range(bedroom_extra):
+                plus_buttons.nth(1).click()
+                page.wait_for_timeout(400)
+            print(f"  Camera da letto: +{bedroom_extra} via +[1]")
+        else:
+            print(f"  Camera da letto: skip (extra={bedroom_extra}, buttons={plus_total_after})")
 
-        click_room_counter(page, "Bagno", comp["bagni"])
-        click_room_counter(page, "Cucina", 1)
+        # Soggiorno: skip (default 0 is fine for most properties)
+
+        # Bagno: default=0, need bagni clicks
+        if comp["bagni"] > 0 and plus_total_after > 3:
+            for _ in range(comp["bagni"]):
+                plus_buttons.nth(3).click()
+                page.wait_for_timeout(400)
+            print(f"  Bagno: +{comp['bagni']} via +[3]")
+        else:
+            print(f"  Bagno: skip (bagni={comp['bagni']}, buttons={plus_total_after})")
+
+        # Cucina: default=0, need 1 click
+        if plus_total_after > 4:
+            plus_buttons.nth(4).click()
+            page.wait_for_timeout(400)
+            print("  Cucina: +1 via +[4]")
+        else:
+            print(f"  Cucina: skip (buttons={plus_total_after})")
+
+        # Take screenshot AFTER all clicks to verify
+        screenshot(page, "step8_AFTER_room_clicks")
 
         step_done(page, "ospiti_camere")
 
