@@ -1232,20 +1232,71 @@ def insert_property(page):
             amount = match.group(1)
 
             try:
-                # Find the button with label text and "+"
-                btn = page.get_by_text(button_label, exact=False)
-                if btn.count() > 0:
-                    btn.first.click()
-                    page.wait_for_timeout(1500)
-                    print(f"  Cliccato '{button_label}' — apro form costo extra")
+                # Find the button with label text — try multiple strategies
+                btn_clicked = False
 
-                    # Look for the price input that appeared (usually the last visible input)
-                    # Try label-based first
-                    filled = False
+                # Strategy A: role=button with name
+                try:
+                    btn = page.get_by_role("button", name=button_label)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        btn.first.click()
+                        btn_clicked = True
+                except Exception:
+                    pass
+
+                # Strategy B: get_by_text
+                if not btn_clicked:
+                    try:
+                        btn = page.get_by_text(button_label, exact=False)
+                        if btn.count() > 0:
+                            btn.first.click()
+                            btn_clicked = True
+                    except Exception:
+                        pass
+
+                # Strategy C: locator with button/a containing text
+                if not btn_clicked:
+                    try:
+                        btn = page.locator(f"button:has-text('{button_label}'), a:has-text('{button_label}'), [role='button']:has-text('{button_label}')")
+                        if btn.count() > 0:
+                            btn.first.click()
+                            btn_clicked = True
+                    except Exception:
+                        pass
+
+                if not btn_clicked:
+                    print(f"  [WARN] Bottone '{button_label}' non trovato sulla pagina")
+                    return
+
+                page.wait_for_timeout(2000)
+                print(f"  Cliccato '{button_label}' — apro form costo extra")
+                screenshot(page, f"extra_cost_{button_label.lower().replace(' ', '_')}")
+
+                # Look for the price input that appeared
+                filled = False
+
+                # Try get_by_placeholder
+                for ph in ["Prezzo", "Costo", "Importo", "EUR", "€", "0"]:
+                    try:
+                        f = page.get_by_placeholder(ph, exact=False)
+                        if f.count() > 0:
+                            f.last.click()
+                            page.wait_for_timeout(300)
+                            f.last.fill(amount)
+                            filled = True
+                            print(f"  {button_label}: €{amount} (placeholder '{ph}')")
+                            break
+                    except Exception:
+                        continue
+
+                # Try label-based
+                if not filled:
                     for lbl in ["Prezzo", "Costo", "Importo", "Price", "Amount"]:
                         try:
                             f = page.get_by_label(lbl)
                             if f.count() > 0:
+                                f.last.click()
+                                page.wait_for_timeout(300)
                                 f.last.fill(amount)
                                 filled = True
                                 print(f"  {button_label}: €{amount} (label '{lbl}')")
@@ -1253,33 +1304,62 @@ def insert_property(page):
                         except Exception:
                             continue
 
-                    # Fallback: find input[type=number] or input near the button
-                    if not filled:
-                        try:
-                            inputs = page.locator("input[type='number'], input[inputmode='numeric']")
-                            if inputs.count() > 0:
-                                inputs.last.fill(amount)
-                                filled = True
-                                print(f"  {button_label}: €{amount} (input number)")
-                        except Exception:
-                            pass
+                # Fallback: find input[type=number] or input[inputmode=numeric]
+                if not filled:
+                    try:
+                        inputs = page.locator("input[type='number'], input[inputmode='numeric'], input[inputmode='decimal']")
+                        if inputs.count() > 0:
+                            inputs.last.click()
+                            page.wait_for_timeout(300)
+                            inputs.last.fill(amount)
+                            filled = True
+                            print(f"  {button_label}: €{amount} (input number)")
+                    except Exception:
+                        pass
 
-                    if not filled:
-                        print(f"  [WARN] Campo importo per '{button_label}' non trovato")
+                # Last fallback: JS — find visible input with € nearby
+                if not filled:
+                    filled = page.evaluate("""(amount) => {
+                        const inputs = document.querySelectorAll('input');
+                        for (const inp of inputs) {
+                            if (inp.offsetParent === null) continue; // skip hidden
+                            const rect = inp.getBoundingClientRect();
+                            if (rect.width === 0 || rect.height === 0) continue;
+                            const container = inp.closest('form') || inp.closest('[class*="modal"]')
+                                || inp.closest('[class*="Modal"]') || inp.parentElement?.parentElement;
+                            if (container) {
+                                const nativeSet = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value').set;
+                                nativeSet.call(inp, amount);
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""", amount)
+                    if filled:
+                        print(f"  {button_label}: €{amount} (JS)")
 
-                    # Confirm/save the extra cost if there's a confirm button
-                    for confirm_text in ["Salva", "Conferma", "Aggiungi", "OK", "Ok"]:
-                        try:
-                            confirm = page.get_by_role("button", name=confirm_text)
-                            if confirm.count() > 0 and confirm.last.is_visible():
-                                confirm.last.click()
-                                page.wait_for_timeout(1000)
-                                print(f"  Confermato {button_label} ('{confirm_text}')")
-                                break
-                        except Exception:
-                            continue
-                else:
-                    print(f"  [WARN] Bottone '{button_label}' non trovato sulla pagina")
+                if not filled:
+                    print(f"  [WARN] Campo importo per '{button_label}' non trovato")
+
+                # Confirm/save the extra cost
+                page.wait_for_timeout(500)
+                for confirm_text in ["Salva", "Conferma", "Aggiungi", "OK", "Ok", "Save"]:
+                    try:
+                        confirm = page.get_by_role("button", name=confirm_text)
+                        if confirm.count() > 0 and confirm.last.is_visible():
+                            confirm.last.click()
+                            page.wait_for_timeout(1500)
+                            print(f"  Confermato {button_label} ('{confirm_text}')")
+                            break
+                    except Exception:
+                        continue
+
+                # Dismiss any overlay that remains after confirming
+                dismiss_overlay(page)
+
             except Exception as e:
                 print(f"  [WARN] Extra cost '{button_label}' fallito: {e}")
 
@@ -1297,63 +1377,138 @@ def insert_property(page):
         # --- IMPOSTAZIONI PREDEFINITE: click "Modifica" to change defaults ---
         # Soggiorno minimo, check-in/out are in "Impostazioni predefinite" section
         try:
-            modifica_btn = page.get_by_text("Modifica", exact=False)
-            if modifica_btn.count() > 0:
-                modifica_btn.first.click()
-                page.wait_for_timeout(2000)
+            # Find "Modifica" link/button near "Impostazioni predefinite"
+            modifica_btn = None
+            for sel in [
+                page.get_by_role("link", name="Modifica"),
+                page.get_by_role("button", name="Modifica"),
+                page.get_by_text("Modifica", exact=False),
+            ]:
+                try:
+                    if sel.count() > 0 and sel.first.is_visible():
+                        modifica_btn = sel.first
+                        break
+                except Exception:
+                    continue
+
+            if modifica_btn:
+                modifica_btn.click()
+                page.wait_for_timeout(3000)
                 print("  Cliccato 'Modifica' impostazioni predefinite")
                 screenshot(page, "impostazioni_predefinite_aperte")
 
-                # Soggiorno minimo
+                # Soggiorno minimo — the modal likely has select/input for min nights
                 sog_bassa = cond.get("soggiorno_minimo_bassa", {})
                 sog_alta = cond.get("soggiorno_minimo_alta", {})
                 notti = str(sog_bassa.get("notti", sog_alta.get("notti", "")))
                 if notti:
-                    fill_field(
+                    # Try fill_field first
+                    filled_sog = fill_field(
                         page, notti,
                         ["Soggiorno minimo", "Notti minime", "Minimum stay",
-                         "Lunghezza del soggiorno"],
+                         "Lunghezza del soggiorno", "Minimo"],
                         ["input[name*='soggiorno']", "input[name*='minim']",
                          "input[name*='stay']", "select[name*='soggiorno']",
-                         "select[name*='min']"],
+                         "select[name*='min']", "input[name*='night']"],
                         "Soggiorno minimo"
                     )
+                    # Fallback: JS in modal context
+                    if not filled_sog:
+                        filled_sog = page.evaluate("""(notti) => {
+                            // Look for inputs/selects inside modal or overlay
+                            const modal = document.querySelector('.ReactModal__Content')
+                                || document.querySelector('[class*="modal"]')
+                                || document.querySelector('[role="dialog"]');
+                            if (!modal) return false;
+                            const fields = modal.querySelectorAll('input, select');
+                            for (const f of fields) {
+                                const container = f.closest('label') || f.parentElement;
+                                const text = (container?.textContent || '').toLowerCase();
+                                if (text.includes('soggiorno') || text.includes('minim') || text.includes('nott')) {
+                                    if (f.tagName === 'SELECT') {
+                                        for (const opt of f.options) {
+                                            if (opt.value === notti || opt.text.includes(notti)) {
+                                                f.value = opt.value;
+                                                f.dispatchEvent(new Event('change', {bubbles: true}));
+                                                return true;
+                                            }
+                                        }
+                                    } else {
+                                        const nativeSet = Object.getOwnPropertyDescriptor(
+                                            window.HTMLInputElement.prototype, 'value').set;
+                                        nativeSet.call(f, notti);
+                                        f.dispatchEvent(new Event('input', {bubbles: true}));
+                                        f.dispatchEvent(new Event('change', {bubbles: true}));
+                                        return true;
+                                    }
+                                }
+                            }
+                            return false;
+                        }""", notti)
+                        if filled_sog:
+                            print(f"  Soggiorno minimo: {notti} (JS modal)")
 
-                # Check-in
-                fill_field(
-                    page,
-                    cond.get("check_in", ""),
-                    ["Check-in", "Check in", "Orario arrivo"],
-                    ["input[name*='check_in']", "input[name*='checkin']",
-                     "select[name*='check_in']", "select[name*='checkin']"],
-                    "Check-in"
-                )
+                # Check-in — extract start hour from "17:00 - 21:00"
+                check_in_raw = cond.get("check_in", "")
+                if check_in_raw:
+                    fill_field(
+                        page, check_in_raw,
+                        ["Check-in", "Check in", "Orario arrivo", "Arrivo"],
+                        ["input[name*='check_in']", "input[name*='checkin']",
+                         "select[name*='check_in']", "select[name*='checkin']",
+                         "select[name*='arrival']"],
+                        "Check-in"
+                    )
 
                 # Check-out
-                fill_field(
-                    page,
-                    cond.get("check_out", ""),
-                    ["Check-out", "Check out", "Orario partenza"],
-                    ["input[name*='check_out']", "input[name*='checkout']",
-                     "select[name*='check_out']", "select[name*='checkout']"],
-                    "Check-out"
-                )
+                check_out_raw = cond.get("check_out", "")
+                if check_out_raw:
+                    fill_field(
+                        page, check_out_raw,
+                        ["Check-out", "Check out", "Orario partenza", "Partenza"],
+                        ["input[name*='check_out']", "input[name*='checkout']",
+                         "select[name*='check_out']", "select[name*='checkout']",
+                         "select[name*='departure']"],
+                        "Check-out"
+                    )
 
-                # Save impostazioni predefinite
-                for save_text in ["Salva", "Conferma", "Save", "OK"]:
+                screenshot(page, "impostazioni_predefinite_compilate")
+
+                # Save impostazioni predefinite — try multiple strategies
+                saved = False
+                for save_text in ["Salva", "Conferma", "Save", "OK", "Applica"]:
                     try:
                         save_btn = page.get_by_role("button", name=save_text)
                         if save_btn.count() > 0 and save_btn.last.is_visible():
                             save_btn.last.click()
                             page.wait_for_timeout(2000)
                             print(f"  Impostazioni predefinite salvate ('{save_text}')")
+                            saved = True
                             break
                     except Exception:
                         continue
+
+                # If save button not found, try submit type button in modal
+                if not saved:
+                    try:
+                        submit = page.locator("[type='submit'], button[form]")
+                        if submit.count() > 0 and submit.last.is_visible():
+                            submit.last.click()
+                            page.wait_for_timeout(2000)
+                            saved = True
+                            print("  Impostazioni predefinite salvate (submit)")
+                    except Exception:
+                        pass
+
+                # Always dismiss overlay after modal interaction
+                dismiss_overlay(page)
+                page.wait_for_timeout(1000)
+
             else:
                 print("  [INFO] Bottone 'Modifica' non trovato — impostazioni predefinite skip")
         except Exception as e:
             print(f"  [WARN] Impostazioni predefinite fallite: {e}")
+            dismiss_overlay(page)
 
         step_done(page, "prezzo_e_condizioni")
 
@@ -1373,9 +1528,14 @@ def insert_property(page):
             # Step 1: Click radio "Sì, utilizzo altre piattaforme o un calendario personale"
             radio_clicked = False
             for radio_text in [
+                "Si, utilizzo altre piattaforme o un calendario personale",
                 "Sì, utilizzo altre piattaforme o un calendario personale",
+                "utilizzo altre piattaforme o un calendario personale",
+                "utilizzo altre piattaforme",
+                "Si, utilizzo altre piattaforme",
                 "Sì, utilizzo altre piattaforme",
                 "Sì",
+                "Si,",
             ]:
                 try:
                     radio = page.get_by_text(radio_text, exact=False)
@@ -1479,38 +1639,79 @@ def insert_property(page):
         # --- CIN ---
         if cin:
             filled_cin = False
-            # Strategy 1: placeholder text "CIN"
-            try:
-                cin_field = page.locator("input[placeholder*='CIN']")
-                if cin_field.count() > 0:
-                    cin_field.first.fill(cin)
-                    filled_cin = True
-                    print(f"  CIN compilato: {cin}")
-            except Exception:
-                pass
+
+            # Strategy 0: get_by_placeholder (most reliable — matches visible placeholder)
+            for ph in ["Inserisci il numero CIN", "CIN", "numero CIN"]:
+                try:
+                    cin_field = page.get_by_placeholder(ph, exact=False)
+                    if cin_field.count() > 0:
+                        cin_field.first.click()
+                        page.wait_for_timeout(300)
+                        cin_field.first.fill(cin)
+                        filled_cin = True
+                        print(f"  CIN compilato: {cin} (placeholder '{ph}')")
+                        break
+                except Exception:
+                    continue
+
+            # Strategy 1: CSS placeholder attribute
+            if not filled_cin:
+                try:
+                    cin_field = page.locator("input[placeholder*='CIN']")
+                    if cin_field.count() > 0:
+                        cin_field.first.click()
+                        page.wait_for_timeout(300)
+                        cin_field.first.fill(cin)
+                        filled_cin = True
+                        print(f"  CIN compilato: {cin} (CSS placeholder)")
+                except Exception:
+                    pass
 
             # Strategy 2: label
             if not filled_cin:
                 try:
                     cin_field = page.get_by_label("CIN", exact=False)
                     if cin_field.count() > 0:
+                        cin_field.first.click()
+                        page.wait_for_timeout(300)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (label): {cin}")
                 except Exception:
                     pass
 
-            # Strategy 3: JS - find input near "CIN" text (but not "CIR")
+            # Strategy 3: JS — find first input inside a section containing "CIN" heading
             if not filled_cin:
                 filled_cin = page.evaluate("""(val) => {
+                    // Find headings/paragraphs mentioning CIN (Nazionale)
+                    const allEls = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,strong,b,span,div');
+                    for (const el of allEls) {
+                        const t = el.textContent || '';
+                        if (t.includes('Nazionale') && t.includes('CIN') && !t.includes('CIR')) {
+                            // Look for the nearest input after this heading
+                            let sibling = el.nextElementSibling;
+                            for (let i = 0; i < 10 && sibling; i++) {
+                                const inp = sibling.querySelector('input') || (sibling.tagName === 'INPUT' ? sibling : null);
+                                if (inp) {
+                                    const nativeSet = Object.getOwnPropertyDescriptor(
+                                        window.HTMLInputElement.prototype, 'value').set;
+                                    nativeSet.call(inp, val);
+                                    inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                    inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return true;
+                                }
+                                sibling = sibling.nextElementSibling;
+                            }
+                        }
+                    }
+                    // Fallback: check parent hierarchy but only 3 levels
                     const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
                     for (const inp of inputs) {
-                        let container = inp;
-                        for (let i = 0; i < 5; i++) {
-                            container = container.parentElement;
+                        let container = inp.parentElement;
+                        for (let i = 0; i < 3; i++) {
                             if (!container) break;
                             const text = container.textContent;
-                            if (text.includes('CIN') && !text.includes('CIR')) {
+                            if (text.includes('CIN') && text.includes('Nazionale')) {
                                 const nativeSet = Object.getOwnPropertyDescriptor(
                                     window.HTMLInputElement.prototype, 'value').set;
                                 nativeSet.call(inp, val);
@@ -1518,6 +1719,7 @@ def insert_property(page):
                                 inp.dispatchEvent(new Event('change', {bubbles: true}));
                                 return true;
                             }
+                            container = container.parentElement;
                         }
                     }
                     return false;
@@ -1530,6 +1732,8 @@ def insert_property(page):
                 try:
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 0:
+                        text_inputs.first.click()
+                        page.wait_for_timeout(300)
                         text_inputs.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (primo input): {cin}")
@@ -1542,35 +1746,74 @@ def insert_property(page):
         # --- CIR ---
         if cir:
             filled_cir = False
-            # Strategy 1: placeholder text "CIR"
-            try:
-                cir_field = page.locator("input[placeholder*='CIR']")
-                if cir_field.count() > 0:
-                    cir_field.first.fill(cir)
-                    filled_cir = True
-                    print(f"  CIR compilato: {cir}")
-            except Exception:
-                pass
+
+            # Strategy 0: get_by_placeholder (most reliable)
+            for ph in ["Inserisci il numero CIR", "CIR", "numero CIR"]:
+                try:
+                    cir_field = page.get_by_placeholder(ph, exact=False)
+                    if cir_field.count() > 0:
+                        cir_field.first.click()
+                        page.wait_for_timeout(300)
+                        cir_field.first.fill(cir)
+                        filled_cir = True
+                        print(f"  CIR compilato: {cir} (placeholder '{ph}')")
+                        break
+                except Exception:
+                    continue
+
+            # Strategy 1: CSS placeholder attribute
+            if not filled_cir:
+                try:
+                    cir_field = page.locator("input[placeholder*='CIR']")
+                    if cir_field.count() > 0:
+                        cir_field.first.click()
+                        page.wait_for_timeout(300)
+                        cir_field.first.fill(cir)
+                        filled_cir = True
+                        print(f"  CIR compilato: {cir} (CSS placeholder)")
+                except Exception:
+                    pass
 
             # Strategy 2: label
             if not filled_cir:
                 try:
                     cir_field = page.get_by_label("CIR", exact=False)
                     if cir_field.count() > 0:
+                        cir_field.first.click()
+                        page.wait_for_timeout(300)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (label): {cir}")
                 except Exception:
                     pass
 
-            # Strategy 3: JS - find input near "CIR" text
+            # Strategy 3: JS — find input inside section with "Regionale" and "CIR"
             if not filled_cir:
                 filled_cir = page.evaluate("""(val) => {
+                    const allEls = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,strong,b,span,div');
+                    for (const el of allEls) {
+                        const t = el.textContent || '';
+                        if (t.includes('Regionale') && t.includes('CIR')) {
+                            let sibling = el.nextElementSibling;
+                            for (let i = 0; i < 10 && sibling; i++) {
+                                const inp = sibling.querySelector('input') || (sibling.tagName === 'INPUT' ? sibling : null);
+                                if (inp) {
+                                    const nativeSet = Object.getOwnPropertyDescriptor(
+                                        window.HTMLInputElement.prototype, 'value').set;
+                                    nativeSet.call(inp, val);
+                                    inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                    inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return true;
+                                }
+                                sibling = sibling.nextElementSibling;
+                            }
+                        }
+                    }
+                    // Fallback: parent hierarchy 3 levels
                     const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
                     for (const inp of inputs) {
-                        let container = inp;
-                        for (let i = 0; i < 5; i++) {
-                            container = container.parentElement;
+                        let container = inp.parentElement;
+                        for (let i = 0; i < 3; i++) {
                             if (!container) break;
                             const text = container.textContent;
                             if (text.includes('CIR') && text.includes('Regionale')) {
@@ -1581,6 +1824,7 @@ def insert_property(page):
                                 inp.dispatchEvent(new Event('change', {bubbles: true}));
                                 return true;
                             }
+                            container = container.parentElement;
                         }
                     }
                     return false;
@@ -1593,6 +1837,8 @@ def insert_property(page):
                 try:
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 1:
+                        text_inputs.nth(1).click()
+                        page.wait_for_timeout(300)
                         text_inputs.nth(1).fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (secondo input): {cir}")
