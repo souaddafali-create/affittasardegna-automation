@@ -1,0 +1,43 @@
+name: WhatsApp Bot Test
+
+on:
+  push:
+    paths:
+      - 'whatsapp_bot/**'
+  pull_request:
+    paths:
+      - 'whatsapp_bot/**'
+  workflow_dispatch:
+
+jobs:
+  test-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Validate JSON files
+        run: |
+          python -c "
+          import json
+          for f in ['whatsapp_bot/n8n_workflow.json', 'whatsapp_bot/config.json']:
+              with open(f) as fh:
+                  json.load(fh)
+              print(f'{f}: OK')
+          "
+
+      - name: Validate system prompt exists
+        run: |
+          test -s whatsapp_bot/system_prompt.txt && echo "system_prompt.txt: OK"
+
+      - name: Test bot responses
+        if: env.ANTHROPIC_API_KEY != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python whatsapp_bot/test_bot.py

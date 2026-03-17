@@ -1,0 +1,218 @@
+{
+  "name": "AffittaSardegna WhatsApp Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "33d39489-b64a-42d4-b571-9a0384059a14",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.entry[0].changes[0].value.messages[0].type }}",
+              "value2": "text"
+            }
+          ]
+        }
+      },
+      "id": "is-text-message",
+      "name": "Is Text Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract message data from WhatsApp webhook payload\nconst entry = $input.first().json.body.entry[0];\nconst changes = entry.changes[0].value;\nconst message = changes.messages[0];\nconst contact = changes.contacts[0];\n\nreturn [{\n  json: {\n    sender_phone: message.from,\n    sender_name: contact.profile.name,\n    message_text: message.text.body,\n    message_id: message.id,\n    timestamp: message.timestamp,\n    phone_number_id: changes.metadata.phone_number_id,\n    display_phone: changes.metadata.display_phone_number,\n    wamid: message.id\n  }\n}];"
+      },
+      "id": "extract-message",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1024, system: $env.WHATSAPP_BOT_SYSTEM_PROMPT, messages: [{ role: 'user', content: $json.message_text }] }) }}"
+      },
+      "id": "claude-api",
+      "name": "Claude API - Classify & Respond",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const claudeResponse = $input.first().json;\nconst responseText = claudeResponse.content[0].text;\n\n// Parse structured response from Claude\n// Claude returns JSON with: category, needs_human, response_text, priority\nlet parsed;\ntry {\n  parsed = JSON.parse(responseText);\n} catch (e) {\n  // If Claude didn't return JSON, treat as direct response\n  parsed = {\n    category: 'altro',\n    needs_human: true,\n    response_text: responseText,\n    priority: 'normal'\n  };\n}\n\n// Get original message data from previous node\nconst msgData = $('Extract Message Data').first().json;\n\nreturn [{\n  json: {\n    ...msgData,\n    bot_response: parsed.response_text,\n    category: parsed.category,\n    needs_human: parsed.needs_human,\n    priority: parsed.priority || 'normal',\n    summary: parsed.summary || ''\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Claude Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v21.0/{{ $json.phone_number_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.sender_phone, type: 'text', text: { body: $json.bot_response } }) }}"
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.needs_human }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "needs-human",
+      "name": "Needs Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1500, 350]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.HUMAN_INBOX_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.sender_phone, name: $json.sender_name, category: $json.category, priority: $json.priority, message: $json.message_text, bot_response: $json.bot_response, summary: $json.summary, timestamp: $json.timestamp }) }}"
+      },
+      "id": "notify-human",
+      "name": "Notify Human Inbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1750, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Text Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Text Message?": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Data": {
+      "main": [
+        [
+          {
+            "node": "Claude API - Classify & Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API - Classify & Respond": {
+      "main": [
+        [
+          {
+            "node": "Parse Claude Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Claude Response": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs Human?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Human?": {
+      "main": [
+        [
+          {
+            "node": "Notify Human Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "bot_name": "AffittaSardegna WhatsApp Bot",
+  "version": "1.0.0",
+  "whatsapp": {
+    "phone_number": "3494787272",
+    "note": "Numero principale — NON toccare. Usare inbox web per gestione umana.",
+    "meta_app_id": "126921442533925",
+    "meta_app_name": "AffittaSardegna Messaging Bot"
+  },
+  "n8n": {
+    "instance_url": "https://affittasardegna.app.n8n.cloud",
+    "webhook_path": "/webhook/33d39489-b64a-42d4-b571-9a0384059a14",
+    "webhook_test_path": "/webhook-test/33d39489-b64a-42d4-b571-9a0384059a14"
+  },
+  "claude_api": {
+    "model": "claude-sonnet-4-20250514",
+    "max_tokens": 1024,
+    "note": "System prompt in system_prompt.txt"
+  },
+  "human_handoff": {
+    "operators": ["Souad", "Edoardo"],
+    "inbox_provider": "respond.io OR wati (da configurare)",
+    "note": "Il bot gestisce risposte automatiche. Souad ed Edoardo intervengono via inbox web per prenotazioni, problemi urgenti e trattative."
+  },
+  "env_vars_required": {
+    "n8n_credentials": [
+      "WHATSAPP_ACCESS_TOKEN — Token permanente Meta Graph API",
+      "ANTHROPIC_API_KEY — API key Anthropic per Claude",
+      "WHATSAPP_VERIFY_TOKEN — Token verifica webhook (scelto da te)",
+      "HUMAN_INBOX_WEBHOOK_URL — URL webhook inbox umana (Respond.io/Wati)",
+      "WHATSAPP_BOT_SYSTEM_PROMPT — Contenuto di system_prompt.txt"
+    ]
+  },
+  "properties": [
+    {
+      "name": "Il Faro",
+      "location": "Badesi (SS)",
+      "data_file": "Il_Faro_Badesi_DATI.json"
+    },
+    {
+      "name": "Villa La Vela",
+      "location": "Stintino (SS)",
+      "data_file": "Villa_La_Vela_DATI.json"
+    }
+  ]
+}
