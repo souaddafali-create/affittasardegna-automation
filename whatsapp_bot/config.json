@@ -1,6 +1,6 @@
 {
   "bot_name": "AffittaSardegna WhatsApp Bot",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "company": {
     "name": "AffittaSardegna",
     "since": 2011,
@@ -11,17 +11,21 @@
     "phone_whatsapp": "+39 349 478 7272",
     "website": "https://affittasardegna.it",
     "booking_engine": "https://book.affittasardegna.it",
-    "booking_system": "Kross Booking",
+    "booking_system": "Kross Booking (NO API — link diretto al booking engine)",
     "languages": ["IT", "EN", "DE", "FR", "ES", "PL", "SV", "DA", "NL"]
   },
   "whatsapp": {
-    "phone_number": "3494787272",
-    "note": "Numero principale — NON toccare. Usare WhatsApp Web per gestione umana.",
+    "phone_number": "+393494787272",
+    "provider": "360dialog",
+    "provider_cost": "~8 EUR/mese",
+    "note": "Numero principale — NON toccare. Operatori rispondono via WhatsApp Web.",
     "meta_app_id": "126921442533925",
-    "meta_app_name": "AffittaSardegna Messaging Bot"
+    "meta_app_name": "AffittaSardegna Messaging Bot",
+    "blocker": "Verifica numero WhatsApp Business con Edoardo su Meta Business Manager"
   },
   "n8n": {
     "instance_url": "https://affittasardegna.app.n8n.cloud",
+    "cost": "~20 EUR/mese",
     "webhook_path": "/webhook/33d39489-b64a-42d4-b571-9a0384059a14",
     "webhook_test_path": "/webhook-test/33d39489-b64a-42d4-b571-9a0384059a14"
   },
@@ -31,9 +35,11 @@
     "note": "System prompt in system_prompt.txt"
   },
   "flows": {
-    "flow_1_ospite": "Viaggiatore che cerca casa vacanza → info + push prenotazione diretta",
-    "flow_2_proprietario": "Proprietario nuovo o esistente → raccolta info + notifica team",
-    "flow_3_altro": "Commercialista, fornitore, consulente → risposta cortese + passaggio umano"
+    "flow_1": "Ospite → disponibilità/preventivo → info + link Kross + push prenotazione diretta",
+    "flow_2": "Ospite → problema durante soggiorno → risposta rassicurante + SEMPRE operatore (urgent)",
+    "flow_3": "Proprietario → nuovo (raccolta info) o esistente (contesto) → SEMPRE operatore",
+    "flow_4": "Collaboratore → operativo (manutentori, pulizie) → SEMPRE operatore",
+    "flow_5": "Altro → commercialista, fornitore, consulente → risposta cortese + operatore se specifico"
   },
   "human_handoff": {
     "operators": ["Souad", "Edoardo"],
@@ -42,9 +48,9 @@
   },
   "data_sources": {
     "properties_detail": "JSON individuali (Il_Faro_Badesi_DATI.json, Villa_La_Vela_DATI.json, ecc.)",
-    "all_properties": "Kross Booking API (book.affittasardegna.it) — da configurare",
+    "availability_prices": "Link diretto al booking engine: https://book.affittasardegna.it (NO API Kross)",
     "website": "affittasardegna.it (WordPress + JetEngine)",
-    "note": "Per le proprietà non in JSON, il bot risponde con info generali e passa a operatore per dettagli specifici."
+    "note": "Per le proprietà non in JSON, il bot risponde con info generali + link Kross e passa a operatore per dettagli specifici."
   },
   "locations_served": [
     "Alghero", "Stintino", "Porto Torres", "Castelsardo", "Valledoria", "Badesi",
@@ -56,10 +62,8 @@
   ],
   "env_vars_required": {
     "n8n_credentials": [
-      "WHATSAPP_ACCESS_TOKEN — Token permanente Meta Graph API",
+      "WHATSAPP_API_KEY — API key 360dialog",
       "ANTHROPIC_API_KEY — API key Anthropic per Claude",
-      "WHATSAPP_VERIFY_TOKEN — Token verifica webhook",
-      "WHATSAPP_PHONE_NUMBER_ID — ID numero telefono WhatsApp Business",
       "OPERATOR_PHONES — Numeri operatori per notifiche (comma-separated)"
     ]
   },
