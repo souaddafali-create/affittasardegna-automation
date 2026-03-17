@@ -1,9 +1,22 @@
 {
   "bot_name": "AffittaSardegna WhatsApp Bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "company": {
+    "name": "AffittaSardegna",
+    "since": 2011,
+    "properties_count": "300+",
+    "coverage": "Nord Sardegna — da Alghero a Cala Gonone",
+    "hq": "Porto Torres (SS)",
+    "phone_booking": "+39 079 4125245",
+    "phone_whatsapp": "+39 349 478 7272",
+    "website": "https://affittasardegna.it",
+    "booking_engine": "https://book.affittasardegna.it",
+    "booking_system": "Kross Booking",
+    "languages": ["IT", "EN", "DE", "FR", "ES", "PL", "SV", "DA", "NL"]
+  },
   "whatsapp": {
     "phone_number": "3494787272",
-    "note": "Numero principale — NON toccare. Usare inbox web per gestione umana.",
+    "note": "Numero principale — NON toccare. Usare WhatsApp Web per gestione umana.",
     "meta_app_id": "126921442533925",
     "meta_app_name": "AffittaSardegna Messaging Bot"
   },
@@ -17,21 +30,40 @@
     "max_tokens": 1024,
     "note": "System prompt in system_prompt.txt"
   },
+  "flows": {
+    "flow_1_ospite": "Viaggiatore che cerca casa vacanza → info + push prenotazione diretta",
+    "flow_2_proprietario": "Proprietario nuovo o esistente → raccolta info + notifica team",
+    "flow_3_altro": "Commercialista, fornitore, consulente → risposta cortese + passaggio umano"
+  },
   "human_handoff": {
     "operators": ["Souad", "Edoardo"],
-    "inbox_provider": "respond.io OR wati (da configurare)",
-    "note": "Il bot gestisce risposte automatiche. Souad ed Edoardo intervengono via inbox web per prenotazioni, problemi urgenti e trattative."
+    "method": "WhatsApp Web sullo stesso numero",
+    "note": "Il bot risponde automaticamente per info generali. Souad ed Edoardo intervengono via WhatsApp Web per prenotazioni, problemi urgenti, proprietari e trattative."
   },
+  "data_sources": {
+    "properties_detail": "JSON individuali (Il_Faro_Badesi_DATI.json, Villa_La_Vela_DATI.json, ecc.)",
+    "all_properties": "Kross Booking API (book.affittasardegna.it) — da configurare",
+    "website": "affittasardegna.it (WordPress + JetEngine)",
+    "note": "Per le proprietà non in JSON, il bot risponde con info generali e passa a operatore per dettagli specifici."
+  },
+  "locations_served": [
+    "Alghero", "Stintino", "Porto Torres", "Castelsardo", "Valledoria", "Badesi",
+    "Isola Rossa", "Santa Teresa Gallura", "Palau", "La Maddalena",
+    "Arzachena", "Porto Cervo", "Cannigione", "Baja Sardinia",
+    "Olbia", "Golfo Aranci", "Pittulongu", "Porto Istana", "Loiri Porto San Paolo",
+    "San Teodoro", "Budoni", "Posada", "Siniscola", "Orosei", "Cala Gonone",
+    "Costa Paradiso", "Viddalba", "Trinità d'Agultu"
+  ],
   "env_vars_required": {
     "n8n_credentials": [
       "WHATSAPP_ACCESS_TOKEN — Token permanente Meta Graph API",
       "ANTHROPIC_API_KEY — API key Anthropic per Claude",
-      "WHATSAPP_VERIFY_TOKEN — Token verifica webhook (scelto da te)",
-      "HUMAN_INBOX_WEBHOOK_URL — URL webhook inbox umana (Respond.io/Wati)",
-      "WHATSAPP_BOT_SYSTEM_PROMPT — Contenuto di system_prompt.txt"
+      "WHATSAPP_VERIFY_TOKEN — Token verifica webhook",
+      "WHATSAPP_PHONE_NUMBER_ID — ID numero telefono WhatsApp Business",
+      "OPERATOR_PHONES — Numeri operatori per notifiche (comma-separated)"
     ]
   },
-  "properties": [
+  "properties_with_json": [
     {
       "name": "Il Faro",
       "location": "Badesi (SS)",
