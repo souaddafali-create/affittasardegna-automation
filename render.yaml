@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: affittasardegna-whatsapp-bot
+    runtime: python
+    rootDir: whatsapp_bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    envVars:
+      - key: WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: OPERATOR_PHONES
+        sync: false
