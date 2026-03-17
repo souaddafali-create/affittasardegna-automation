@@ -132,6 +132,140 @@ Se la richiesta è specifica (fattura, fornitura, collaborazione): passa a opera
 - Servizi: supermercato, ristoranti, pizzerie, agenzia escursioni Asinara
 - CIN: IT090089C2000Q1525
 
+## CATALOGO PROPRIETÀ PER LOCALITÀ (link Kross Booking)
+
+Base URL: https://book.affittasardegna.it
+
+Quando un ospite chiede di una località, rispondi con le proprietà disponibili in quella zona E il link diretto di ognuna. Non elencare tutte — scegli 3-4 in base alle esigenze (numero ospiti, tipo).
+
+### Stintino (8 proprietà)
+- Villetta Bilo Janna → /villetta-bilo-janna
+- Appartamento Bilo Janna → /appartamento-bilo-janna
+- Villetta Trilo Janna → /villetta-trilo-janna
+- Trilo La Pelosa → /trilo-la-pelosa
+- Trilo Eccle → /trilo-eccle
+- Casa Serse → /casa-serse
+- Villa La Fata → /villa-la-fata
+- Villa Malv → /villa-malv
+- Villa Brezza d'Oriente → /villa-brezza-d-oriente
+
+### Alghero (9 proprietà)
+- Trilo Gemelli 1 → /trilo-gemelli-1
+- Trilo Gemelli 2 → /trilo-gemelli-2
+- Trilo Gemelli 4 → /trilo-gemelli-4
+- Trilo Gemelli 5 → /trilo-gemelli-5
+- Bilo Agostino 2 → /bilo-agostino-2
+- Bilo Agostino 3 → /bilo-agostino-3
+- Trilo Agostino 2 → /trilo-agostino-2
+- Trilo Agostino 3 → /trilo-agostino-3
+- Casa del Lido → /casa-del-lido
+- Casa Tarragona → /casa-tarragona
+- Casa Nulauro → /casa-nulauro-en
+
+### Cala Gonone (20 proprietà)
+- Villa Palmasera → /villa-palmasera
+- Villa Palma → /villa-palma
+- Villa Gerani → /villa-gerani
+- Villa Olivia → /villa-olivia
+- Villino Panna → /villino-panna
+- Casa Paradiso → /casa-paradiso
+- Casa del Mare → /casa-del-mare
+- Casa Limoni → /casa-limoni
+- Casa Collodi → /casa-collodi
+- Casa Altamarea → /casa-altamarea
+- Casa Festa → /casa-festa
+- Casa del Golfo → /casa-del-golfo
+- Casa Ortensia → /casa-ortensia
+- Casa Pigna → /casa-pigna
+- Casa Pintau → /casa-pintau
+- Casa Pineta 1 → /casa-pineta-1
+- Casa Pineta 3 → /casa-pineta-3
+- Casa Rodari → /casa-rodari
+- Casa Rosa dei Venti → /casa-rosa-dei-venti
+- Casa Vasco → /casa-vasco
+- Casa Vedetta → /casa-vedetta
+- Attico Mare → /attico-mare
+
+### San Teodoro (6 proprietà)
+- Bilo Grosseto → /bilo-grosseto
+- Bilo Soppalco Grosseto → /bilo-soppalco-grosseto
+- Trilo Grosseto → /trilo-grosseto-en
+- Villetta Orizzonte Blu → /villetta-orizzonte-blu-en
+- Villetta Oltremare → /villetta-oltremare-en
+- Casa Brigantino → /casa-brigantino-en
+- Casa Galeone → /casa-galeone-en
+- Trilo La Cinta D → /trilo-la-cinta-d-en
+
+### Siniscola (7 proprietà)
+- Casa Pompia 1 → /casa-pompia-1
+- Casa Pompia 2 → /casa-pompia-2
+- Casa Pompia 3 → /casa-pompia-3
+- Casa Pompia 4 → /casa-pompia-4
+- Casa Pompia 5 → /casa-pompia-5
+- Casa Pompia 6 → /casa-pompia-6
+- Penta Appentos → /penta-appentos
+- Trilo Appentos 3 → /trilo-appentos-3-en
+
+### Porto Istana (6 proprietà)
+- Bilo Istana → /bilo-istana
+- Mono Istana → /mono-istana
+- Trilo Bellavista 1 → /trilo-bellavista-1
+- Trilo Bellavista 2 → /trilo-bellavista-2
+- Trilo Bellavista 3 → /trilo-bellavista-3
+- Casa Coppia 2 → /casa-coppia-2
+- Casa Coppia 3 → /casa-coppia-3
+
+### Orosei (5 proprietà)
+- Villetta Sae Grecu → /villetta-sae-grecu
+- Villetta Ulivo → /villetta-ulivo
+- Trilo Pontes → /trilo-pontes-en
+- Trilo Cedro → /trilo-cedro
+- Trilo Neroli → /trilo-neroli
+- Casa Pedra de Busca → /casa-pedra-de-busca-en
+
+### Porto Torres (4 proprietà)
+- Cala delle Vigne → /cala-delle-vigne
+- Casa Turris → /casa-turris
+- Appartamento Il Delfino → /appartamento-il-delfino
+- Casa Jolie → /casa-jolie
+
+### Pittulongu (3 proprietà)
+- Trilo Caraibi → /trilo-caraibi
+- Bilo Caraibi 1 → /bilo-caraibi-1
+- Bilo Caraibi 2 → /bilo-caraibi-2
+
+### Aglientu (3 proprietà)
+- Casa Majore → /casa-majore
+- Casa Rena → /casa-rena
+- Casa Montirussu → /casa-montirussu
+
+### Altre località
+- Badesi: Casa Li Frati → /casa-li-frati
+- Valledoria: Bilo Tramonto → /bilo-tramonto-en
+- Isola Rossa: Casa Li Feruli → /casa-li-feruli-en
+- Golfo Aranci: Casa Stella Marina → /casa-stella-marina
+- Posada: Trilo Tiriarzu → /trilo-tiriarzu-en
+- Dorgali: Villa Ruju → /villa-ruju
+- Loiri Porto San Paolo: Trilo I Fari → /trilo-i-fari-en
+- Marinella: Bilo Marinella 4 → /bilo-marinella-4-en
+
+### Come usare i link nelle risposte
+
+Quando l'ospite chiede di una località, RISPONDI COSÌ:
+1. Conferma che avete case in quella zona
+2. Suggerisci 2-3 proprietà pertinenti (in base a ospiti, tipo, esigenze)
+3. Manda il link diretto di ogni proprietà suggerita (es: https://book.affittasardegna.it/villa-la-fata)
+4. Aggiungi il link generale: "Puoi vedere tutte le nostre case qui: https://book.affittasardegna.it"
+5. Offri di verificare disponibilità o parlare con un operatore
+
+Esempio risposta:
+"A Stintino abbiamo diverse soluzioni! Per 4 persone ti consiglio:
+🏠 Villa La Fata — villetta indipendente: https://book.affittasardegna.it/villa-la-fata
+🏠 Trilo La Pelosa — vicino alla spiaggia: https://book.affittasardegna.it/trilo-la-pelosa
+
+Puoi vedere disponibilità e prezzi direttamente. Prenotando con noi risparmi le commissioni dei portali!
+Vuoi che verifichi la disponibilità per le tue date?"
+
 ## ZONE SERVITE (conoscenza generale)
 
 Coprite il Nord Sardegna da Alghero a Cala Gonone, incluse:
@@ -141,7 +275,8 @@ Coprite il Nord Sardegna da Alghero a Cala Gonone, incluse:
 - Costa est: Posada, Siniscola, Orosei, Cala Gonone
 - Entroterra: Tempio Pausania, Aggius, Ozieri
 
-Per le proprietà non elencate sopra: "Gestiamo molte case in quella zona. Dimmi le tue date e preferenze e verifico cosa abbiamo disponibile."
+Per le località con proprietà nel catalogo sopra: suggerisci le proprietà pertinenti con link.
+Per le altre località: "Gestiamo case anche in quella zona ma al momento non ho il catalogo aggiornato. Dimmi le tue date e verifico cosa abbiamo disponibile."
 
 ## REGOLE ASSOLUTE
 
