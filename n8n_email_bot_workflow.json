@@ -1,0 +1,321 @@
+{
+  "name": "AffittaSardegna Email Bot - Outlook + Claude",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute",
+              "minute": 2
+            }
+          ]
+        },
+        "simple": false
+      },
+      "id": "outlook-trigger",
+      "name": "Nuova Email Outlook",
+      "type": "n8n-nodes-base.microsoftOutlookTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "OUTLOOK_CREDENTIAL_ID",
+          "name": "Outlook - info@affittasardegna.it"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "filter-no-noreply",
+              "leftValue": "={{ $json.from.emailAddress.address }}",
+              "rightValue": "noreply",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "filter-no-mailer-daemon",
+              "leftValue": "={{ $json.from.emailAddress.address }}",
+              "rightValue": "mailer-daemon",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "filter-no-notification",
+              "leftValue": "={{ $json.subject }}",
+              "rightValue": "undeliverable",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "filter-has-body",
+              "leftValue": "={{ $json.body.content.length }}",
+              "rightValue": 10,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-spam",
+      "name": "Filtra Spam e Auto-Reply",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Estrae testo pulito dal body HTML dell'email\nconst htmlBody = $input.first().json.body?.content || '';\nconst subject = $input.first().json.subject || '';\nconst fromEmail = $input.first().json.from?.emailAddress?.address || '';\nconst fromName = $input.first().json.from?.emailAddress?.name || '';\nconst receivedAt = $input.first().json.receivedDateTime || '';\nconst messageId = $input.first().json.id || '';\nconst conversationId = $input.first().json.conversationId || '';\n\n// Rimuovi HTML tags per avere testo pulito\nlet plainText = htmlBody\n  .replace(/<style[^>]*>.*?<\\/style>/gsi, '')\n  .replace(/<script[^>]*>.*?<\\/script>/gsi, '')\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>/gi, '\\n\\n')\n  .replace(/<\\/div>/gi, '\\n')\n  .replace(/<[^>]+>/g, '')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&#39;/g, \"'\")\n  .replace(/&quot;/g, '\"')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\n// Tronca a 3000 caratteri per non superare il context window\nif (plainText.length > 3000) {\n  plainText = plainText.substring(0, 3000) + '\\n[...email troncata]';\n}\n\n// Classifica tipo di richiesta\nconst textLower = (subject + ' ' + plainText).toLowerCase();\nlet categoria = 'generale';\n\nif (textLower.match(/disponibil|prenotare|prenota|booking|reservation/)) {\n  categoria = 'disponibilita';\n} else if (textLower.match(/prezz[oi]|cost[oi]|tariffa|listino|quot/)) {\n  categoria = 'prezzi';\n} else if (textLower.match(/check.?in|check.?out|arriv|orar|chiav/)) {\n  categoria = 'checkin';\n} else if (textLower.match(/cancel|rimborso|annulla|disdett/)) {\n  categoria = 'cancellazione';\n} else if (textLower.match(/animali|cane|gatto|pet|dog/)) {\n  categoria = 'animali';\n} else if (textLower.match(/bianche|lenzuol|asciugaman|pulizia|pulizie/)) {\n  categoria = 'servizi_extra';\n} else if (textLower.match(/propon|proprietar|affiliaz|collabor/)) {\n  categoria = 'proposta_immobile';\n} else if (textLower.match(/recla|problema|guast|rott/)) {\n  categoria = 'reclamo';\n}\n\nreturn [{\n  json: {\n    messageId,\n    conversationId,\n    fromEmail,\n    fromName,\n    subject,\n    plainText,\n    htmlBody,\n    receivedAt,\n    categoria,\n  }\n}];"
+      },
+      "id": "parse-email",
+      "name": "Parsa Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, system: $('Carica System Prompt').first().json.systemPrompt, messages: [{ role: 'user', content: 'Email ricevuta da: ' + $json.fromName + ' <' + $json.fromEmail + '>\\nOggetto: ' + $json.subject + '\\nCategoria rilevata: ' + $json.categoria + '\\nData: ' + $json.receivedAt + '\\n\\nTesto email:\\n' + $json.plainText }] }) }}"
+      },
+      "id": "claude-api",
+      "name": "Claude Genera Risposta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ANTHROPIC_CREDENTIAL_ID",
+          "name": "Anthropic API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const claudeResponse = $input.first().json;\nconst emailData = $('Parsa Email').first().json;\n\n// Estrai la risposta dal formato API Claude\nlet rispostaText = '';\nif (claudeResponse.content && claudeResponse.content.length > 0) {\n  rispostaText = claudeResponse.content[0].text || '';\n} else {\n  rispostaText = 'Errore: risposta Claude vuota. Controllare i log.';\n}\n\n// Estrai eventuale oggetto dalla risposta (se Claude lo include)\nlet oggettoRisposta = 'Re: ' + emailData.subject;\nconst oggettoMatch = rispostaText.match(/^OGGETTO:\\s*(.+)$/m);\nif (oggettoMatch) {\n  oggettoRisposta = oggettoMatch[1].trim();\n  rispostaText = rispostaText.replace(/^OGGETTO:\\s*.+$/m, '').trim();\n}\n\n// Controlla se Claude ha segnalato necessita di intervento umano\nconst needsHuman = rispostaText.includes('[ESCALATION]') || \n                   rispostaText.includes('[INTERVENTO UMANO]');\n\nif (needsHuman) {\n  rispostaText = rispostaText\n    .replace('[ESCALATION]', '')\n    .replace('[INTERVENTO UMANO]', '')\n    .trim();\n}\n\n// Converti in HTML per Outlook\nconst rispostaHtml = rispostaText\n  .replace(/\\n\\n/g, '</p><p>')\n  .replace(/\\n/g, '<br>')\n  .replace(/^/, '<p>')\n  .replace(/$/, '</p>');\n\nreturn [{\n  json: {\n    ...emailData,\n    rispostaText,\n    rispostaHtml,\n    oggettoRisposta,\n    needsHuman,\n    claudeModel: claudeResponse.model || 'unknown',\n    claudeTokens: claudeResponse.usage || {},\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Formatta Risposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-escalation",
+              "leftValue": "={{ $json.needsHuman }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-escalation",
+      "name": "Serve Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.oggettoRisposta }}",
+        "bodyContent": "={{ $json.rispostaHtml }}",
+        "additionalFields": {
+          "toRecipients": "={{ $json.fromEmail }}"
+        }
+      },
+      "id": "create-draft-auto",
+      "name": "Crea Bozza (Auto)",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1810, 200],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "OUTLOOK_CREDENTIAL_ID",
+          "name": "Outlook - info@affittasardegna.it"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "=\u26a0\ufe0f ESCALATION: {{ $json.oggettoRisposta }}",
+        "bodyContent": "=<h3>Email che richiede intervento umano</h3><hr><p><strong>Da:</strong> {{ $json.fromName }} &lt;{{ $json.fromEmail }}&gt;</p><p><strong>Oggetto originale:</strong> {{ $json.subject }}</p><p><strong>Categoria:</strong> {{ $json.categoria }}</p><hr><h4>Bozza risposta Claude:</h4>{{ $json.rispostaHtml }}<hr><h4>Email originale:</h4><p>{{ $json.plainText }}</p>",
+        "additionalFields": {
+          "toRecipients": "={{ $json.fromEmail }}"
+        }
+      },
+      "id": "create-draft-escalation",
+      "name": "Bozza + Alert Escalation",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1810, 420],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "OUTLOOK_CREDENTIAL_ID",
+          "name": "Outlook - info@affittasardegna.it"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// System prompt per Claude — caricato come nodo separato per facile modifica\nconst systemPrompt = `Sei l'assistente email di AffittaSardegna (affittasardegna.it), agenzia di affitti brevi in Sardegna.\n\nRISPONDI SEMPRE IN ITALIANO a meno che l'email sia in un'altra lingua (in quel caso rispondi nella lingua del mittente).\n\n## Chi sei\n- Lavori per AffittaSardegna, gestito da Souad\n- Email: info@affittasardegna.it\n- Sito: affittasardegna.it\n- Sei cordiale, professionale e conciso\n- Firma sempre come \"Il team di AffittaSardegna\"\n\n## Proprieta gestite\n\n### 1. Il Faro - Badesi (SS)\n- Tipo: Appartamento nel Residence Le Onde\n- Indirizzo: Via Dettori 20, 07030 Badesi (SS)\n- Ospiti: max 4 | 1 camera | 1 bagno con doccia\n- Letti: 1 matrimoniale + 2 singoli\n- Dotazioni: TV, piano cottura, frigo-congelatore, microonde, lavatrice, aria condizionata, phon, terrazza con arredi da esterno\n- Piscina: comune del residence\n- Parcheggio: posto auto libero del residence\n- Animali: ammessi (piccola taglia)\n- NO: forno, lavastoviglie, WiFi, riscaldamento, giardino\n- Check-in: 15:00-20:00 | Check-out: entro le 10:00\n- Soggiorno minimo: 3 notti (bassa) / 5 notti (alta stagione 15 giu-14 set)\n- Cauzione: 300 EUR\n- Pulizia finale: a carico ospite (importo da confermare)\n- Biancheria: noleggio a carico ospite (importo da confermare)\n- Distanze: Spiaggia Badesi 3km/5min, Castelsardo 25km/25min, Isola Rossa 15km/15min, Aeroporto Alghero 90km/1h15\n- CIN: IT090081C2000U0391\n\n### 2. Villa La Vela - Stintino (SS)\n- Tipo: Villa indipendente con piscina privata\n- Indirizzo: Via Bruncu Spina 46A, 07040 Stintino (SS)\n- Ospiti: max 6 | 2 camere | 1 bagno con vasca\n- Letti: 1 matrimoniale + 2 singoli + 1 divano letto\n- Dotazioni: TV, piano cottura, frigo-congelatore, lavatrice, lavastoviglie, aria condizionata, WiFi, terrazza, giardino privato\n- Piscina: PRIVATA ad uso esclusivo\n- Parcheggio: privato\n- Animali: NON ammessi\n- NO: forno, microonde, phon\n- Check-in: 17:00-21:00 | Check-out: 10:00-11:00\n- Soggiorno minimo: 5 notti (bassa) / 7 notti (ago) / sabato-sabato in luglio-agosto\n- Cauzione: 500 EUR\n- Pulizia finale: 250 EUR obbligatoria\n- Asciugamani: 20 EUR/persona | Lenzuola: 20 EUR/persona\n- Prezzi a notte: da 137 EUR (mar-apr) fino a 377 EUR (ago)\n- Distanze: La Pelosa 11.1km, Centro Stintino 8.2km, Aeroporto Alghero 46km\n- CIN: IT090089C2000Q1525\n- Country Village con supermercato, ristoranti, agenzie escursioni Asinara\n\n## Regole di risposta\n\n1. FORMATO: inizia con \"OGGETTO: Re: ...\" sulla prima riga, poi vai a capo e scrivi il corpo email\n2. Per DISPONIBILITA: non confermare mai date senza verificare. Rispondi che verificherai e risponderai entro 24h.\n3. Per PREZZI: dai i prezzi dal listino se li hai. Per Il Faro di' che il prezzo e su richiesta.\n4. Per CHECK-IN/OUT: dai gli orari esatti dalla scheda proprieta.\n5. Per CANCELLAZIONI/RIMBORSI: scrivi [ESCALATION] all'inizio della risposta. Souad deve gestire personalmente.\n6. Per RECLAMI: scrivi [ESCALATION] all'inizio. Sii empatico, di' che Souad rispondera personalmente.\n7. Per PROPOSTE IMMOBILI: ringrazia, chiedi i dettagli (localita, tipo, capienza, foto) e di' che Souad valutera.\n8. Per richieste che NON riesci a gestire: scrivi [ESCALATION] e spiega cosa serve.\n9. NON inventare mai informazioni che non hai. Se non sai, di' che verificherai.\n10. NON dare mai informazioni sulla password, credenziali, accessi admin.\n11. Includi sempre un link al sito: affittasardegna.it\n12. Se l'email menziona una proprieta specifica, rispondi con i dati di quella proprieta.\n13. Se non menziona nessuna proprieta, presenta brevemente entrambe le opzioni.\n14. Mantieni le risposte CONCISE: max 200 parole per risposte semplici, max 350 per quelle complesse.\n15. Regole casa Il Faro: Non fumare, silenzio 23-08, differenziata obbligatoria.`;\n\nreturn [{ json: { systemPrompt } }];"
+      },
+      "id": "system-prompt",
+      "name": "Carica System Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    }
+  ],
+  "connections": {
+    "Nuova Email Outlook": {
+      "main": [
+        [
+          {
+            "node": "Filtra Spam e Auto-Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtra Spam e Auto-Reply": {
+      "main": [
+        [
+          {
+            "node": "Parsa Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsa Email": {
+      "main": [
+        [
+          {
+            "node": "Carica System Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carica System Prompt": {
+      "main": [
+        [
+          {
+            "node": "Claude Genera Risposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Genera Risposta": {
+      "main": [
+        [
+          {
+            "node": "Formatta Risposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatta Risposta": {
+      "main": [
+        [
+          {
+            "node": "Serve Escalation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Serve Escalation?": {
+      "main": [
+        [
+          {
+            "node": "Crea Bozza (Auto)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bozza + Alert Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "email-bot",
+      "id": "tag-email-bot"
+    },
+    {
+      "name": "affittasardegna",
+      "id": "tag-affittasardegna"
+    }
+  ],
+  "meta": {
+    "instanceId": "affittasardegna-automation"
+  }
+}
