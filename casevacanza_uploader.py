@@ -961,10 +961,9 @@ def insert_property(page):
 
         # Soggiorno: skip (default 0 is fine for most properties)
 
-        # Bagno: default=1 on CaseVacanza, need (bagni - 1) extra clicks
-        bagno_extra = comp["bagni"] - 1
-        if bagno_extra > 0:
-            click_room_counter(page, "Bagno", bagno_extra)
+        # Bagno: default=0 on CaseVacanza, need bagni clicks
+        if comp["bagni"] > 0:
+            click_room_counter(page, "Bagno", comp["bagni"])
 
         # Cucina: default=0, need 1 click
         click_room_counter(page, "Cucina", 1)
@@ -983,6 +982,129 @@ def insert_property(page):
     # --- Step 10: Configura letti (dal JSON composizione.letti) ---
     print("Step 10: Configura letti")
 
+    def click_bed_in_room(room_index, bed_label, clicks):
+        """Click the '+' button for a bed type INSIDE a specific 'Camera da letto N' section.
+
+        room_index: 0-based (0 = Camera da letto 1, 1 = Camera da letto 2, ...)
+        bed_label: partial text to match (e.g. 'Letto matrimoniale')
+        clicks: how many times to click '+'
+        """
+        if clicks <= 0:
+            return True
+
+        for click_i in range(clicks):
+            result = page.evaluate("""({roomIdx, bedLabel}) => {
+                // Find all room sections: elements containing "Camera da letto N"
+                // Each section is a card/container with a heading like "Camera da letto 1"
+                const allHeaders = document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,span,div,p');
+                const roomSections = [];
+                const seen = new Set();
+
+                for (const h of allHeaders) {
+                    const t = h.textContent.trim();
+                    // Match "Camera da letto 1", "Camera da letto 2", etc.
+                    const m = t.match(/^Camera da letto\\s+(\\d+)$/);
+                    if (!m) continue;
+                    // Find the parent card/section container
+                    let section = h;
+                    for (let d = 0; d < 8; d++) {
+                        section = section.parentElement;
+                        if (!section) break;
+                        // A good section has multiple buttons (bed counters)
+                        const btns = section.querySelectorAll('button');
+                        if (btns.length >= 10 && !seen.has(section)) {
+                            seen.add(section);
+                            roomSections.push({idx: parseInt(m[1]) - 1, el: section});
+                            break;
+                        }
+                    }
+                }
+
+                // Sort by room number
+                roomSections.sort((a, b) => a.idx - b.idx);
+
+                if (roomIdx >= roomSections.length) {
+                    return {found: false, error: `Room ${roomIdx+1} not found, only ${roomSections.length} rooms`};
+                }
+
+                const roomEl = roomSections[roomIdx].el;
+                const bedLabelLower = bedLabel.toLowerCase();
+
+                // Within this room section, find the row containing the bed label
+                // Strategy: find text nodes matching, then walk up to find +/- buttons
+                const walker = document.createTreeWalker(roomEl, NodeFilter.SHOW_TEXT, null, false);
+                while (walker.nextNode()) {
+                    const nodeText = walker.currentNode.textContent.trim().toLowerCase();
+                    if (!nodeText.includes(bedLabelLower)) continue;
+
+                    // Walk up from this text node to find a row with buttons
+                    let row = walker.currentNode.parentElement;
+                    for (let d = 0; d < 6; d++) {
+                        if (!row) break;
+                        const buttons = row.querySelectorAll('button');
+                        if (buttons.length >= 2 && buttons.length <= 4) {
+                            // Found the counter row — click the last button ("+")
+                            const addBtn = buttons[buttons.length - 1];
+                            const rect = addBtn.getBoundingClientRect();
+                            return {
+                                found: true,
+                                x: rect.x + rect.width / 2,
+                                y: rect.y + rect.height / 2,
+                                roomNum: roomIdx + 1,
+                                matchedText: walker.currentNode.textContent.trim().substring(0, 50)
+                            };
+                        }
+                        row = row.parentElement;
+                    }
+                }
+
+                // Fallback: search by element textContent includes
+                const candidates = Array.from(roomEl.querySelectorAll('div, span, label, p'))
+                    .filter(el => {
+                        const t = el.textContent.trim().toLowerCase();
+                        return t.includes(bedLabelLower) && t.length < bedLabel.length * 4;
+                    })
+                    .sort((a, b) => a.textContent.length - b.textContent.length);
+
+                for (const el of candidates) {
+                    let container = el;
+                    for (let d = 0; d < 6; d++) {
+                        if (!container) break;
+                        const buttons = container.querySelectorAll('button');
+                        if (buttons.length >= 2 && buttons.length <= 4) {
+                            const addBtn = buttons[buttons.length - 1];
+                            const rect = addBtn.getBoundingClientRect();
+                            return {
+                                found: true,
+                                x: rect.x + rect.width / 2,
+                                y: rect.y + rect.height / 2,
+                                roomNum: roomIdx + 1,
+                                matchedText: el.textContent.trim().substring(0, 50)
+                            };
+                        }
+                        container = container.parentElement;
+                    }
+                }
+
+                return {found: false, error: `Bed '${bedLabel}' not found in room ${roomIdx+1}`};
+            }""", {"roomIdx": room_index, "bedLabel": bed_label})
+
+            if not result.get("found"):
+                print(f"  [WARN] Camera {room_index+1}, {bed_label}: {result.get('error', 'non trovato')}")
+                return False
+
+            # Click at coordinates
+            page.mouse.click(result["x"], result["y"])
+            page.wait_for_timeout(250)
+
+            if click_i == 0:
+                print(f"  Camera {result['roomNum']}: {bed_label} "
+                      f"at ({result['x']:.0f}, {result['y']:.0f}) "
+                      f"match='{result.get('matchedText', '?')}'")
+
+        print(f"  Camera {room_index+1}: {bed_label} +{clicks} completati")
+        return True
+
     def do_step10():
         letti = comp.get("letti", [])
         if not letti:
@@ -992,6 +1114,15 @@ def insert_property(page):
 
         screenshot(page, "step10_BEFORE_letti")
 
+        # Each entry in letti[] maps to a room in order:
+        #   letti[0] → Camera da letto 1
+        #   letti[1] → Camera da letto 2
+        #   etc.
+        # Special: divano_letto goes in any available room or as extra
+        room_beds = []      # [(room_index, bed_label, qty)]
+        extra_beds = []     # beds without a room (divano_letto in soggiorno)
+
+        room_idx = 0
         for letto in letti:
             tipo = letto["tipo"]
             qty = letto["quantita"]
@@ -1000,63 +1131,33 @@ def insert_property(page):
                 print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
 
-            # Try click_room_counter first (coordinate-based)
-            success = click_room_counter(page, label, qty)
+            # Short label for matching (without dimensions text)
+            short_label = label.split("(")[0].strip()
 
-            # Fallback: JS-based approach — find the row by partial text match
-            # and click the last button ("+") N times
-            if not success:
-                # Try with short label (without dimensions)
-                short_labels = {
-                    "matrimoniale": "Letto matrimoniale",
-                    "singolo": "Letto singolo",
-                    "divano_letto": "Divano letto",
-                    "francese": "Queen-size",
-                    "king": "King-size",
-                    "castello": "Letto a castello",
-                    "singoli_separati": "Letti singoli separati",
-                }
-                short = short_labels.get(tipo, label)
-                print(f"  [RETRY] Provo con label corta: '{short}'")
-                success = click_room_counter(page, short, qty)
+            if tipo in ("divano_letto", "divano_letto_matrimoniale"):
+                # Divano letto can go in a room or as extra
+                extra_beds.append((short_label, qty))
+            else:
+                room_beds.append((room_idx, short_label, qty))
+                room_idx += 1
 
-            # Last resort: JS click on + button by finding row text
+        print(f"  Letti per camera: {room_beds}")
+        if extra_beds:
+            print(f"  Letti extra (divano): {extra_beds}")
+
+        # Assign beds to rooms
+        for r_idx, bed_label, qty in room_beds:
+            click_bed_in_room(r_idx, bed_label, qty)
+            page.wait_for_timeout(200)
+
+        # Extra beds (divano_letto): try in last room or globally
+        for bed_label, qty in extra_beds:
+            # Try global click_room_counter (finds first match anywhere)
+            success = click_room_counter(page, bed_label, qty)
             if not success:
-                for click_i in range(qty):
-                    clicked = page.evaluate("""(searchText) => {
-                        // Find all elements that contain the search text
-                        const allEls = document.querySelectorAll('div, span, li, label, p');
-                        for (const el of allEls) {
-                            const text = el.textContent.trim();
-                            if (!text.toLowerCase().includes(searchText.toLowerCase())) continue;
-                            // Must be a reasonably sized container (not the whole page)
-                            if (text.length > searchText.length * 5) continue;
-                            // Find buttons in this element or its parent
-                            let container = el;
-                            for (let d = 0; d < 5; d++) {
-                                const buttons = container.querySelectorAll('button');
-                                if (buttons.length >= 2) {
-                                    // Click the last button ("+")
-                                    const addBtn = buttons[buttons.length - 1];
-                                    addBtn.click();
-                                    return {clicked: true, text: text.substring(0, 60)};
-                                }
-                                container = container.parentElement;
-                                if (!container) break;
-                            }
-                        }
-                        return {clicked: false};
-                    }""", label.split("(")[0].strip())
-                    if clicked and clicked.get("clicked"):
-                        page.wait_for_timeout(250)
-                        if click_i == 0:
-                            print(f"  {label}: JS click on '{clicked.get('text', '?')}'")
-                    else:
-                        print(f"  [FAIL] {label}: nessun bottone + trovato nemmeno via JS")
-                        break
-                else:
-                    if qty > 0:
-                        print(f"  {label}: +{qty} click completati (JS fallback)")
+                # Try in the last room
+                last_room = max(room_idx - 1, 0)
+                click_bed_in_room(last_room, bed_label, qty)
 
         screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
