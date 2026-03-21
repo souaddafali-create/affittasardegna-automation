@@ -526,82 +526,125 @@ def fill_field(page, value, labels, css_selectors, field_name):
 def click_room_counter(page, label_text, clicks):
     """Click the + button N times for a counter row identified by label text.
 
-    Uses JS to FIND the button and tag it, then Playwright's .click() to
-    actually click it.  JS .click() does NOT trigger React synthetic events,
-    so we must use Playwright for the actual click.
+    Strategy:
+    1. JS finds the label element, walks up to the counter row container,
+       identifies the LAST button (the "+" button), and returns its bounding box.
+    2. Playwright clicks at the center of that bounding box using page.mouse.click().
+       Real mouse events at real coordinates → React always responds.
+    3. Re-locates the button each iteration (React may re-render after each click).
     """
     if clicks <= 0:
         return True
 
-    # Unique marker for this counter's + button
-    marker = f"auto-{label_text.replace(' ', '-').lower()}"
-
     for click_idx in range(clicks):
-        # Tag the + button fresh each time (React may re-render between clicks)
-        found = page.evaluate("""({label, marker}) => {
-            // Walk the entire DOM text to find the label
+        # --- Locate the "+" button's bounding box via JS ---
+        btn_info = page.evaluate("""(label) => {
+            // Helper: given a starting element, walk up to find a row with >=2 buttons
+            function findCounterRow(startEl) {
+                let el = startEl;
+                for (let depth = 0; depth < 10; depth++) {
+                    if (!el) return null;
+                    const buttons = el.querySelectorAll('button');
+                    if (buttons.length >= 2) {
+                        return {container: el, buttons: buttons};
+                    }
+                    el = el.parentElement;
+                }
+                return null;
+            }
+
+            // Strategy A: exact text node match
             const walker = document.createTreeWalker(
                 document.body, NodeFilter.SHOW_TEXT, null, false
             );
             while (walker.nextNode()) {
                 const nodeText = walker.currentNode.textContent.trim();
-                if (nodeText.toLowerCase() !== label.toLowerCase()) continue;
-
-                // Found exact label text node — walk up to find counter container
-                let el = walker.currentNode.parentElement;
-                for (let i = 0; i < 10; i++) {
-                    if (!el) break;
-                    const buttons = el.querySelectorAll('button');
-                    if (buttons.length >= 2) {
-                        // Last button in the row is the + button
-                        const addBtn = buttons[buttons.length - 1];
-                        addBtn.setAttribute('data-auto-target', marker);
-                        return {found: true, btnText: addBtn.textContent.trim(),
-                                containerTag: el.tagName, buttonsFound: buttons.length};
+                if (nodeText.toLowerCase() === label.toLowerCase()) {
+                    const row = findCounterRow(walker.currentNode.parentElement);
+                    if (row) {
+                        const addBtn = row.buttons[row.buttons.length - 1];
+                        const rect = addBtn.getBoundingClientRect();
+                        return {
+                            found: true, method: 'exact',
+                            x: rect.x + rect.width / 2,
+                            y: rect.y + rect.height / 2,
+                            w: rect.width, h: rect.height,
+                            btnText: addBtn.textContent.trim(),
+                            btnCount: row.buttons.length
+                        };
                     }
-                    el = el.parentElement;
                 }
             }
 
-            // Fallback: search by includes (for labels like "Camera da letto")
-            const allEls = document.querySelectorAll('div, span, label, p, h3, h4');
+            // Strategy B: element textContent includes label (shorter elements first)
             const labelLower = label.toLowerCase();
-            for (const el of allEls) {
-                const text = el.textContent.trim();
-                if (text.length > label.length * 3) continue;
-                if (!text.toLowerCase().includes(labelLower)) continue;
+            const candidates = Array.from(
+                document.querySelectorAll('div, span, label, p, h3, h4, li')
+            ).filter(el => {
+                const t = el.textContent.trim().toLowerCase();
+                return t.includes(labelLower) && t.length < label.length * 4;
+            }).sort((a, b) => a.textContent.length - b.textContent.length);
 
-                let container = el;
-                for (let i = 0; i < 8; i++) {
-                    const buttons = container.querySelectorAll('button');
-                    if (buttons.length >= 2) {
-                        const addBtn = buttons[buttons.length - 1];
-                        addBtn.setAttribute('data-auto-target', marker);
-                        return {found: true, btnText: addBtn.textContent.trim(),
-                                containerTag: container.tagName, buttonsFound: buttons.length,
-                                method: 'includes'};
+            for (const el of candidates) {
+                const row = findCounterRow(el);
+                if (row) {
+                    const addBtn = row.buttons[row.buttons.length - 1];
+                    const rect = addBtn.getBoundingClientRect();
+                    return {
+                        found: true, method: 'includes',
+                        x: rect.x + rect.width / 2,
+                        y: rect.y + rect.height / 2,
+                        w: rect.width, h: rect.height,
+                        btnText: addBtn.textContent.trim(),
+                        btnCount: row.buttons.length
+                    };
+                }
+            }
+
+            // Strategy C: find ALL counter rows on the page and return diagnostic info
+            const allButtons = document.querySelectorAll('button');
+            const rows = [];
+            const seen = new Set();
+            for (const btn of allButtons) {
+                let container = btn.parentElement;
+                for (let d = 0; d < 5; d++) {
+                    if (!container || seen.has(container)) break;
+                    const siblings = container.querySelectorAll('button');
+                    if (siblings.length >= 2 && siblings.length <= 4) {
+                        seen.add(container);
+                        // Get nearby text
+                        const text = container.textContent.trim().substring(0, 80);
+                        rows.push({text, btnCount: siblings.length});
+                        break;
                     }
-                    if (!container.parentElement) break;
                     container = container.parentElement;
                 }
             }
-            return {found: false};
-        }""", {"label": label_text, "marker": marker})
 
-        if not found.get("found"):
+            return {found: false, counterRows: rows};
+        }""", label_text)
+
+        if not btn_info.get("found"):
+            diag = btn_info.get("counterRows", [])
             print(f"  [WARN] {label_text}: + button non trovato (click {click_idx+1}/{clicks})")
+            if diag and click_idx == 0:
+                print(f"  [DIAG] Counter rows trovate sulla pagina:")
+                for row in diag:
+                    print(f"    - [{row['btnCount']} btn] {row['text']}")
             return False
 
-        # Use Playwright .click() — this triggers proper mouse events for React
-        btn = page.locator(f'[data-auto-target="{marker}"]')
-        if btn.count() > 0:
-            btn.first.click()
-            page.wait_for_timeout(400)
-        else:
-            print(f"  [WARN] {label_text}: tagged button not found in DOM")
-            return False
+        # --- Click at the exact coordinates using Playwright mouse ---
+        x, y = btn_info["x"], btn_info["y"]
+        page.mouse.click(x, y)
+        page.wait_for_timeout(400)
 
-    print(f"  {label_text}: +{clicks} (Playwright click, btn='{found.get('btnText', '?')}')")
+        if click_idx == 0:
+            method = btn_info.get("method", "?")
+            btn_text = btn_info.get("btnText", "?")
+            print(f"  {label_text}: clicking at ({x:.0f}, {y:.0f}), "
+                  f"btn='{btn_text}', method={method}")
+
+    print(f"  {label_text}: +{clicks} click completati")
     return True
 
 
@@ -879,50 +922,7 @@ def insert_property(page):
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
 
-        # --- STRATEGY: tag each room's "+" button by finding it near the label text ---
-        # The room counter buttons DON'T have data-test attributes like ospiti does.
-        # We use JS to walk from each label (e.g. "Camera da letto") up the DOM tree
-        # until we find a container with a "+" button, then tag it. After tagging,
-        # Playwright clicks the tagged button (real pointer events → React responds).
-
-        # Tag room counter "+" buttons by label proximity
-        room_labels = [
-            ("Camera da letto", "room-bedroom"),
-            ("Soggiorno", "room-living"),
-            ("Bagno", "room-bathroom"),
-            ("Cucina", "room-kitchen"),
-        ]
-        for label_text, tag_id in room_labels:
-            tagged = page.evaluate("""({label, tagId}) => {
-                // Find all text nodes containing the label
-                const walker = document.createTreeWalker(
-                    document.body, NodeFilter.SHOW_TEXT);
-                while (walker.nextNode()) {
-                    const txt = walker.currentNode.textContent.trim();
-                    if (txt === label || txt.startsWith(label)) {
-                        // Walk up from the label to find a container with a "+" button
-                        let container = walker.currentNode.parentElement;
-                        for (let depth = 0; depth < 8; depth++) {
-                            if (!container) break;
-                            const btns = container.querySelectorAll('button');
-                            for (const btn of btns) {
-                                if (btn.textContent.trim() === '+') {
-                                    btn.setAttribute('data-room', tagId);
-                                    return true;
-                                }
-                            }
-                            container = container.parentElement;
-                        }
-                    }
-                }
-                return false;
-            }""", {"label": label_text, "tagId": tag_id})
-            if tagged:
-                print(f"  Tagged '{label_text}' → [data-room={tag_id}]")
-            else:
-                print(f"  [WARN] '{label_text}' + button NOT found for tagging")
-
-        # --- CLICK OSPITI: use proven scoped selector ---
+        # --- OSPITI: use proven data-test scoped selector ---
         ospiti_btn = page.locator(
             '[data-test="guest-count"] [data-test="counter-add-btn"]')
         if ospiti_btn.count() > 0:
@@ -931,7 +931,8 @@ def insert_property(page):
                 page.wait_for_timeout(300)
             print(f"  Ospiti: {comp['max_ospiti']}")
         else:
-            print("  [WARN] Ospiti counter-add-btn not found")
+            # Fallback: coordinate click on ospiti counter
+            click_room_counter(page, "Ospiti", comp["max_ospiti"] - 1)
 
         # Bambini ammessi checkbox
         try:
@@ -955,40 +956,21 @@ def insert_property(page):
         # Wait for DOM to settle after ospiti changes
         page.wait_for_timeout(1500)
 
-        # --- CLICK ROOM COUNTERS using tagged buttons ---
+        # --- ROOM COUNTERS: coordinate-based clicks ---
         # Camera da letto: default=1, need (camere - 1) extra clicks
         bedroom_extra = comp["camere"] - 1
         if bedroom_extra > 0:
-            btn = page.locator('[data-room="room-bedroom"]')
-            if btn.count() > 0:
-                for _ in range(bedroom_extra):
-                    btn.click()
-                    page.wait_for_timeout(400)
-                print(f"  Camera da letto: +{bedroom_extra}")
-            else:
-                print(f"  [WARN] Camera da letto button not found (need +{bedroom_extra})")
+            click_room_counter(page, "Camera da letto", bedroom_extra)
 
         # Soggiorno: skip (default 0 is fine for most properties)
 
-        # Bagno: default=0, need bagni clicks
-        if comp["bagni"] > 0:
-            btn = page.locator('[data-room="room-bathroom"]')
-            if btn.count() > 0:
-                for _ in range(comp["bagni"]):
-                    btn.click()
-                    page.wait_for_timeout(400)
-                print(f"  Bagno: +{comp['bagni']}")
-            else:
-                print(f"  [WARN] Bagno button not found (need +{comp['bagni']})")
+        # Bagno: default=1 on CaseVacanza, need (bagni - 1) extra clicks
+        bagno_extra = comp["bagni"] - 1
+        if bagno_extra > 0:
+            click_room_counter(page, "Bagno", bagno_extra)
 
         # Cucina: default=0, need 1 click
-        btn = page.locator('[data-room="room-kitchen"]')
-        if btn.count() > 0:
-            btn.click()
-            page.wait_for_timeout(400)
-            print("  Cucina: +1")
-        else:
-            print("  [WARN] Cucina button not found")
+        click_room_counter(page, "Cucina", 1)
 
         # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
