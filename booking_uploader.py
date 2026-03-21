@@ -500,13 +500,54 @@ def insert_property(page):
     # --- Step 6: Letti (dal JSON composizione.letti) ---
     print("Step 6: Configurazione letti")
 
-    # Mappa tipo letto JSON → possibili label Booking (IT/EN)
+    # Mappa tipo letto JSON → label parziale su Booking (match parziale)
+    # Le label complete sono es. "Letto matrimoniale (ca. 140 x 200 cm)"
     LETTO_LABELS_BOOKING = {
-        "matrimoniale": ["Letto matrimoniale", "Double bed", "Letto alla francese"],
-        "francese": ["Letto alla francese", "Queen bed"],
-        "singolo": ["Letto singolo", "Single bed", "Letti singoli"],
-        "divano_letto": ["Divano letto", "Sofa bed"],
+        "matrimoniale": ["Letto matrimoniale"],
+        "francese": ["Letto Queen-size"],
+        "singolo": ["Letto singolo"],
+        "divano_letto": ["Divano letto matrimoniale", "Divano letto singolo"],
+        "divano_letto_singolo": ["Divano letto singolo"],
+        "king": ["Letto King-size"],
+        "castello": ["Letto a castello"],
     }
+
+    def _click_bed_plus(partial_label, clicks):
+        """Clicca il pulsante '+' N volte per un tipo letto su Booking.
+        Booking usa contatori +/- per ogni tipo letto, non campi di testo."""
+        # Trova il testo del letto nella pagina
+        label_el = page.get_by_text(partial_label, exact=False)
+        if label_el.count() == 0:
+            return False
+
+        # Risali al container riga che contiene i pulsanti +/-
+        # Il '+' è tipicamente l'ultimo button nella riga
+        try:
+            plus = label_el.first.locator(
+                "xpath=ancestor::*[.//button][1]//button[last()]"
+            )
+            if plus.is_visible():
+                for _ in range(clicks):
+                    plus.click()
+                    page.wait_for_timeout(400)
+                return True
+        except Exception:
+            pass
+
+        # Fallback: cerca il primo '+' button che segue il label nel DOM
+        try:
+            plus = label_el.first.locator(
+                "xpath=following::button[normalize-space()='+'][1]"
+            )
+            if plus.count() > 0 and plus.is_visible():
+                for _ in range(clicks):
+                    plus.click()
+                    page.wait_for_timeout(400)
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def do_step6():
         screenshot(page, "letti_pagina")
@@ -518,22 +559,29 @@ def insert_property(page):
 
         for letto in letti:
             tipo = letto["tipo"]
-            quantita = str(letto["quantita"])
+            quantita = letto["quantita"]
             labels = LETTO_LABELS_BOOKING.get(tipo, [])
             if not labels:
                 print(f"  Tipo letto sconosciuto: {tipo}, skip")
                 continue
             found = False
             for label in labels:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    field.first.fill(quantita)
-                    print(f"  {label}: {quantita} (dal JSON)")
+                if _click_bed_plus(label, quantita):
+                    print(f"  {label}: +{quantita} (dal JSON)")
                     found = True
                     break
             if not found:
+                # Fallback: prova fill() su input con label
+                for label in labels:
+                    field = page.get_by_label(label)
+                    if field.count() > 0:
+                        field.first.fill(str(quantita))
+                        print(f"  {label}: {quantita} via fill (dal JSON)")
+                        found = True
+                        break
+            if not found:
                 print(f"  Label non trovata per tipo '{tipo}', skip")
-            wait(page, 1000)
+            wait(page, 500)
 
         # Continua
         for txt in ["Continua", "Continue", "Avanti", "Next"]:
