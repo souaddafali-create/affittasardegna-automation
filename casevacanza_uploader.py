@@ -95,12 +95,14 @@ SCREENSHOT_DIR = "screenshots"
 # Mappa tipo letto JSON → indice bottone CaseVacanza
 # CaseVacanza ordina: 0=Divano letto, 1=Matrimoniale, 2=Francese, 3=Singolo
 LETTO_LABEL = {
-    "matrimoniale": "Letto matrimoniale",
-    "singolo": "Letto singolo",
-    "divano_letto": "Divano letto",
-    "francese": "Letto Queen-size",
-    "king": "Letto King-size",
+    "matrimoniale": "Letto matrimoniale (ca. 140 x 200 cm)",
+    "singolo": "Letto singolo (ca. 90 x 200 cm)",
+    "divano_letto": "Divano letto singolo",
+    "divano_letto_matrimoniale": "Divano letto matrimoniale",
+    "francese": "Letto Queen-size (ca. 160 x 200 cm)",
+    "king": "Letto King-size (ca. 180 x 200 cm)",
     "castello": "Letto a castello",
+    "singoli_separati": "Letti singoli separati (2x ca. 90 x 200 cm)",
 }
 
 step_counter = 0
@@ -143,7 +145,7 @@ def step_done(page, name):
         page.wait_for_load_state("domcontentloaded", timeout=10_000)
     except Exception:
         pass
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(400)
     screenshot(page, name)
     save_html(page, name)
 
@@ -152,7 +154,7 @@ def dismiss_overlay(page):
     """Close any modal/overlay: Escape, button clicks, then JS hide."""
     # 1) Press Escape
     page.keyboard.press("Escape")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(200)
 
     # 2) Try close buttons inside known modal containers
     for selector in [".react-modal-portal-v2", ".ReactModal__Overlay"]:
@@ -162,7 +164,7 @@ def dismiss_overlay(page):
                 close_btn = modal.locator("button").first
                 if close_btn.count() > 0:
                     close_btn.click()
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(200)
                     print(f"  Modal chiuso ({selector} -> button)")
                     return
         except Exception:
@@ -173,7 +175,7 @@ def dismiss_overlay(page):
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
             ok_btn.first.click()
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(200)
     except Exception:
         pass
 
@@ -197,7 +199,7 @@ def dismiss_overlay(page):
     }""")
     if hidden:
         print(f"  Nascosti {hidden} overlay via JS (pointer-events:none + zIndex:-1)")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
 
 
 def try_step(page, step_name, func, critical=False):
@@ -234,7 +236,7 @@ def click_save_and_verify(page, step_name):
 
     # Scroll to bottom to make save button visible
     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(200)
 
     # Diagnostic: check if save-button exists in DOM
     save_exists = page.evaluate("""() => {
@@ -310,7 +312,7 @@ def click_save_and_verify(page, step_name):
                 else:
                     print(f"  [WARN] Nessun bottone save/continua trovato!")
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(200)
 
     url_after = page.url
     heading_after = page.evaluate("""() => {
@@ -636,7 +638,7 @@ def click_room_counter(page, label_text, clicks):
         # --- Click at the exact coordinates using Playwright mouse ---
         x, y = btn_info["x"], btn_info["y"]
         page.mouse.click(x, y)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(250)
 
         if click_idx == 0:
             method = btn_info.get("method", "?")
@@ -659,8 +661,7 @@ def login(page):
     print("Login CaseVacanza.it...")
     page.goto("https://my.casevacanza.it", timeout=60_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
-    page.wait_for_timeout(2000)  # Extra wait for Keycloak redirect to settle
+    page.wait_for_timeout(1500)  # Wait for Keycloak redirect to settle
     screenshot(page, "login_page")
 
     # Close cookie popup if present
@@ -668,7 +669,7 @@ def login(page):
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
             ok_btn.first.click()
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(400)
             print("  Popup cookie chiuso")
     except Exception:
         pass
@@ -679,7 +680,6 @@ def login(page):
     screenshot(page, "login_credenziali")
     page.click("#kc-login")
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
     step_done(page, "dopo_login")
     print(f"  URL dopo login: {page.url}")
     print("Login effettuato.")
@@ -692,7 +692,7 @@ def navigate_to_add_property(page):
     # First check if there's an incomplete property to resume
     page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(1500)
 
     property_name = PROP.get("marketing", {}).get("titolo", "")
     # Look for "Da completare" / "Completa e pubblica" button for this property
@@ -716,7 +716,7 @@ def navigate_to_add_property(page):
                         # Click the first matching one
                         complete_btn.first.click()
                         page.wait_for_load_state("domcontentloaded")
-                        page.wait_for_timeout(3000)
+                        page.wait_for_timeout(1500)
                         print(f"  Ripresa proprietà incompleta: {property_name}")
                         dismiss_overlay(page)
                         step_done(page, "ripresa_proprietà")
@@ -728,11 +728,10 @@ def navigate_to_add_property(page):
     print("Nessuna proprietà incompleta trovata — creo nuova")
     page.goto("https://my.casevacanza.it/listing/add-property", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
 
     # Dismiss any modal (cookie popup, ReactModal, etc.)
     dismiss_overlay(page)
-    page.wait_for_timeout(3000)  # Let React SPA fully render wizard components
+    page.wait_for_timeout(1500)  # Let React SPA fully render wizard components
 
     step_done(page, "pagina_iniziale")
     print("Pagina wizard raggiunta.")
@@ -760,7 +759,7 @@ def insert_property(page):
     # --- Step 1: Click [data-test="single"] (Proprietà a unità singola) ---
     print("Step 1: Proprietà a unità singola")
     dismiss_overlay(page)
-    page.wait_for_timeout(2000)  # Let React finish rendering wizard
+    page.wait_for_timeout(800)  # Let React finish rendering wizard
 
     def do_step1():
         # Try data-test first, then text fallback
@@ -770,7 +769,6 @@ def insert_property(page):
         else:
             page.get_by_text("Proprietà a unità singola", exact=False).click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "tipo_proprietà")
 
     # When resuming, step1 is not critical (we're past it already)
@@ -824,7 +822,7 @@ def insert_property(page):
     def do_step5():
         page.get_by_text("Inseriscilo manualmente").click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(400)
 
         ident = PROP["identificativi"]
         addr_parts = ident["indirizzo"].rsplit(" ", 1)
@@ -832,15 +830,15 @@ def insert_property(page):
         civico = addr_parts[1] if len(addr_parts) > 1 else ""
 
         page.locator('[data-test="stateOrProvince"]').fill(ident["regione"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="city"]').fill(ident["comune"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="street"]').fill(via)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="houseNumberOrName"]').fill(civico)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="postalCode"]').fill(ident["cap"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         step_done(page, "indirizzo_compilato")
 
     try_step(page, "step5_indirizzo", do_step5)
@@ -907,7 +905,6 @@ def insert_property(page):
 
         page.locator('[data-test="save-button"]').click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "dopo_mappa")
 
     try_step(page, "step7_mappa", do_step7)
@@ -928,7 +925,7 @@ def insert_property(page):
         if ospiti_btn.count() > 0:
             for _ in range(comp["max_ospiti"] - 1):
                 ospiti_btn.click()
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(200)
             print(f"  Ospiti: {comp['max_ospiti']}")
         else:
             # Fallback: coordinate click on ospiti counter
@@ -954,7 +951,7 @@ def insert_property(page):
                 pass
 
         # Wait for DOM to settle after ospiti changes
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(200)
 
         # --- ROOM COUNTERS: coordinate-based clicks ---
         # Camera da letto: default=1, need (camere - 1) extra clicks
@@ -993,6 +990,8 @@ def insert_property(page):
             step_done(page, "letti_configurati")
             return
 
+        screenshot(page, "step10_BEFORE_letti")
+
         for letto in letti:
             tipo = letto["tipo"]
             qty = letto["quantita"]
@@ -1001,9 +1000,65 @@ def insert_property(page):
                 print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
 
-            # Bed counters also don't have data-test — use click_room_counter
-            click_room_counter(page, label, qty)
+            # Try click_room_counter first (coordinate-based)
+            success = click_room_counter(page, label, qty)
 
+            # Fallback: JS-based approach — find the row by partial text match
+            # and click the last button ("+") N times
+            if not success:
+                # Try with short label (without dimensions)
+                short_labels = {
+                    "matrimoniale": "Letto matrimoniale",
+                    "singolo": "Letto singolo",
+                    "divano_letto": "Divano letto",
+                    "francese": "Queen-size",
+                    "king": "King-size",
+                    "castello": "Letto a castello",
+                    "singoli_separati": "Letti singoli separati",
+                }
+                short = short_labels.get(tipo, label)
+                print(f"  [RETRY] Provo con label corta: '{short}'")
+                success = click_room_counter(page, short, qty)
+
+            # Last resort: JS click on + button by finding row text
+            if not success:
+                for click_i in range(qty):
+                    clicked = page.evaluate("""(searchText) => {
+                        // Find all elements that contain the search text
+                        const allEls = document.querySelectorAll('div, span, li, label, p');
+                        for (const el of allEls) {
+                            const text = el.textContent.trim();
+                            if (!text.toLowerCase().includes(searchText.toLowerCase())) continue;
+                            // Must be a reasonably sized container (not the whole page)
+                            if (text.length > searchText.length * 5) continue;
+                            // Find buttons in this element or its parent
+                            let container = el;
+                            for (let d = 0; d < 5; d++) {
+                                const buttons = container.querySelectorAll('button');
+                                if (buttons.length >= 2) {
+                                    // Click the last button ("+")
+                                    const addBtn = buttons[buttons.length - 1];
+                                    addBtn.click();
+                                    return {clicked: true, text: text.substring(0, 60)};
+                                }
+                                container = container.parentElement;
+                                if (!container) break;
+                            }
+                        }
+                        return {clicked: false};
+                    }""", label.split("(")[0].strip())
+                    if clicked and clicked.get("clicked"):
+                        page.wait_for_timeout(250)
+                        if click_i == 0:
+                            print(f"  {label}: JS click on '{clicked.get('text', '?')}'")
+                    else:
+                        print(f"  [FAIL] {label}: nessun bottone + trovato nemmeno via JS")
+                        break
+                else:
+                    if qty > 0:
+                        print(f"  {label}: +{qty} click completati (JS fallback)")
+
+        screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
 
     try_step(page, "step10_letti", do_step10)
@@ -1056,7 +1111,7 @@ def insert_property(page):
                 print(f"  Strategy 3 fallita: {e}")
 
         if uploaded:
-            page.wait_for_timeout(10_000)
+            page.wait_for_timeout(4000)
         else:
             print("  SKIP foto: nessuna strategia ha funzionato")
 
@@ -1079,7 +1134,7 @@ def insert_property(page):
                 tab = page.get_by_role("tab", name=tab_label)
                 if tab.count() > 0:
                     tab.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     print(f"  Tab '{tab_label}' cliccata")
                     break
             except Exception:
@@ -1089,7 +1144,7 @@ def insert_property(page):
                 tab = page.get_by_text("Tutti", exact=True)
                 if tab.count() > 0:
                     tab.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     print("  Tab 'Tutti' cliccata (text fallback)")
             except Exception as e:
                 print(f"  [WARN] Tab 'Tutti' non trovata: {e}")
@@ -1104,7 +1159,7 @@ def insert_property(page):
                     cb = page.get_by_role("checkbox", name=servizio, exact=True)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (role=checkbox exact)")
                         selected = True
                 except Exception:
@@ -1115,7 +1170,7 @@ def insert_property(page):
                     cb = page.get_by_role("checkbox", name=servizio, exact=False)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (role=checkbox partial)")
                         selected = True
                 except Exception:
@@ -1127,7 +1182,7 @@ def insert_property(page):
                     cb = page.get_by_label(servizio, exact=True)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (get_by_label)")
                         selected = True
                 except Exception:
@@ -1160,7 +1215,7 @@ def insert_property(page):
                         return {found: false};
                     }""", servizio)
                     if result.get("found"):
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (JS checkbox)")
                         selected = True
                 except Exception as e:
@@ -1172,7 +1227,7 @@ def insert_property(page):
                     el = page.get_by_text(servizio, exact=True)
                     if el.count() > 0:
                         el.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (click text)")
                         selected = True
                 except Exception:
@@ -1195,7 +1250,6 @@ def insert_property(page):
     def do_step16():
         page.get_by_text("Li scrivo io").click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "li_scrivo_io")
 
     try_step(page, "step16_li_scrivo_io", do_step16)
@@ -1214,14 +1268,14 @@ def insert_property(page):
             page.locator(
                 "input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']"
             ).first.fill(titolo)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
 
         desc_field = page.get_by_label("Descrizione")
         if desc_field.count() > 0:
             desc_field.fill(descrizione)
         else:
             page.locator("textarea").first.fill(descrizione)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
 
         step_done(page, "titolo_descrizione")
 
@@ -1246,7 +1300,7 @@ def insert_property(page):
                 print("  Pagina prezzo caricata")
             except Exception:
                 print("  [WARN] Heading 'Impostiamo il prezzo' non trovato, continuo comunque")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(800)
 
             # Diagnostic: log all input elements on the page
             diag = page.evaluate("""() => {
@@ -1269,7 +1323,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder '{ph}')")
@@ -1285,7 +1339,7 @@ def insert_property(page):
                         if f.count() > 0:
                             f.first.scroll_into_view_if_needed()
                             f.first.click()
-                            page.wait_for_timeout(500)
+                            page.wait_for_timeout(200)
                             f.first.fill(prezzo_str)
                             filled = True
                             print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
@@ -1303,7 +1357,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS placeholder)")
@@ -1320,7 +1374,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS)")
@@ -1337,7 +1391,7 @@ def insert_property(page):
                         if inp_type in ("text", "number", "tel", ""):
                             inp.scroll_into_view_if_needed()
                             inp.click()
-                            page.wait_for_timeout(500)
+                            page.wait_for_timeout(200)
                             inp.fill(prezzo_str)
                             filled = True
                             print(f"  Prezzo: {prezzo_str} EUR/notte (visible input type={inp_type})")
@@ -1402,7 +1456,7 @@ def insert_property(page):
                 print(f"  [WARN] Campo prezzo non trovato — {prezzo_str} EUR/notte")
             else:
                 # Verify the value actually stuck
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(200)
                 screenshot(page, "prezzo_filled")
         else:
             print("  Prezzo non presente nel JSON — lascio vuoto")
@@ -1463,7 +1517,7 @@ def insert_property(page):
                     print(f"  [WARN] Bottone '{button_label}' non trovato sulla pagina")
                     return
 
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 print(f"  Cliccato '{button_label}' — apro form costo extra")
                 screenshot(page, f"extra_cost_{button_label.lower().replace(' ', '_')}")
 
@@ -1476,7 +1530,7 @@ def insert_property(page):
                         f = page.get_by_placeholder(ph, exact=False)
                         if f.count() > 0:
                             f.last.click()
-                            page.wait_for_timeout(300)
+                            page.wait_for_timeout(200)
                             f.last.fill(amount)
                             filled = True
                             print(f"  {button_label}: €{amount} (placeholder '{ph}')")
@@ -1491,7 +1545,7 @@ def insert_property(page):
                             f = page.get_by_label(lbl)
                             if f.count() > 0:
                                 f.last.click()
-                                page.wait_for_timeout(300)
+                                page.wait_for_timeout(200)
                                 f.last.fill(amount)
                                 filled = True
                                 print(f"  {button_label}: €{amount} (label '{lbl}')")
@@ -1505,7 +1559,7 @@ def insert_property(page):
                         inputs = page.locator("input[type='number'], input[inputmode='numeric'], input[inputmode='decimal']")
                         if inputs.count() > 0:
                             inputs.last.click()
-                            page.wait_for_timeout(300)
+                            page.wait_for_timeout(200)
                             inputs.last.fill(amount)
                             filled = True
                             print(f"  {button_label}: €{amount} (input number)")
@@ -1540,7 +1594,7 @@ def insert_property(page):
                     print(f"  [WARN] Campo importo per '{button_label}' non trovato")
 
                 # Confirm/save the extra cost
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(200)
                 for confirm_text in ["Salva", "Conferma", "Aggiungi", "OK", "Ok", "Save"]:
                     try:
                         confirm = page.get_by_role("button", name=confirm_text)
@@ -1588,7 +1642,7 @@ def insert_property(page):
 
             if modifica_btn:
                 modifica_btn.click()
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(1500)
                 print("  Cliccato 'Modifica' impostazioni predefinite")
                 screenshot(page, "impostazioni_predefinite_aperte")
 
@@ -1676,7 +1730,7 @@ def insert_property(page):
                         save_btn = page.get_by_role("button", name=save_text)
                         if save_btn.count() > 0 and save_btn.last.is_visible():
                             save_btn.last.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             print(f"  Impostazioni predefinite salvate ('{save_text}')")
                             saved = True
                             break
@@ -1689,7 +1743,7 @@ def insert_property(page):
                         submit = page.locator("[type='submit'], button[form]")
                         if submit.count() > 0 and submit.last.is_visible():
                             submit.last.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             saved = True
                             print("  Impostazioni predefinite salvate (submit)")
                     except Exception:
@@ -1697,7 +1751,7 @@ def insert_property(page):
 
                 # Always dismiss overlay after modal interaction
                 dismiss_overlay(page)
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(400)
 
             else:
                 print("  [INFO] Bottone 'Modifica' non trovato — impostazioni predefinite skip")
@@ -1736,7 +1790,7 @@ def insert_property(page):
                     radio = page.get_by_text(radio_text, exact=False)
                     if radio.count() > 0:
                         radio.first.click()
-                        page.wait_for_timeout(2000)
+                        page.wait_for_timeout(800)
                         radio_clicked = True
                         print(f"  Radio selezionato: '{radio_text}'")
                         break
@@ -1749,7 +1803,7 @@ def insert_property(page):
                     radios = page.locator("input[type='radio']")
                     if radios.count() > 0:
                         radios.first.click()
-                        page.wait_for_timeout(2000)
+                        page.wait_for_timeout(800)
                         radio_clicked = True
                         print("  Radio selezionato (primo radio input)")
                 except Exception:
@@ -1789,7 +1843,7 @@ def insert_property(page):
                         confirm = page.get_by_role("button", name=confirm_text)
                         if confirm.count() > 0 and confirm.first.is_visible():
                             confirm.first.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             print(f"  Confermato import iCal ('{confirm_text}')")
                             break
                     except Exception:
@@ -1804,7 +1858,7 @@ def insert_property(page):
                     radio = page.get_by_text(no_text, exact=False)
                     if radio.count() > 0:
                         radio.first.click()
-                        page.wait_for_timeout(1000)
+                        page.wait_for_timeout(400)
                         print(f"  Selezionato: '{no_text}'")
                         break
                 except Exception:
@@ -1841,7 +1895,7 @@ def insert_property(page):
                     cin_field = page.get_by_placeholder(ph, exact=False)
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato: {cin} (placeholder '{ph}')")
@@ -1855,7 +1909,7 @@ def insert_property(page):
                     cin_field = page.locator("input[placeholder*='CIN']")
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato: {cin} (CSS placeholder)")
@@ -1868,7 +1922,7 @@ def insert_property(page):
                     cin_field = page.get_by_label("CIN", exact=False)
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (label): {cin}")
@@ -1928,7 +1982,7 @@ def insert_property(page):
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 0:
                         text_inputs.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         text_inputs.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (primo input): {cin}")
@@ -1948,7 +2002,7 @@ def insert_property(page):
                     cir_field = page.get_by_placeholder(ph, exact=False)
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato: {cir} (placeholder '{ph}')")
@@ -1962,7 +2016,7 @@ def insert_property(page):
                     cir_field = page.locator("input[placeholder*='CIR']")
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato: {cir} (CSS placeholder)")
@@ -1975,7 +2029,7 @@ def insert_property(page):
                     cir_field = page.get_by_label("CIR", exact=False)
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (label): {cir}")
@@ -2033,7 +2087,7 @@ def insert_property(page):
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 1:
                         text_inputs.nth(1).click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         text_inputs.nth(1).fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (secondo input): {cir}")
@@ -2054,7 +2108,7 @@ def insert_property(page):
     # --- Step 28: Pagina finale — solo screenshot, NON inviare ---
     print("\nStep 28: Pagina finale — SOLO screenshot")
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(400)
     step_done(page, "pagina_finale")
     print("Flusso completato! NON inviato per la verifica.")
 
@@ -2098,7 +2152,7 @@ def add_seasonal_prices(page):
     print("\nNavigazione alla lista proprietà...")
     page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(1500)
     step_done(page, "lista_proprietà")
 
     # Find and click the property name to go to its dashboard
@@ -2112,7 +2166,7 @@ def add_seasonal_prices(page):
         if link.count() > 0:
             link.first.click()
             page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(800)
             found = True
             print(f"  Proprietà trovata e aperta: {nome}")
     except Exception as e:
@@ -2125,7 +2179,7 @@ def add_seasonal_prices(page):
             if prop_link.count() > 0:
                 prop_link.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 found = True
                 print("  Aperta prima proprietà dalla lista")
         except Exception as e:
@@ -2147,7 +2201,7 @@ def add_seasonal_prices(page):
             if tab.count() > 0:
                 tab.first.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 tab_found = True
                 print(f"  Tab '{tab_text}' aperta")
                 break
@@ -2164,7 +2218,7 @@ def add_seasonal_prices(page):
             if tab_link.count() > 0:
                 tab_link.first.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 tab_found = True
                 print("  Tab tariffe aperta (CSS fallback)")
         except Exception as e:
@@ -2190,7 +2244,7 @@ def add_seasonal_prices(page):
                 btn = page.get_by_text(btn_text, exact=False)
                 if btn.count() > 0:
                     btn.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     add_clicked = True
                     print(f"  Cliccato '{btn_text}'")
                     break
@@ -2205,7 +2259,7 @@ def add_seasonal_prices(page):
                 ).last
                 if btn.count() > 0:
                     btn.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     add_clicked = True
                     print("  Cliccato bottone 'Aggiungi' (fallback)")
             except Exception:
@@ -2266,7 +2320,7 @@ def add_seasonal_prices(page):
                 if save_btn.count() > 0:
                     save_btn.first.click()
                     page.wait_for_load_state("domcontentloaded")
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     saved = True
                     print(f"  Salvata stagione {i+1} ('{save_text}')")
                     break
@@ -2280,7 +2334,7 @@ def add_seasonal_prices(page):
                 if save_btn.count() > 0:
                     save_btn.first.click()
                     page.wait_for_load_state("domcontentloaded")
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     saved = True
                     print(f"  Salvata stagione {i+1} (data-test save)")
             except Exception:
