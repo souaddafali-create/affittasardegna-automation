@@ -657,11 +657,11 @@ def click_room_counter(page, label_text, clicks):
 
 
 def login(page):
-    """Login su CaseVacanza.it via Keycloak SSO."""
+    """Login su CaseVacanza.it via Keycloak SSO (resiliente a cambio selettori/iframe)."""
     print("Login CaseVacanza.it...")
     page.goto("https://my.casevacanza.it", timeout=60_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1500)  # Wait for Keycloak redirect to settle
+    page.wait_for_timeout(2000)
     screenshot(page, "login_page")
 
     # Close cookie popup if present
@@ -669,17 +669,93 @@ def login(page):
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
             ok_btn.first.click()
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(500)
             print("  Popup cookie chiuso")
     except Exception:
         pass
 
-    # Keycloak login form
-    page.fill("#username", EMAIL)
-    page.fill("#password", PASSWORD)
+    # Iframe check (Keycloak SSO may be in iframe)
+    login_frame = page
+    if len(page.frames) > 1:
+        for frame in page.frames:
+            try:
+                if frame.locator("input[type='password']").count() > 0:
+                    login_frame = frame
+                    print(f"  Login in iframe: {frame.url}")
+                    break
+            except Exception:
+                pass
+
+    # Wait for any login input to appear
+    INPUT_SELECTOR = (
+        "#username, #email, input[name='username'], input[name='email'], "
+        "input[type='email'], input[type='text'], input[type='password']"
+    )
+    try:
+        login_frame.wait_for_selector(INPUT_SELECTOR, timeout=30_000)
+    except Exception:
+        print("  [WARN] Campi login non visibili, provo state=attached...")
+        try:
+            login_frame.wait_for_selector(INPUT_SELECTOR, timeout=15_000, state="attached")
+        except Exception:
+            screenshot(page, "login_timeout")
+            save_html(page, "login_timeout")
+            raise RuntimeError("Campi login non trovati dopo timeout")
+    page.wait_for_timeout(1000)
+
+    # Email field — prova più selettori
+    email_field = None
+    for sel in ["#username", "#email", "input[name='username']", "input[name='email']",
+                "input[name='loginname']", "input[type='email']", "input[type='text']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            email_field = loc.first
+            print(f"  Campo email trovato: {sel}")
+            break
+    if email_field is None:
+        for lbl in ["Email", "Username", "E-mail", "Indirizzo email"]:
+            loc = login_frame.get_by_label(lbl)
+            if loc.count() > 0:
+                email_field = loc.first
+                break
+    if email_field is None:
+        screenshot(page, "login_no_email_field")
+        save_html(page, "login_no_email_field")
+        raise RuntimeError("Campo email non trovato")
+    email_field.fill(EMAIL)
+
+    # Password field
+    pw_field = None
+    for sel in ["#password", "input[name='password']", "input[type='password']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            pw_field = loc.first
+            print(f"  Campo password trovato: {sel}")
+            break
+    if pw_field is None:
+        raise RuntimeError("Campo password non trovato")
+    pw_field.fill(PASSWORD)
     screenshot(page, "login_credenziali")
-    page.click("#kc-login")
+
+    # Login button
+    login_btn = None
+    for sel in ["#kc-login", "button[type='submit']", "input[type='submit']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            login_btn = loc.first
+            break
+    if login_btn is None:
+        for lbl in ["Accedi", "Login", "Sign in", "Entra"]:
+            loc = login_frame.get_by_text(lbl, exact=True)
+            if loc.count() > 0:
+                login_btn = loc.first
+                break
+    if login_btn is None:
+        raise RuntimeError("Bottone login non trovato")
+    login_btn.click()
+
     page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(3000)
     step_done(page, "dopo_login")
     print(f"  URL dopo login: {page.url}")
     print("Login effettuato.")
