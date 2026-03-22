@@ -525,6 +525,106 @@ def fill_field(page, value, labels, css_selectors, field_name):
     return filled
 
 
+def click_counter_by_label(page, label_text, clicks):
+    """Click the + button N times for a counter row identified by its visible label.
+
+    Uses 3 strategies in order:
+    A) data-test selectors (if available)
+    B) Playwright locator: find label → walk up DOM → click last button with force
+    C) JavaScript: find label element, walk to row, call .click() on + button
+
+    Returns True if at least one strategy succeeded.
+    """
+    if clicks <= 0:
+        return True
+
+    # --- Strategy A: try data-test based selectors ---
+    data_test_map = {
+        "Camera da letto": "bedroom-count",
+        "Soggiorno": "living-room-count",
+        "Bagno": "bathroom-count",
+        "Cucina": "kitchen-count",
+    }
+    dt_key = data_test_map.get(label_text)
+    if dt_key:
+        add_btn = page.locator(f'[data-test="{dt_key}"] [data-test="counter-add-btn"]')
+        if add_btn.count() > 0:
+            for i in range(clicks):
+                add_btn.click(force=True)
+                page.wait_for_timeout(200)
+            print(f"  {label_text}: +{clicks} via data-test='{dt_key}' (Strategy A)")
+            return True
+
+    # --- Strategy B: Playwright locator walk-up ---
+    try:
+        label_loc = page.get_by_text(label_text, exact=True)
+        if label_loc.count() == 0:
+            label_loc = page.get_by_text(label_text, exact=False)
+        if label_loc.count() > 0:
+            # Walk up the DOM to find a container with >= 2 buttons
+            for depth in range(1, 12):
+                xpath_expr = "/".join([".."] * depth)
+                ancestor = label_loc.first.locator(f"xpath={xpath_expr}")
+                btns = ancestor.locator("button")
+                btn_count = btns.count()
+                if btn_count >= 2:
+                    plus_btn = btns.last
+                    for i in range(clicks):
+                        plus_btn.click(force=True, timeout=3000)
+                        page.wait_for_timeout(250)
+                    print(f"  {label_text}: +{clicks} via Playwright walk-up depth={depth} (Strategy B)")
+                    return True
+    except Exception as e:
+        print(f"  {label_text}: Strategy B fallita: {e}")
+
+    # --- Strategy C: JavaScript native .click() ---
+    try:
+        for i in range(clicks):
+            result = page.evaluate("""(label) => {
+                const lower = label.toLowerCase();
+                // Find the most specific element containing the label
+                const all = document.querySelectorAll('div, span, label, p, li, h3, h4, td, strong, b');
+                let best = null;
+                let bestLen = Infinity;
+                for (const el of all) {
+                    const t = el.textContent.trim();
+                    if (t.toLowerCase() === lower || (t.toLowerCase().includes(lower) && t.length < lower.length * 2.5)) {
+                        if (t.length < bestLen) {
+                            best = el;
+                            bestLen = t.length;
+                        }
+                    }
+                }
+                if (!best) return {ok: false, error: 'label not found'};
+
+                // Walk up to find row with >=2 buttons
+                let row = best;
+                for (let d = 0; d < 12; d++) {
+                    if (!row) break;
+                    const btns = row.querySelectorAll('button');
+                    if (btns.length >= 2) {
+                        const addBtn = btns[btns.length - 1];
+                        addBtn.click();  // Native DOM click — React picks it up via delegation
+                        return {ok: true, btnText: addBtn.textContent.trim(), depth: d};
+                    }
+                    row = row.parentElement;
+                }
+                return {ok: false, error: 'no button row found'};
+            }""", label_text)
+            if not result.get("ok"):
+                print(f"  {label_text}: Strategy C fallita: {result.get('error')}")
+                return False
+            if i == 0:
+                print(f"  {label_text}: JS .click() depth={result.get('depth')} btn='{result.get('btnText')}'")
+            page.wait_for_timeout(250)
+        print(f"  {label_text}: +{clicks} via JS .click() (Strategy C)")
+        return True
+    except Exception as e:
+        print(f"  {label_text}: Strategy C exception: {e}")
+
+    return False
+
+
 def click_room_counter(page, label_text, clicks):
     """Click the + button N times for a counter row identified by label text.
 
@@ -995,6 +1095,18 @@ def insert_property(page):
         save_html(page, "step8_BEFORE_clicks")
         screenshot(page, "step8_BEFORE_clicks")
 
+        # --- Dump ALL data-test attributes for diagnostics ---
+        data_tests = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('[data-test]')).map(el => ({
+                dt: el.getAttribute('data-test'),
+                tag: el.tagName,
+                text: el.textContent.trim().substring(0, 50)
+            }));
+        }""")
+        print(f"  [DIAG] data-test attrs sulla pagina: {len(data_tests)}")
+        for dt in data_tests:
+            print(f"    {dt['dt']} ({dt['tag']}) = '{dt['text']}'")
+
         # --- OSPITI: use proven data-test scoped selector ---
         ospiti_btn = page.locator(
             '[data-test="guest-count"] [data-test="counter-add-btn"]')
@@ -1026,23 +1138,21 @@ def insert_property(page):
             except Exception:
                 pass
 
-        # Wait for DOM to settle after ospiti changes
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(300)
 
-        # --- ROOM COUNTERS: coordinate-based clicks ---
-        # Camera da letto: default=1, need (camere - 1) extra clicks
-        bedroom_extra = comp["camere"] - 1
-        if bedroom_extra > 0:
-            click_room_counter(page, "Camera da letto", bedroom_extra)
+        # --- ROOM COUNTERS: reliable Playwright approach ---
+        room_targets = [
+            ("Camera da letto", comp["camere"] - 1),   # default=1
+            ("Bagno", comp["bagni"]),                    # default=0
+            ("Cucina", 1),                               # always at least 1
+        ]
 
-        # Soggiorno: skip (default 0 is fine for most properties)
-
-        # Bagno: default=0 on CaseVacanza, need bagni clicks
-        if comp["bagni"] > 0:
-            click_room_counter(page, "Bagno", comp["bagni"])
-
-        # Cucina: default=0, need 1 click
-        click_room_counter(page, "Cucina", 1)
+        for label, clicks in room_targets:
+            if clicks <= 0:
+                continue
+            clicked = click_counter_by_label(page, label, clicks)
+            if not clicked:
+                print(f"  [ERRORE] {label}: nessun metodo ha funzionato")
 
         # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
@@ -1067,8 +1177,18 @@ def insert_property(page):
 
         screenshot(page, "step10_BEFORE_letti")
 
-        # Use JS to find and click "+" buttons by matching label text.
-        # React counters need proper event dispatching, not just mouse clicks.
+        # Dump data-test attributes for diagnostics (bed page)
+        data_tests = page.evaluate("""() => {
+            return Array.from(document.querySelectorAll('[data-test]')).map(el => ({
+                dt: el.getAttribute('data-test'),
+                tag: el.tagName,
+                text: el.textContent.trim().substring(0, 50)
+            }));
+        }""")
+        print(f"  [DIAG] data-test attrs (letti page): {len(data_tests)}")
+        for dt in data_tests:
+            print(f"    {dt['dt']} ({dt['tag']}) = '{dt['text']}'")
+
         for letto in letti:
             tipo = letto["tipo"]
             qty = letto["quantita"]
@@ -1076,169 +1196,14 @@ def insert_property(page):
             if not label:
                 print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
-
-            for click_i in range(qty):
-                result = page.evaluate("""(args) => {
-                    const label = args.label;
-
-                    // Find all text nodes containing this label
-                    function findLabelElement(searchText) {
-                        const lower = searchText.toLowerCase();
-                        // Try all visible elements
-                        const all = document.querySelectorAll('div, span, label, p, li, h3, h4, td');
-                        let best = null;
-                        let bestLen = Infinity;
-                        for (const el of all) {
-                            const t = el.textContent.trim();
-                            if (t.toLowerCase().includes(lower) && t.length < lower.length * 3) {
-                                if (t.length < bestLen) {
-                                    best = el;
-                                    bestLen = t.length;
-                                }
-                            }
-                        }
-                        return best;
-                    }
-
-                    const labelEl = findLabelElement(label);
-                    if (!labelEl) return {ok: false, error: 'label not found: ' + label};
-
-                    // Walk up to find a container with +/- buttons
-                    let container = labelEl;
-                    let plusBtn = null;
-                    for (let depth = 0; depth < 15; depth++) {
-                        if (!container) break;
-                        const buttons = container.querySelectorAll('button');
-                        if (buttons.length >= 2) {
-                            // The "+" button is the last one (or one with "+" text)
-                            for (const btn of buttons) {
-                                const txt = btn.textContent.trim();
-                                if (txt === '+' || txt === '+1') {
-                                    plusBtn = btn;
-                                    break;
-                                }
-                            }
-                            if (!plusBtn) {
-                                // Last button is usually "+"
-                                plusBtn = buttons[buttons.length - 1];
-                            }
-                            break;
-                        }
-                        container = container.parentElement;
-                    }
-
-                    if (!plusBtn) return {ok: false, error: 'plus button not found for: ' + label};
-
-                    // Dispatch full event sequence that React listens to
-                    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-                    for (const evtName of events) {
-                        const evt = new MouseEvent(evtName, {
-                            bubbles: true, cancelable: true, view: window
-                        });
-                        plusBtn.dispatchEvent(evt);
-                    }
-
-                    // Also try React's internal handler
-                    const reactKey = Object.keys(plusBtn).find(k => k.startsWith('__reactInternalInstance') || k.startsWith('__reactFiber'));
-                    let reactInfo = reactKey ? 'found' : 'not found';
-
-                    return {
-                        ok: true,
-                        btnText: plusBtn.textContent.trim().substring(0, 20),
-                        containerText: container ? container.textContent.trim().substring(0, 60) : '?',
-                        reactFiber: reactInfo
-                    };
-                }""", {"label": label})
-
-                if click_i == 0:
-                    print(f"  {label}: JS dispatch result = {result}")
-
-                if not result.get("ok"):
-                    print(f"  [ERRORE] {label}: {result.get('error')}")
-                    break
-
-                page.wait_for_timeout(300)
-
-            # Also try Playwright locator click as backup (multiple strategies)
-            if qty > 0:
-                # Backup A: find row via get_by_text, walk up to buttons
-                try:
-                    label_loc = page.get_by_text(label, exact=False).first
-                    # Walk up 10 levels to find a container with "+" button
-                    for depth in range(1, 10):
-                        xpath_up = "/".join([".."] * depth)
-                        ancestor = label_loc.locator(f"xpath={xpath_up}")
-                        btns = ancestor.locator("button")
-                        if btns.count() >= 2:
-                            plus_btn = btns.last
-                            for _ in range(qty):
-                                plus_btn.click(force=True, timeout=2000)
-                                page.wait_for_timeout(300)
-                            print(f"  {label}: Playwright backup A OK (depth={depth})")
-                            break
-                except Exception as e:
-                    print(f"  {label}: Playwright backup A fallito: {e}")
-
-                # Backup B: find "+" button via aria-label or text "+"
-                try:
-                    # Use JS to find & click with React-compatible approach
-                    for _ in range(qty):
-                        page.evaluate("""(label) => {
-                            const lower = label.toLowerCase();
-                            const all = document.querySelectorAll('div, span, li');
-                            for (const el of all) {
-                                const t = el.textContent.trim().toLowerCase();
-                                if (t.includes(lower) && t.length < lower.length * 3) {
-                                    // Found label — now find sibling/nearby "+" button
-                                    let row = el.parentElement;
-                                    for (let d = 0; d < 8; d++) {
-                                        if (!row) break;
-                                        const btns = row.querySelectorAll('button');
-                                        if (btns.length >= 2) {
-                                            const addBtn = btns[btns.length - 1];
-                                            // Use native HTMLElement.click() - works with React
-                                            addBtn.click();
-                                            return true;
-                                        }
-                                        row = row.parentElement;
-                                    }
-                                }
-                            }
-                            return false;
-                        }""", label)
-                        page.wait_for_timeout(300)
-                    print(f"  {label}: JS .click() backup B executed")
-                except Exception as e:
-                    print(f"  {label}: Backup B fallito: {e}")
+            clicked = click_counter_by_label(page, label, qty)
+            if not clicked:
+                # Try shorter label (without dimensions)
+                short = label.split("(")[0].strip()
+                click_counter_by_label(page, short, qty)
 
         page.wait_for_timeout(500)
         screenshot(page, "step10_AFTER_letti")
-
-        # Verify: check if any counter shows > 0
-        counters = page.evaluate("""() => {
-            const results = [];
-            // Find all elements that look like counter values (number between two buttons)
-            const buttons = document.querySelectorAll('button');
-            const seen = new Set();
-            for (const btn of buttons) {
-                const row = btn.parentElement;
-                if (!row || seen.has(row)) continue;
-                seen.add(row);
-                const rowButtons = row.querySelectorAll('button');
-                if (rowButtons.length === 2) {
-                    // Get text between the two buttons
-                    const text = row.textContent.replace(rowButtons[0].textContent, '').replace(rowButtons[1].textContent, '').trim();
-                    if (/^\\d+$/.test(text) && parseInt(text) > 0) {
-                        // Walk up to find label
-                        let label = row.parentElement ? row.parentElement.textContent.trim().substring(0, 60) : '?';
-                        results.push({value: parseInt(text), label: label});
-                    }
-                }
-            }
-            return results;
-        }""")
-        print(f"  Verifica contatori > 0: {counters}")
-
         step_done(page, "letti_configurati")
 
         screenshot(page, "step10_AFTER_letti")
