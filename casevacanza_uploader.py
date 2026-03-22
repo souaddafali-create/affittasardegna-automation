@@ -202,6 +202,25 @@ def dismiss_overlay(page):
         page.wait_for_timeout(200)
 
 
+def dismiss_cookie(page):
+    """Chiude il cookie banner CaseVacanza se presente."""
+    try:
+        btn = page.locator('[data-test="accept-button"]:visible').first
+        if btn.is_visible(timeout=2000):
+            btn.click()
+            page.wait_for_timeout(500)
+            print("  Cookie banner chiuso")
+    except Exception:
+        pass
+    try:
+        btn2 = page.locator('[data-test="accept-all-button"]:visible').first
+        if btn2.is_visible(timeout=500):
+            btn2.click()
+            page.wait_for_timeout(300)
+    except Exception:
+        pass
+
+
 def try_step(page, step_name, func, critical=False):
     """Execute a step wrapped in try/except. Dismiss overlays before,
     always capture state after (success or failure).
@@ -1087,37 +1106,52 @@ def insert_property(page):
 
     # --- Step 8: Ospiti e camere ---
     comp = PROP["composizione"]
-    print(f"Step 8: Ospiti e camere ({comp['max_ospiti']} ospiti, "
-          f"{comp['camere']} cam, {comp['bagni']} bagni)")
+    ospiti = comp["max_ospiti"]
+    camere = comp["camere"]
+    bagni = comp["bagni"]
+    print(f"Step 8: Ospiti e camere ({ospiti} ospiti, {camere} cam, {bagni} bagni)")
 
     def do_step8():
-        # Screenshot BEFORE any interaction
-        save_html(page, "step8_BEFORE_clicks")
+        """Mappa confermata dall'HTML reale (step8_BEFORE_clicks.html):
+        counter-add-btn nth(0) = Ospiti
+        counter-add-btn nth(1) = Camera da letto  (default 1)
+        counter-add-btn nth(2) = Soggiorno        (default 0, lasciamo 0)
+        counter-add-btn nth(3) = Bagno            (default 0)
+        counter-add-btn nth(4) = Cucina           (default 0)
+        """
         screenshot(page, "step8_BEFORE_clicks")
 
-        # --- Dump ALL data-test attributes for diagnostics ---
-        data_tests = page.evaluate("""() => {
-            return Array.from(document.querySelectorAll('[data-test]')).map(el => ({
-                dt: el.getAttribute('data-test'),
-                tag: el.tagName,
-                text: el.textContent.trim().substring(0, 50)
-            }));
-        }""")
-        print(f"  [DIAG] data-test attrs sulla pagina: {len(data_tests)}")
-        for dt in data_tests:
-            print(f"    {dt['dt']} ({dt['tag']}) = '{dt['text']}'")
+        # Chiudi cookie banner PRIMA di qualsiasi click
+        dismiss_cookie(page)
+        page.wait_for_timeout(500)
 
-        # --- OSPITI: use proven data-test scoped selector ---
-        ospiti_btn = page.locator(
+        # Tutti i counter-add-btn sulla pagina (ordine fisso confermato)
+        add = page.locator('[data-test="counter-add-btn"]')
+
+        # Ospiti: usa selector scoped al guest-count (sicuro, già funzionava)
+        guest_add = page.locator(
             '[data-test="guest-count"] [data-test="counter-add-btn"]')
-        if ospiti_btn.count() > 0:
-            for _ in range(comp["max_ospiti"] - 1):
-                ospiti_btn.click()
-                page.wait_for_timeout(200)
-            print(f"  Ospiti: {comp['max_ospiti']}")
-        else:
-            # Fallback: coordinate click on ospiti counter
-            click_room_counter(page, "Ospiti", comp["max_ospiti"] - 1)
+        for _ in range(max(0, ospiti - 1)):  # default è 1
+            guest_add.click()
+            page.wait_for_timeout(300)
+        print(f"  Ospiti → {ospiti}")
+
+        # Camera da letto: nth(1), default è 1
+        for _ in range(max(0, camere - 1)):
+            add.nth(1).click()
+            page.wait_for_timeout(300)
+        print(f"  Camere → {camere}")
+
+        # Bagno: nth(3), default è 0
+        for _ in range(max(0, bagni)):
+            add.nth(3).click()
+            page.wait_for_timeout(300)
+        print(f"  Bagni → {bagni}")
+
+        # Cucina: nth(4), sempre 1
+        add.nth(4).click()
+        page.wait_for_timeout(300)
+        print("  Cucina → 1")
 
         # Bambini ammessi checkbox
         try:
@@ -1138,25 +1172,7 @@ def insert_property(page):
             except Exception:
                 pass
 
-        page.wait_for_timeout(300)
-
-        # --- ROOM COUNTERS: reliable Playwright approach ---
-        room_targets = [
-            ("Camera da letto", comp["camere"] - 1),   # default=1
-            ("Bagno", comp["bagni"]),                    # default=0
-            ("Cucina", 1),                               # always at least 1
-        ]
-
-        for label, clicks in room_targets:
-            if clicks <= 0:
-                continue
-            clicked = click_counter_by_label(page, label, clicks)
-            if not clicked:
-                print(f"  [ERRORE] {label}: nessun metodo ha funzionato")
-
-        # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
-
         step_done(page, "ospiti_camere")
 
     try_step(page, "step8_ospiti_camere", do_step8)
@@ -1165,10 +1181,16 @@ def insert_property(page):
     print("Step 9: Continua (ospiti)")
     click_save_and_verify(page, "ospiti")
 
-    # --- Step 10: Configura letti (JS dispatch per ogni tipo) ---
+    # --- Step 10: Configura letti ---
     print("Step 10: Configura letti")
 
     def do_step10():
+        """Struttura confermata dall'HTML reale:
+        - Camera 1 è espansa di default
+        - Camera 2+ è collassata → serve click su [data-test=expand-room]
+        - Tutti i letti hanno data-test=counter-add-btn
+        - Il testo del grandparent identifica il tipo letto
+        """
         letti = comp.get("letti", [])
         if not letti:
             print("  ATTENZIONE: nessun dato letti nel JSON, skip")
@@ -1177,34 +1199,72 @@ def insert_property(page):
 
         screenshot(page, "step10_BEFORE_letti")
 
-        # Dump data-test attributes for diagnostics (bed page)
-        data_tests = page.evaluate("""() => {
-            return Array.from(document.querySelectorAll('[data-test]')).map(el => ({
-                dt: el.getAttribute('data-test'),
-                tag: el.tagName,
-                text: el.textContent.trim().substring(0, 50)
-            }));
-        }""")
-        print(f"  [DIAG] data-test attrs (letti page): {len(data_tests)}")
-        for dt in data_tests:
-            print(f"    {dt['dt']} ({dt['tag']}) = '{dt['text']}'")
-
-        for letto in letti:
-            tipo = letto["tipo"]
-            qty = letto["quantita"]
-            label = LETTO_LABEL.get(tipo)
-            if not label:
-                print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
-                continue
-            clicked = click_counter_by_label(page, label, qty)
-            if not clicked:
-                # Try shorter label (without dimensions)
-                short = label.split("(")[0].strip()
-                click_counter_by_label(page, short, qty)
-
+        # Chiudi cookie banner prima
+        dismiss_cookie(page)
         page.wait_for_timeout(500)
-        screenshot(page, "step10_AFTER_letti")
-        step_done(page, "letti_configurati")
+
+        # Label esatte dalla pagina reale
+        LETTO_TESTO = {
+            "matrimoniale":         "Letto matrimoniale",
+            "king":                 "Letto King-size",
+            "queen":                "Letto Queen-size",
+            "singolo":              "Letto singolo",
+            "divano_letto":         "Divano letto singolo",
+            "divano_letto_matrimoniale": "Divano letto matrimoniale",
+            "letto_a_castello":     "Letto a castello",
+        }
+
+        def click_letto(label_parziale, quantita, camera_idx):
+            """Trova e clicca il bed counter per label, nella camera specificata."""
+            # Se camera > 0, espandi quella camera
+            if camera_idx > 0:
+                try:
+                    expand_btns = page.locator('[data-test="expand-room"]')
+                    if expand_btns.count() > 0:
+                        expand_btns.first.click()
+                        page.wait_for_timeout(800)
+                        print(f"    Camera {camera_idx + 1} espansa")
+                except Exception as e:
+                    print(f"    [WARN] Espansione camera {camera_idx + 1} fallita: {e}")
+
+            for _ in range(quantita):
+                coords = page.evaluate("""(label) => {
+                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+                    for (const btn of btns) {
+                        const gp = btn.parentElement && btn.parentElement.parentElement;
+                        if (gp && gp.textContent.includes(label)) {
+                            const r = btn.getBoundingClientRect();
+                            if (r.width > 0 && r.height > 0) {
+                                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+                            }
+                        }
+                    }
+                    return null;
+                }""", label_parziale)
+                if coords:
+                    page.mouse.click(coords['x'], coords['y'])
+                    page.wait_for_timeout(400)
+                else:
+                    print(f"    [WARN] '{label_parziale}' non trovato in camera {camera_idx + 1}")
+                    return
+            print(f"    + {quantita}x {label_parziale} (camera {camera_idx + 1})")
+
+        # Assegna letti: letti[0]→Camera1, letti[1]→Camera2, resto→Camera1
+        for cam_idx, letto_entry in enumerate(letti[:camere]):
+            tipo = letto_entry.get("tipo", "matrimoniale")
+            qty = int(letto_entry.get("quantita", 1))
+            label = LETTO_TESTO.get(tipo, tipo)
+            print(f"  Camera {cam_idx + 1}: {qty}x {tipo}")
+            click_letto(label, qty, cam_idx)
+
+        # Letti extra oltre le camere (es. divano_letto) → camera 1
+        for letto_entry in letti[camere:]:
+            tipo = letto_entry.get("tipo", "")
+            qty = int(letto_entry.get("quantita", 1))
+            label = LETTO_TESTO.get(tipo, tipo)
+            if tipo:
+                print(f"  Extra: {qty}x {tipo} → camera 1")
+                click_letto(label, qty, 0)
 
         screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
