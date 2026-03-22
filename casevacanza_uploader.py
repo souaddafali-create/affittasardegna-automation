@@ -979,11 +979,37 @@ def insert_property(page):
     print("Step 9: Continua (ospiti)")
     click_save_and_verify(page, "ospiti")
 
-    # --- Step 10: Configura letti (SKIP — lascio contatori a 0) ---
-    # TODO: implementare configurazione letti per-room con soluzione specifica
-    print("Step 10: Configura letti — SKIP (contatori a 0, da completare manualmente)")
-    screenshot(page, "step10_letti_skip")
-    step_done(page, "letti_skip")
+    # --- Step 10: Configura letti (click_room_counter per ogni tipo) ---
+    print("Step 10: Configura letti")
+
+    def do_step10():
+        letti = comp.get("letti", [])
+        if not letti:
+            print("  ATTENZIONE: nessun dato letti nel JSON, skip")
+            step_done(page, "letti_skip")
+            return
+
+        screenshot(page, "step10_BEFORE_letti")
+
+        for letto in letti:
+            tipo = letto["tipo"]
+            qty = letto["quantita"]
+            label = LETTO_LABEL.get(tipo)
+            if not label:
+                print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
+                continue
+            # click_room_counter usa match parziale — funziona con le label complete
+            success = click_room_counter(page, label, qty)
+            if not success:
+                # Prova con label corta (senza dimensioni tra parentesi)
+                short = label.split("(")[0].strip()
+                click_room_counter(page, short, qty)
+            page.wait_for_timeout(300)
+
+        screenshot(page, "step10_AFTER_letti")
+        step_done(page, "letti_configurati")
+
+    try_step(page, "step10_letti", do_step10)
 
     # --- Step 11: Continua (letti) ---
     print("Step 11: Continua (letti)")
