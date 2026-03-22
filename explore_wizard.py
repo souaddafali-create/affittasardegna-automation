@@ -190,18 +190,40 @@ def dismiss_popups(page):
         ok_btn.first.click()
         print("Popup cookies chiuso.")
         wait(page, 1000)
-    modal_overlay = page.locator(".ReactModal__Overlay")
-    if modal_overlay.count() > 0:
-        close_btn = modal_overlay.locator("button").first
+    # Chiudi TUTTI i ReactModal overlay (possono essere multipli)
+    for attempt in range(5):
+        modal_overlay = page.locator(".ReactModal__Overlay")
+        if modal_overlay.count() == 0:
+            break
+        print(f"  ReactModal trovato (tentativo {attempt+1}), chiudo...")
+        # Prova bottone di chiusura
+        close_btn = modal_overlay.locator("button")
         if close_btn.count() > 0:
-            close_btn.click()
-        else:
-            modal_overlay.click(position={"x": 10, "y": 10})
+            try:
+                close_btn.first.click(timeout=2000)
+            except Exception:
+                pass
+        # Fallback: rimuovi via JS
+        page.evaluate("""() => {
+            document.querySelectorAll('.ReactModal__Overlay').forEach(el => el.remove());
+            document.querySelectorAll('.ReactModal__Body--open').forEach(el => {
+                el.classList.remove('ReactModal__Body--open');
+            });
+        }""")
         wait(page, 1000)
+    if page.locator(".ReactModal__Overlay").count() == 0:
         print("ReactModal chiuso.")
 
 
 def navigate_to_add_property(page):
+    # Rimuovi eventuali modal residui prima di cliccare
+    page.evaluate("""() => {
+        document.querySelectorAll('.ReactModal__Overlay').forEach(el => el.remove());
+        document.querySelectorAll('.ReactModal__Body--open').forEach(el => {
+            el.classList.remove('ReactModal__Body--open');
+        });
+    }""")
+    wait(page, 500)
     page.locator("a", has_text="Proprietà").first.click()
     wait(page)
     print("Navigato a Proprietà.")
