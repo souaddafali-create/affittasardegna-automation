@@ -1100,16 +1100,37 @@ def insert_property(page):
             step_done(page, "foto_skip")
             return
 
+        print(f"  Foto da caricare: {len(photo_paths)}")
+        for p in photo_paths:
+            sz = os.path.getsize(p) if os.path.isfile(p) else 0
+            print(f"    {p} ({sz} bytes)")
+
         uploaded = False
-        # Strategy 1: standard input[type="file"]
+
+        # Strategy 0: use file chooser event (most reliable for "Carica foto" button)
         try:
-            fi = page.locator("input[type='file']")
-            if fi.count() > 0:
-                fi.set_input_files(photo_paths)
-                uploaded = True
-                print(f"  Upload {len(photo_paths)} foto via input[type='file']")
+            with page.expect_file_chooser(timeout=5000) as fc_info:
+                # Click "Carica foto" button to trigger file chooser
+                btn = page.get_by_text("Carica foto")
+                if btn.count() > 0:
+                    btn.first.click()
+            file_chooser = fc_info.value
+            file_chooser.set_files(photo_paths)
+            uploaded = True
+            print(f"  Upload {len(photo_paths)} foto via file chooser")
         except Exception as e:
-            print(f"  Strategy 1 fallita: {e}")
+            print(f"  Strategy 0 (file chooser) fallita: {e}")
+
+        # Strategy 1: standard input[type="file"]
+        if not uploaded:
+            try:
+                fi = page.locator("input[type='file']")
+                if fi.count() > 0:
+                    fi.set_input_files(photo_paths)
+                    uploaded = True
+                    print(f"  Upload {len(photo_paths)} foto via input[type='file']")
+            except Exception as e:
+                print(f"  Strategy 1 fallita: {e}")
 
         # Strategy 2: input[accept*="image"]
         if not uploaded:
@@ -1135,7 +1156,9 @@ def insert_property(page):
                 print(f"  Strategy 3 fallita: {e}")
 
         if uploaded:
-            page.wait_for_timeout(4000)
+            # Wait for upload to complete (thumbnails should appear)
+            page.wait_for_timeout(6000)
+            screenshot(page, "foto_uploaded")
         else:
             print("  SKIP foto: nessuna strategia ha funzionato")
 
