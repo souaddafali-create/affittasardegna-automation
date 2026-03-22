@@ -1055,7 +1055,7 @@ def insert_property(page):
     print("Step 9: Continua (ospiti)")
     click_save_and_verify(page, "ospiti")
 
-    # --- Step 10: Configura letti (click_room_counter per ogni tipo) ---
+    # --- Step 10: Configura letti (JS dispatch per ogni tipo) ---
     print("Step 10: Configura letti")
 
     def do_step10():
@@ -1067,6 +1067,8 @@ def insert_property(page):
 
         screenshot(page, "step10_BEFORE_letti")
 
+        # Use JS to find and click "+" buttons by matching label text.
+        # React counters need proper event dispatching, not just mouse clicks.
         for letto in letti:
             tipo = letto["tipo"]
             qty = letto["quantita"]
@@ -1074,13 +1076,170 @@ def insert_property(page):
             if not label:
                 print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
                 continue
-            # click_room_counter usa match parziale — funziona con le label complete
-            success = click_room_counter(page, label, qty)
-            if not success:
-                # Prova con label corta (senza dimensioni tra parentesi)
-                short = label.split("(")[0].strip()
-                click_room_counter(page, short, qty)
-            page.wait_for_timeout(300)
+
+            for click_i in range(qty):
+                result = page.evaluate("""(args) => {
+                    const label = args.label;
+
+                    // Find all text nodes containing this label
+                    function findLabelElement(searchText) {
+                        const lower = searchText.toLowerCase();
+                        // Try all visible elements
+                        const all = document.querySelectorAll('div, span, label, p, li, h3, h4, td');
+                        let best = null;
+                        let bestLen = Infinity;
+                        for (const el of all) {
+                            const t = el.textContent.trim();
+                            if (t.toLowerCase().includes(lower) && t.length < lower.length * 3) {
+                                if (t.length < bestLen) {
+                                    best = el;
+                                    bestLen = t.length;
+                                }
+                            }
+                        }
+                        return best;
+                    }
+
+                    const labelEl = findLabelElement(label);
+                    if (!labelEl) return {ok: false, error: 'label not found: ' + label};
+
+                    // Walk up to find a container with +/- buttons
+                    let container = labelEl;
+                    let plusBtn = null;
+                    for (let depth = 0; depth < 15; depth++) {
+                        if (!container) break;
+                        const buttons = container.querySelectorAll('button');
+                        if (buttons.length >= 2) {
+                            // The "+" button is the last one (or one with "+" text)
+                            for (const btn of buttons) {
+                                const txt = btn.textContent.trim();
+                                if (txt === '+' || txt === '+1') {
+                                    plusBtn = btn;
+                                    break;
+                                }
+                            }
+                            if (!plusBtn) {
+                                // Last button is usually "+"
+                                plusBtn = buttons[buttons.length - 1];
+                            }
+                            break;
+                        }
+                        container = container.parentElement;
+                    }
+
+                    if (!plusBtn) return {ok: false, error: 'plus button not found for: ' + label};
+
+                    // Dispatch full event sequence that React listens to
+                    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                    for (const evtName of events) {
+                        const evt = new MouseEvent(evtName, {
+                            bubbles: true, cancelable: true, view: window
+                        });
+                        plusBtn.dispatchEvent(evt);
+                    }
+
+                    // Also try React's internal handler
+                    const reactKey = Object.keys(plusBtn).find(k => k.startsWith('__reactInternalInstance') || k.startsWith('__reactFiber'));
+                    let reactInfo = reactKey ? 'found' : 'not found';
+
+                    return {
+                        ok: true,
+                        btnText: plusBtn.textContent.trim().substring(0, 20),
+                        containerText: container ? container.textContent.trim().substring(0, 60) : '?',
+                        reactFiber: reactInfo
+                    };
+                }""", {"label": label})
+
+                if click_i == 0:
+                    print(f"  {label}: JS dispatch result = {result}")
+
+                if not result.get("ok"):
+                    print(f"  [ERRORE] {label}: {result.get('error')}")
+                    break
+
+                page.wait_for_timeout(300)
+
+            # Also try Playwright locator click as backup (multiple strategies)
+            if qty > 0:
+                # Backup A: find row via get_by_text, walk up to buttons
+                try:
+                    label_loc = page.get_by_text(label, exact=False).first
+                    # Walk up 10 levels to find a container with "+" button
+                    for depth in range(1, 10):
+                        xpath_up = "/".join([".."] * depth)
+                        ancestor = label_loc.locator(f"xpath={xpath_up}")
+                        btns = ancestor.locator("button")
+                        if btns.count() >= 2:
+                            plus_btn = btns.last
+                            for _ in range(qty):
+                                plus_btn.click(force=True, timeout=2000)
+                                page.wait_for_timeout(300)
+                            print(f"  {label}: Playwright backup A OK (depth={depth})")
+                            break
+                except Exception as e:
+                    print(f"  {label}: Playwright backup A fallito: {e}")
+
+                # Backup B: find "+" button via aria-label or text "+"
+                try:
+                    # Use JS to find & click with React-compatible approach
+                    for _ in range(qty):
+                        page.evaluate("""(label) => {
+                            const lower = label.toLowerCase();
+                            const all = document.querySelectorAll('div, span, li');
+                            for (const el of all) {
+                                const t = el.textContent.trim().toLowerCase();
+                                if (t.includes(lower) && t.length < lower.length * 3) {
+                                    // Found label — now find sibling/nearby "+" button
+                                    let row = el.parentElement;
+                                    for (let d = 0; d < 8; d++) {
+                                        if (!row) break;
+                                        const btns = row.querySelectorAll('button');
+                                        if (btns.length >= 2) {
+                                            const addBtn = btns[btns.length - 1];
+                                            // Use native HTMLElement.click() - works with React
+                                            addBtn.click();
+                                            return true;
+                                        }
+                                        row = row.parentElement;
+                                    }
+                                }
+                            }
+                            return false;
+                        }""", label)
+                        page.wait_for_timeout(300)
+                    print(f"  {label}: JS .click() backup B executed")
+                except Exception as e:
+                    print(f"  {label}: Backup B fallito: {e}")
+
+        page.wait_for_timeout(500)
+        screenshot(page, "step10_AFTER_letti")
+
+        # Verify: check if any counter shows > 0
+        counters = page.evaluate("""() => {
+            const results = [];
+            // Find all elements that look like counter values (number between two buttons)
+            const buttons = document.querySelectorAll('button');
+            const seen = new Set();
+            for (const btn of buttons) {
+                const row = btn.parentElement;
+                if (!row || seen.has(row)) continue;
+                seen.add(row);
+                const rowButtons = row.querySelectorAll('button');
+                if (rowButtons.length === 2) {
+                    // Get text between the two buttons
+                    const text = row.textContent.replace(rowButtons[0].textContent, '').replace(rowButtons[1].textContent, '').trim();
+                    if (/^\\d+$/.test(text) && parseInt(text) > 0) {
+                        // Walk up to find label
+                        let label = row.parentElement ? row.parentElement.textContent.trim().substring(0, 60) : '?';
+                        results.push({value: parseInt(text), label: label});
+                    }
+                }
+            }
+            return results;
+        }""")
+        print(f"  Verifica contatori > 0: {counters}")
+
+        step_done(page, "letti_configurati")
 
         screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
