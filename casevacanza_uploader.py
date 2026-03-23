@@ -433,24 +433,27 @@ def consolidate_seasonal_prices():
         return default_min
 
     # Consolidate: merge adjacent entries with same price
+    # Support both "da"/"a" and "dal"/"al" key formats
     seasons = []
     current = None
     for entry in listino:
         prezzo = entry.get("prezzo_notte")
-        if not prezzo:
+        da_val = entry.get("da") or entry.get("dal")
+        a_val = entry.get("a") or entry.get("al")
+        if not prezzo or not da_val or not a_val:
             continue
         if current and current["prezzo_notte"] == prezzo:
             # Extend current season
-            current["a"] = entry["a"]
+            current["a"] = a_val
         else:
             # Start new season
             if current:
                 seasons.append(current)
             current = {
-                "da": entry["da"],
-                "a": entry["a"],
+                "da": da_val,
+                "a": a_val,
                 "prezzo_notte": prezzo,
-                "notti_min": get_min_stay(entry["da"]),
+                "notti_min": get_min_stay(da_val),
             }
     if current:
         seasons.append(current)
@@ -2346,12 +2349,17 @@ def insert_property(page):
 
 
 def _parse_date_it(date_str, year=2025):
-    """Parse Italian short date like '28-mar' into 'YYYY-MM-DD' string."""
+    """Parse date into 'YYYY-MM-DD' string.
+    Supports ISO format '2025-03-28' and Italian short format '28-mar'."""
+    parts = date_str.strip().split("-")
+    # ISO format: YYYY-MM-DD (3 parts, first part is 4 digits)
+    if len(parts) == 3 and len(parts[0]) == 4:
+        return date_str.strip()
+    # Italian short format: DD-mon (e.g. '28-mar')
     mesi = {
         "gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6,
         "lug": 7, "ago": 8, "set": 9, "ott": 10, "nov": 11, "dic": 12,
     }
-    parts = date_str.strip().split("-")
     day = int(parts[0])
     month = mesi.get(parts[1].lower(), 1)
     return f"{year}-{month:02d}-{day:02d}"
