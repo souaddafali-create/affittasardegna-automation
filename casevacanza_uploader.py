@@ -95,12 +95,14 @@ SCREENSHOT_DIR = "screenshots"
 # Mappa tipo letto JSON → indice bottone CaseVacanza
 # CaseVacanza ordina: 0=Divano letto, 1=Matrimoniale, 2=Francese, 3=Singolo
 LETTO_LABEL = {
-    "matrimoniale": "Letto matrimoniale",
-    "singolo": "Letto singolo",
-    "divano_letto": "Divano letto",
-    "francese": "Letto Queen-size",
-    "king": "Letto King-size",
+    "matrimoniale": "Letto matrimoniale (ca. 140 x 200 cm)",
+    "singolo": "Letto singolo (ca. 90 x 200 cm)",
+    "divano_letto": "Divano letto singolo",
+    "divano_letto_matrimoniale": "Divano letto matrimoniale",
+    "francese": "Letto Queen-size (ca. 160 x 200 cm)",
+    "king": "Letto King-size (ca. 180 x 200 cm)",
     "castello": "Letto a castello",
+    "singoli_separati": "Letti singoli separati (2x ca. 90 x 200 cm)",
 }
 
 step_counter = 0
@@ -143,7 +145,7 @@ def step_done(page, name):
         page.wait_for_load_state("domcontentloaded", timeout=10_000)
     except Exception:
         pass
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(400)
     screenshot(page, name)
     save_html(page, name)
 
@@ -152,7 +154,7 @@ def dismiss_overlay(page):
     """Close any modal/overlay: Escape, button clicks, then JS hide."""
     # 1) Press Escape
     page.keyboard.press("Escape")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(200)
 
     # 2) Try close buttons inside known modal containers
     for selector in [".react-modal-portal-v2", ".ReactModal__Overlay"]:
@@ -162,7 +164,7 @@ def dismiss_overlay(page):
                 close_btn = modal.locator("button").first
                 if close_btn.count() > 0:
                     close_btn.click()
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(200)
                     print(f"  Modal chiuso ({selector} -> button)")
                     return
         except Exception:
@@ -173,7 +175,7 @@ def dismiss_overlay(page):
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
             ok_btn.first.click()
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(200)
     except Exception:
         pass
 
@@ -197,7 +199,19 @@ def dismiss_overlay(page):
     }""")
     if hidden:
         print(f"  Nascosti {hidden} overlay via JS (pointer-events:none + zIndex:-1)")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
+
+
+def dismiss_cookie(page):
+    """Chiude il cookie banner CaseVacanza prima di qualsiasi click sui contatori."""
+    try:
+        btn = page.locator('[data-test="accept-button"]:visible').first
+        if btn.is_visible(timeout=2000):
+            btn.click()
+            page.wait_for_timeout(500)
+            print("Cookie banner chiuso")
+    except Exception:
+        pass
 
 
 def try_step(page, step_name, func, critical=False):
@@ -234,7 +248,7 @@ def click_save_and_verify(page, step_name):
 
     # Scroll to bottom to make save button visible
     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(200)
 
     # Diagnostic: check if save-button exists in DOM
     save_exists = page.evaluate("""() => {
@@ -310,7 +324,7 @@ def click_save_and_verify(page, step_name):
                 else:
                     print(f"  [WARN] Nessun bottone save/continua trovato!")
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(200)
 
     url_after = page.url
     heading_after = page.evaluate("""() => {
@@ -523,6 +537,106 @@ def fill_field(page, value, labels, css_selectors, field_name):
     return filled
 
 
+def click_counter_by_label(page, label_text, clicks):
+    """Click the + button N times for a counter row identified by its visible label.
+
+    Uses 3 strategies in order:
+    A) data-test selectors (if available)
+    B) Playwright locator: find label → walk up DOM → click last button with force
+    C) JavaScript: find label element, walk to row, call .click() on + button
+
+    Returns True if at least one strategy succeeded.
+    """
+    if clicks <= 0:
+        return True
+
+    # --- Strategy A: try data-test based selectors ---
+    data_test_map = {
+        "Camera da letto": "bedroom-count",
+        "Soggiorno": "living-room-count",
+        "Bagno": "bathroom-count",
+        "Cucina": "kitchen-count",
+    }
+    dt_key = data_test_map.get(label_text)
+    if dt_key:
+        add_btn = page.locator(f'[data-test="{dt_key}"] [data-test="counter-add-btn"]')
+        if add_btn.count() > 0:
+            for i in range(clicks):
+                add_btn.click(force=True)
+                page.wait_for_timeout(200)
+            print(f"  {label_text}: +{clicks} via data-test='{dt_key}' (Strategy A)")
+            return True
+
+    # --- Strategy B: Playwright locator walk-up ---
+    try:
+        label_loc = page.get_by_text(label_text, exact=True)
+        if label_loc.count() == 0:
+            label_loc = page.get_by_text(label_text, exact=False)
+        if label_loc.count() > 0:
+            # Walk up the DOM to find a container with >= 2 buttons
+            for depth in range(1, 12):
+                xpath_expr = "/".join([".."] * depth)
+                ancestor = label_loc.first.locator(f"xpath={xpath_expr}")
+                btns = ancestor.locator("button")
+                btn_count = btns.count()
+                if btn_count >= 2:
+                    plus_btn = btns.last
+                    for i in range(clicks):
+                        plus_btn.click(force=True, timeout=3000)
+                        page.wait_for_timeout(250)
+                    print(f"  {label_text}: +{clicks} via Playwright walk-up depth={depth} (Strategy B)")
+                    return True
+    except Exception as e:
+        print(f"  {label_text}: Strategy B fallita: {e}")
+
+    # --- Strategy C: JavaScript native .click() ---
+    try:
+        for i in range(clicks):
+            result = page.evaluate("""(label) => {
+                const lower = label.toLowerCase();
+                // Find the most specific element containing the label
+                const all = document.querySelectorAll('div, span, label, p, li, h3, h4, td, strong, b');
+                let best = null;
+                let bestLen = Infinity;
+                for (const el of all) {
+                    const t = el.textContent.trim();
+                    if (t.toLowerCase() === lower || (t.toLowerCase().includes(lower) && t.length < lower.length * 2.5)) {
+                        if (t.length < bestLen) {
+                            best = el;
+                            bestLen = t.length;
+                        }
+                    }
+                }
+                if (!best) return {ok: false, error: 'label not found'};
+
+                // Walk up to find row with >=2 buttons
+                let row = best;
+                for (let d = 0; d < 12; d++) {
+                    if (!row) break;
+                    const btns = row.querySelectorAll('button');
+                    if (btns.length >= 2) {
+                        const addBtn = btns[btns.length - 1];
+                        addBtn.click();  // Native DOM click — React picks it up via delegation
+                        return {ok: true, btnText: addBtn.textContent.trim(), depth: d};
+                    }
+                    row = row.parentElement;
+                }
+                return {ok: false, error: 'no button row found'};
+            }""", label_text)
+            if not result.get("ok"):
+                print(f"  {label_text}: Strategy C fallita: {result.get('error')}")
+                return False
+            if i == 0:
+                print(f"  {label_text}: JS .click() depth={result.get('depth')} btn='{result.get('btnText')}'")
+            page.wait_for_timeout(250)
+        print(f"  {label_text}: +{clicks} via JS .click() (Strategy C)")
+        return True
+    except Exception as e:
+        print(f"  {label_text}: Strategy C exception: {e}")
+
+    return False
+
+
 def click_room_counter(page, label_text, clicks):
     """Click the + button N times for a counter row identified by label text.
 
@@ -636,7 +750,7 @@ def click_room_counter(page, label_text, clicks):
         # --- Click at the exact coordinates using Playwright mouse ---
         x, y = btn_info["x"], btn_info["y"]
         page.mouse.click(x, y)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(250)
 
         if click_idx == 0:
             method = btn_info.get("method", "?")
@@ -655,12 +769,11 @@ def click_room_counter(page, label_text, clicks):
 
 
 def login(page):
-    """Login su CaseVacanza.it via Keycloak SSO."""
+    """Login su CaseVacanza.it via Keycloak SSO (resiliente a cambio selettori/iframe)."""
     print("Login CaseVacanza.it...")
     page.goto("https://my.casevacanza.it", timeout=60_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
-    page.wait_for_timeout(2000)  # Extra wait for Keycloak redirect to settle
+    page.wait_for_timeout(2000)
     screenshot(page, "login_page")
 
     # Close cookie popup if present
@@ -668,18 +781,93 @@ def login(page):
         ok_btn = page.locator("button", has_text="Ok")
         if ok_btn.count() > 0 and ok_btn.first.is_visible():
             ok_btn.first.click()
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(500)
             print("  Popup cookie chiuso")
     except Exception:
         pass
 
-    # Keycloak login form
-    page.fill("#username", EMAIL)
-    page.fill("#password", PASSWORD)
-    screenshot(page, "login_credenziali")
-    page.click("#kc-login")
-    page.wait_for_load_state("domcontentloaded")
+    # Iframe check (Keycloak SSO may be in iframe)
+    login_frame = page
+    if len(page.frames) > 1:
+        for frame in page.frames:
+            try:
+                if frame.locator("input[type='password']").count() > 0:
+                    login_frame = frame
+                    print(f"  Login in iframe: {frame.url}")
+                    break
+            except Exception:
+                pass
+
+    # Wait for any login input to appear
+    INPUT_SELECTOR = (
+        "#username, #email, input[name='username'], input[name='email'], "
+        "input[type='email'], input[type='text'], input[type='password']"
+    )
+    try:
+        login_frame.wait_for_selector(INPUT_SELECTOR, timeout=30_000)
+    except Exception:
+        print("  [WARN] Campi login non visibili, provo state=attached...")
+        try:
+            login_frame.wait_for_selector(INPUT_SELECTOR, timeout=15_000, state="attached")
+        except Exception:
+            screenshot(page, "login_timeout")
+            save_html(page, "login_timeout")
+            raise RuntimeError("Campi login non trovati dopo timeout")
     page.wait_for_timeout(1000)
+
+    # Email field — prova più selettori
+    email_field = None
+    for sel in ["#username", "#email", "input[name='username']", "input[name='email']",
+                "input[name='loginname']", "input[type='email']", "input[type='text']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            email_field = loc.first
+            print(f"  Campo email trovato: {sel}")
+            break
+    if email_field is None:
+        for lbl in ["Email", "Username", "E-mail", "Indirizzo email"]:
+            loc = login_frame.get_by_label(lbl)
+            if loc.count() > 0:
+                email_field = loc.first
+                break
+    if email_field is None:
+        screenshot(page, "login_no_email_field")
+        save_html(page, "login_no_email_field")
+        raise RuntimeError("Campo email non trovato")
+    email_field.fill(EMAIL)
+
+    # Password field
+    pw_field = None
+    for sel in ["#password", "input[name='password']", "input[type='password']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            pw_field = loc.first
+            print(f"  Campo password trovato: {sel}")
+            break
+    if pw_field is None:
+        raise RuntimeError("Campo password non trovato")
+    pw_field.fill(PASSWORD)
+    screenshot(page, "login_credenziali")
+
+    # Login button
+    login_btn = None
+    for sel in ["#kc-login", "button[type='submit']", "input[type='submit']"]:
+        loc = login_frame.locator(sel)
+        if loc.count() > 0:
+            login_btn = loc.first
+            break
+    if login_btn is None:
+        for lbl in ["Accedi", "Login", "Sign in", "Entra"]:
+            loc = login_frame.get_by_text(lbl, exact=True)
+            if loc.count() > 0:
+                login_btn = loc.first
+                break
+    if login_btn is None:
+        raise RuntimeError("Bottone login non trovato")
+    login_btn.click()
+
+    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_timeout(3000)
     step_done(page, "dopo_login")
     print(f"  URL dopo login: {page.url}")
     print("Login effettuato.")
@@ -692,7 +880,7 @@ def navigate_to_add_property(page):
     # First check if there's an incomplete property to resume
     page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(1500)
 
     property_name = PROP.get("marketing", {}).get("titolo", "")
     # Look for "Da completare" / "Completa e pubblica" button for this property
@@ -716,7 +904,7 @@ def navigate_to_add_property(page):
                         # Click the first matching one
                         complete_btn.first.click()
                         page.wait_for_load_state("domcontentloaded")
-                        page.wait_for_timeout(3000)
+                        page.wait_for_timeout(1500)
                         print(f"  Ripresa proprietà incompleta: {property_name}")
                         dismiss_overlay(page)
                         step_done(page, "ripresa_proprietà")
@@ -728,11 +916,10 @@ def navigate_to_add_property(page):
     print("Nessuna proprietà incompleta trovata — creo nuova")
     page.goto("https://my.casevacanza.it/listing/add-property", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
 
     # Dismiss any modal (cookie popup, ReactModal, etc.)
     dismiss_overlay(page)
-    page.wait_for_timeout(3000)  # Let React SPA fully render wizard components
+    page.wait_for_timeout(1500)  # Let React SPA fully render wizard components
 
     step_done(page, "pagina_iniziale")
     print("Pagina wizard raggiunta.")
@@ -760,7 +947,7 @@ def insert_property(page):
     # --- Step 1: Click [data-test="single"] (Proprietà a unità singola) ---
     print("Step 1: Proprietà a unità singola")
     dismiss_overlay(page)
-    page.wait_for_timeout(2000)  # Let React finish rendering wizard
+    page.wait_for_timeout(800)  # Let React finish rendering wizard
 
     def do_step1():
         # Try data-test first, then text fallback
@@ -770,7 +957,6 @@ def insert_property(page):
         else:
             page.get_by_text("Proprietà a unità singola", exact=False).click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "tipo_proprietà")
 
     # When resuming, step1 is not critical (we're past it already)
@@ -824,7 +1010,7 @@ def insert_property(page):
     def do_step5():
         page.get_by_text("Inseriscilo manualmente").click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(400)
 
         ident = PROP["identificativi"]
         addr_parts = ident["indirizzo"].rsplit(" ", 1)
@@ -832,15 +1018,15 @@ def insert_property(page):
         civico = addr_parts[1] if len(addr_parts) > 1 else ""
 
         page.locator('[data-test="stateOrProvince"]').fill(ident["regione"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="city"]').fill(ident["comune"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="street"]').fill(via)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="houseNumberOrName"]').fill(civico)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         page.locator('[data-test="postalCode"]').fill(ident["cap"])
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
         step_done(page, "indirizzo_compilato")
 
     try_step(page, "step5_indirizzo", do_step5)
@@ -907,32 +1093,58 @@ def insert_property(page):
 
         page.locator('[data-test="save-button"]').click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "dopo_mappa")
 
     try_step(page, "step7_mappa", do_step7)
 
     # --- Step 8: Ospiti e camere ---
     comp = PROP["composizione"]
-    print(f"Step 8: Ospiti e camere ({comp['max_ospiti']} ospiti, "
-          f"{comp['camere']} cam, {comp['bagni']} bagni)")
+    ospiti = comp["max_ospiti"]
+    camere = comp["camere"]
+    bagni = comp["bagni"]
+    print(f"Step 8: Ospiti e camere ({ospiti} ospiti, {camere} cam, {bagni} bagni)")
 
     def do_step8():
-        # Screenshot BEFORE any interaction
-        save_html(page, "step8_BEFORE_clicks")
+        """Mappa confermata dall'HTML reale (step8_BEFORE_clicks.html):
+        counter-add-btn nth(0) = Ospiti
+        counter-add-btn nth(1) = Camera da letto  (default 1)
+        counter-add-btn nth(2) = Soggiorno        (default 0, lasciamo 0)
+        counter-add-btn nth(3) = Bagno            (default 0)
+        counter-add-btn nth(4) = Cucina           (default 0)
+        """
         screenshot(page, "step8_BEFORE_clicks")
 
-        # --- OSPITI: use proven data-test scoped selector ---
-        ospiti_btn = page.locator(
+        # Chiudi cookie banner PRIMA di qualsiasi click
+        dismiss_cookie(page)
+        page.wait_for_timeout(500)
+
+        # Tutti i counter-add-btn sulla pagina (ordine fisso confermato)
+        add = page.locator('[data-test="counter-add-btn"]')
+
+        # Ospiti: usa selector scoped al guest-count (sicuro, già funzionava)
+        guest_add = page.locator(
             '[data-test="guest-count"] [data-test="counter-add-btn"]')
-        if ospiti_btn.count() > 0:
-            for _ in range(comp["max_ospiti"] - 1):
-                ospiti_btn.click()
-                page.wait_for_timeout(300)
-            print(f"  Ospiti: {comp['max_ospiti']}")
-        else:
-            # Fallback: coordinate click on ospiti counter
-            click_room_counter(page, "Ospiti", comp["max_ospiti"] - 1)
+        for _ in range(max(0, ospiti - 1)):  # default è 1
+            guest_add.click()
+            page.wait_for_timeout(300)
+        print(f"  Ospiti → {ospiti}")
+
+        # Camera da letto: nth(1), default è 1
+        for _ in range(max(0, camere - 1)):
+            add.nth(1).click()
+            page.wait_for_timeout(300)
+        print(f"  Camere → {camere}")
+
+        # Bagno: nth(3), default è 0
+        for _ in range(max(0, bagni)):
+            add.nth(3).click()
+            page.wait_for_timeout(300)
+        print(f"  Bagni → {bagni}")
+
+        # Cucina: nth(4), sempre 1
+        add.nth(4).click()
+        page.wait_for_timeout(300)
+        print("  Cucina → 1")
 
         # Bambini ammessi checkbox
         try:
@@ -953,28 +1165,7 @@ def insert_property(page):
             except Exception:
                 pass
 
-        # Wait for DOM to settle after ospiti changes
-        page.wait_for_timeout(1500)
-
-        # --- ROOM COUNTERS: coordinate-based clicks ---
-        # Camera da letto: default=1, need (camere - 1) extra clicks
-        bedroom_extra = comp["camere"] - 1
-        if bedroom_extra > 0:
-            click_room_counter(page, "Camera da letto", bedroom_extra)
-
-        # Soggiorno: skip (default 0 is fine for most properties)
-
-        # Bagno: default=1 on CaseVacanza, need (bagni - 1) extra clicks
-        bagno_extra = comp["bagni"] - 1
-        if bagno_extra > 0:
-            click_room_counter(page, "Bagno", bagno_extra)
-
-        # Cucina: default=0, need 1 click
-        click_room_counter(page, "Cucina", 1)
-
-        # Take screenshot AFTER all clicks to verify
         screenshot(page, "step8_AFTER_room_clicks")
-
         step_done(page, "ospiti_camere")
 
     try_step(page, "step8_ospiti_camere", do_step8)
@@ -983,27 +1174,91 @@ def insert_property(page):
     print("Step 9: Continua (ospiti)")
     click_save_and_verify(page, "ospiti")
 
-    # --- Step 10: Configura letti (dal JSON composizione.letti) ---
+    # --- Step 10: Configura letti ---
     print("Step 10: Configura letti")
 
     def do_step10():
+        """Struttura confermata dall'HTML reale:
+        - Camera 1 è espansa di default
+        - Camera 2+ è collassata → serve click su [data-test=expand-room]
+        - Tutti i letti hanno data-test=counter-add-btn
+        - Il testo del grandparent identifica il tipo letto
+        """
+        dismiss_cookie(page)
+        page.wait_for_timeout(500)
+
         letti = comp.get("letti", [])
         if not letti:
             print("  ATTENZIONE: nessun dato letti nel JSON, skip")
-            step_done(page, "letti_configurati")
+            step_done(page, "letti_skip")
             return
 
-        for letto in letti:
-            tipo = letto["tipo"]
-            qty = letto["quantita"]
-            label = LETTO_LABEL.get(tipo)
-            if not label:
-                print(f"  [WARN] Tipo letto sconosciuto: {tipo}, skip")
-                continue
+        screenshot(page, "step10_BEFORE_letti")
 
-            # Bed counters also don't have data-test — use click_room_counter
-            click_room_counter(page, label, qty)
+        # Label esatte dalla pagina reale
+        LETTO_TESTO = {
+            "matrimoniale":         "Letto matrimoniale",
+            "king":                 "Letto King-size",
+            "queen":                "Letto Queen-size",
+            "singolo":              "Letto singolo",
+            "divano_letto":         "Divano letto singolo",
+            "divano_letto_matrimoniale": "Divano letto matrimoniale",
+            "letto_a_castello":     "Letto a castello",
+        }
 
+        def click_letto(label_parziale, quantita, camera_idx):
+            """Trova e clicca il bed counter per label, nella camera specificata."""
+            # Se camera > 0, espandi quella camera
+            if camera_idx > 0:
+                try:
+                    expand_btns = page.locator('[data-test="expand-room"]')
+                    if expand_btns.count() > 0:
+                        expand_btns.first.click()
+                        page.wait_for_timeout(800)
+                        print(f"    Camera {camera_idx + 1} espansa")
+                except Exception as e:
+                    print(f"    [WARN] Espansione camera {camera_idx + 1} fallita: {e}")
+
+            for _ in range(quantita):
+                coords = page.evaluate("""(label) => {
+                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
+                    for (const btn of btns) {
+                        const gp = btn.parentElement && btn.parentElement.parentElement;
+                        if (gp && gp.textContent.includes(label)) {
+                            const r = btn.getBoundingClientRect();
+                            if (r.width > 0 && r.height > 0) {
+                                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+                            }
+                        }
+                    }
+                    return null;
+                }""", label_parziale)
+                if coords:
+                    page.mouse.click(coords['x'], coords['y'])
+                    page.wait_for_timeout(400)
+                else:
+                    print(f"    [WARN] '{label_parziale}' non trovato in camera {camera_idx + 1}")
+                    return
+            print(f"    + {quantita}x {label_parziale} (camera {camera_idx + 1})")
+
+        # Assegna letti: letti[0]→Camera1, letti[1]→Camera2, resto→Camera1
+        for cam_idx, letto_entry in enumerate(letti[:camere]):
+            tipo = letto_entry.get("tipo", "matrimoniale")
+            qty = int(letto_entry.get("quantita", 1))
+            label = LETTO_TESTO.get(tipo, tipo)
+            print(f"  Camera {cam_idx + 1}: {qty}x {tipo}")
+            click_letto(label, qty, cam_idx)
+
+        # Letti extra oltre le camere (es. divano_letto) → camera 1
+        for letto_entry in letti[camere:]:
+            tipo = letto_entry.get("tipo", "")
+            qty = int(letto_entry.get("quantita", 1))
+            label = LETTO_TESTO.get(tipo, tipo)
+            if tipo:
+                print(f"  Extra: {qty}x {tipo} → camera 1")
+                click_letto(label, qty, 0)
+
+        screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
 
     try_step(page, "step10_letti", do_step10)
@@ -1021,16 +1276,37 @@ def insert_property(page):
             step_done(page, "foto_skip")
             return
 
+        print(f"  Foto da caricare: {len(photo_paths)}")
+        for p in photo_paths:
+            sz = os.path.getsize(p) if os.path.isfile(p) else 0
+            print(f"    {p} ({sz} bytes)")
+
         uploaded = False
-        # Strategy 1: standard input[type="file"]
+
+        # Strategy 0: use file chooser event (most reliable for "Carica foto" button)
         try:
-            fi = page.locator("input[type='file']")
-            if fi.count() > 0:
-                fi.set_input_files(photo_paths)
-                uploaded = True
-                print(f"  Upload {len(photo_paths)} foto via input[type='file']")
+            with page.expect_file_chooser(timeout=5000) as fc_info:
+                # Click "Carica foto" button to trigger file chooser
+                btn = page.get_by_text("Carica foto")
+                if btn.count() > 0:
+                    btn.first.click()
+            file_chooser = fc_info.value
+            file_chooser.set_files(photo_paths)
+            uploaded = True
+            print(f"  Upload {len(photo_paths)} foto via file chooser")
         except Exception as e:
-            print(f"  Strategy 1 fallita: {e}")
+            print(f"  Strategy 0 (file chooser) fallita: {e}")
+
+        # Strategy 1: standard input[type="file"]
+        if not uploaded:
+            try:
+                fi = page.locator("input[type='file']")
+                if fi.count() > 0:
+                    fi.set_input_files(photo_paths)
+                    uploaded = True
+                    print(f"  Upload {len(photo_paths)} foto via input[type='file']")
+            except Exception as e:
+                print(f"  Strategy 1 fallita: {e}")
 
         # Strategy 2: input[accept*="image"]
         if not uploaded:
@@ -1056,7 +1332,9 @@ def insert_property(page):
                 print(f"  Strategy 3 fallita: {e}")
 
         if uploaded:
-            page.wait_for_timeout(10_000)
+            # Wait for upload to complete (thumbnails should appear)
+            page.wait_for_timeout(6000)
+            screenshot(page, "foto_uploaded")
         else:
             print("  SKIP foto: nessuna strategia ha funzionato")
 
@@ -1079,7 +1357,7 @@ def insert_property(page):
                 tab = page.get_by_role("tab", name=tab_label)
                 if tab.count() > 0:
                     tab.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     print(f"  Tab '{tab_label}' cliccata")
                     break
             except Exception:
@@ -1089,7 +1367,7 @@ def insert_property(page):
                 tab = page.get_by_text("Tutti", exact=True)
                 if tab.count() > 0:
                     tab.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     print("  Tab 'Tutti' cliccata (text fallback)")
             except Exception as e:
                 print(f"  [WARN] Tab 'Tutti' non trovata: {e}")
@@ -1104,7 +1382,7 @@ def insert_property(page):
                     cb = page.get_by_role("checkbox", name=servizio, exact=True)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (role=checkbox exact)")
                         selected = True
                 except Exception:
@@ -1115,7 +1393,7 @@ def insert_property(page):
                     cb = page.get_by_role("checkbox", name=servizio, exact=False)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (role=checkbox partial)")
                         selected = True
                 except Exception:
@@ -1127,7 +1405,7 @@ def insert_property(page):
                     cb = page.get_by_label(servizio, exact=True)
                     if cb.count() > 0:
                         cb.first.check()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (get_by_label)")
                         selected = True
                 except Exception:
@@ -1160,7 +1438,7 @@ def insert_property(page):
                         return {found: false};
                     }""", servizio)
                     if result.get("found"):
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (JS checkbox)")
                         selected = True
                 except Exception as e:
@@ -1172,7 +1450,7 @@ def insert_property(page):
                     el = page.get_by_text(servizio, exact=True)
                     if el.count() > 0:
                         el.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         print(f"  [OK] {servizio} (click text)")
                         selected = True
                 except Exception:
@@ -1195,7 +1473,6 @@ def insert_property(page):
     def do_step16():
         page.get_by_text("Li scrivo io").click()
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(1000)
         step_done(page, "li_scrivo_io")
 
     try_step(page, "step16_li_scrivo_io", do_step16)
@@ -1214,14 +1491,14 @@ def insert_property(page):
             page.locator(
                 "input[name*='titolo'], input[name*='title'], input[placeholder*='Titolo']"
             ).first.fill(titolo)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
 
         desc_field = page.get_by_label("Descrizione")
         if desc_field.count() > 0:
             desc_field.fill(descrizione)
         else:
             page.locator("textarea").first.fill(descrizione)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(200)
 
         step_done(page, "titolo_descrizione")
 
@@ -1246,7 +1523,7 @@ def insert_property(page):
                 print("  Pagina prezzo caricata")
             except Exception:
                 print("  [WARN] Heading 'Impostiamo il prezzo' non trovato, continuo comunque")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(800)
 
             # Diagnostic: log all input elements on the page
             diag = page.evaluate("""() => {
@@ -1269,7 +1546,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (placeholder '{ph}')")
@@ -1285,7 +1562,7 @@ def insert_property(page):
                         if f.count() > 0:
                             f.first.scroll_into_view_if_needed()
                             f.first.click()
-                            page.wait_for_timeout(500)
+                            page.wait_for_timeout(200)
                             f.first.fill(prezzo_str)
                             filled = True
                             print(f"  Prezzo: {prezzo_str} EUR/notte (label '{lbl}')")
@@ -1303,7 +1580,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS placeholder)")
@@ -1320,7 +1597,7 @@ def insert_property(page):
                     if f.count() > 0:
                         f.first.scroll_into_view_if_needed()
                         f.first.click()
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(200)
                         f.first.fill(prezzo_str)
                         filled = True
                         print(f"  Prezzo: {prezzo_str} EUR/notte (CSS)")
@@ -1337,7 +1614,7 @@ def insert_property(page):
                         if inp_type in ("text", "number", "tel", ""):
                             inp.scroll_into_view_if_needed()
                             inp.click()
-                            page.wait_for_timeout(500)
+                            page.wait_for_timeout(200)
                             inp.fill(prezzo_str)
                             filled = True
                             print(f"  Prezzo: {prezzo_str} EUR/notte (visible input type={inp_type})")
@@ -1402,7 +1679,7 @@ def insert_property(page):
                 print(f"  [WARN] Campo prezzo non trovato — {prezzo_str} EUR/notte")
             else:
                 # Verify the value actually stuck
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(200)
                 screenshot(page, "prezzo_filled")
         else:
             print("  Prezzo non presente nel JSON — lascio vuoto")
@@ -1463,7 +1740,7 @@ def insert_property(page):
                     print(f"  [WARN] Bottone '{button_label}' non trovato sulla pagina")
                     return
 
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 print(f"  Cliccato '{button_label}' — apro form costo extra")
                 screenshot(page, f"extra_cost_{button_label.lower().replace(' ', '_')}")
 
@@ -1476,7 +1753,7 @@ def insert_property(page):
                         f = page.get_by_placeholder(ph, exact=False)
                         if f.count() > 0:
                             f.last.click()
-                            page.wait_for_timeout(300)
+                            page.wait_for_timeout(200)
                             f.last.fill(amount)
                             filled = True
                             print(f"  {button_label}: €{amount} (placeholder '{ph}')")
@@ -1491,7 +1768,7 @@ def insert_property(page):
                             f = page.get_by_label(lbl)
                             if f.count() > 0:
                                 f.last.click()
-                                page.wait_for_timeout(300)
+                                page.wait_for_timeout(200)
                                 f.last.fill(amount)
                                 filled = True
                                 print(f"  {button_label}: €{amount} (label '{lbl}')")
@@ -1505,7 +1782,7 @@ def insert_property(page):
                         inputs = page.locator("input[type='number'], input[inputmode='numeric'], input[inputmode='decimal']")
                         if inputs.count() > 0:
                             inputs.last.click()
-                            page.wait_for_timeout(300)
+                            page.wait_for_timeout(200)
                             inputs.last.fill(amount)
                             filled = True
                             print(f"  {button_label}: €{amount} (input number)")
@@ -1540,7 +1817,7 @@ def insert_property(page):
                     print(f"  [WARN] Campo importo per '{button_label}' non trovato")
 
                 # Confirm/save the extra cost
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(200)
                 for confirm_text in ["Salva", "Conferma", "Aggiungi", "OK", "Ok", "Save"]:
                     try:
                         confirm = page.get_by_role("button", name=confirm_text)
@@ -1588,7 +1865,7 @@ def insert_property(page):
 
             if modifica_btn:
                 modifica_btn.click()
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(1500)
                 print("  Cliccato 'Modifica' impostazioni predefinite")
                 screenshot(page, "impostazioni_predefinite_aperte")
 
@@ -1676,7 +1953,7 @@ def insert_property(page):
                         save_btn = page.get_by_role("button", name=save_text)
                         if save_btn.count() > 0 and save_btn.last.is_visible():
                             save_btn.last.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             print(f"  Impostazioni predefinite salvate ('{save_text}')")
                             saved = True
                             break
@@ -1689,7 +1966,7 @@ def insert_property(page):
                         submit = page.locator("[type='submit'], button[form]")
                         if submit.count() > 0 and submit.last.is_visible():
                             submit.last.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             saved = True
                             print("  Impostazioni predefinite salvate (submit)")
                     except Exception:
@@ -1697,7 +1974,7 @@ def insert_property(page):
 
                 # Always dismiss overlay after modal interaction
                 dismiss_overlay(page)
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(400)
 
             else:
                 print("  [INFO] Bottone 'Modifica' non trovato — impostazioni predefinite skip")
@@ -1736,7 +2013,7 @@ def insert_property(page):
                     radio = page.get_by_text(radio_text, exact=False)
                     if radio.count() > 0:
                         radio.first.click()
-                        page.wait_for_timeout(2000)
+                        page.wait_for_timeout(800)
                         radio_clicked = True
                         print(f"  Radio selezionato: '{radio_text}'")
                         break
@@ -1749,7 +2026,7 @@ def insert_property(page):
                     radios = page.locator("input[type='radio']")
                     if radios.count() > 0:
                         radios.first.click()
-                        page.wait_for_timeout(2000)
+                        page.wait_for_timeout(800)
                         radio_clicked = True
                         print("  Radio selezionato (primo radio input)")
                 except Exception:
@@ -1789,7 +2066,7 @@ def insert_property(page):
                         confirm = page.get_by_role("button", name=confirm_text)
                         if confirm.count() > 0 and confirm.first.is_visible():
                             confirm.first.click()
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(800)
                             print(f"  Confermato import iCal ('{confirm_text}')")
                             break
                     except Exception:
@@ -1804,7 +2081,7 @@ def insert_property(page):
                     radio = page.get_by_text(no_text, exact=False)
                     if radio.count() > 0:
                         radio.first.click()
-                        page.wait_for_timeout(1000)
+                        page.wait_for_timeout(400)
                         print(f"  Selezionato: '{no_text}'")
                         break
                 except Exception:
@@ -1841,7 +2118,7 @@ def insert_property(page):
                     cin_field = page.get_by_placeholder(ph, exact=False)
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato: {cin} (placeholder '{ph}')")
@@ -1855,7 +2132,7 @@ def insert_property(page):
                     cin_field = page.locator("input[placeholder*='CIN']")
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato: {cin} (CSS placeholder)")
@@ -1868,7 +2145,7 @@ def insert_property(page):
                     cin_field = page.get_by_label("CIN", exact=False)
                     if cin_field.count() > 0:
                         cin_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cin_field.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (label): {cin}")
@@ -1928,7 +2205,7 @@ def insert_property(page):
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 0:
                         text_inputs.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         text_inputs.first.fill(cin)
                         filled_cin = True
                         print(f"  CIN compilato (primo input): {cin}")
@@ -1948,7 +2225,7 @@ def insert_property(page):
                     cir_field = page.get_by_placeholder(ph, exact=False)
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato: {cir} (placeholder '{ph}')")
@@ -1962,7 +2239,7 @@ def insert_property(page):
                     cir_field = page.locator("input[placeholder*='CIR']")
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato: {cir} (CSS placeholder)")
@@ -1975,7 +2252,7 @@ def insert_property(page):
                     cir_field = page.get_by_label("CIR", exact=False)
                     if cir_field.count() > 0:
                         cir_field.first.click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         cir_field.first.fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (label): {cir}")
@@ -2033,7 +2310,7 @@ def insert_property(page):
                     text_inputs = page.locator("input[type='text'], input:not([type])")
                     if text_inputs.count() > 1:
                         text_inputs.nth(1).click()
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(200)
                         text_inputs.nth(1).fill(cir)
                         filled_cir = True
                         print(f"  CIR compilato (secondo input): {cir}")
@@ -2054,7 +2331,7 @@ def insert_property(page):
     # --- Step 28: Pagina finale — solo screenshot, NON inviare ---
     print("\nStep 28: Pagina finale — SOLO screenshot")
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(400)
     step_done(page, "pagina_finale")
     print("Flusso completato! NON inviato per la verifica.")
 
@@ -2098,7 +2375,7 @@ def add_seasonal_prices(page):
     print("\nNavigazione alla lista proprietà...")
     page.goto("https://my.casevacanza.it/listing/properties", timeout=30_000)
     page.wait_for_load_state("domcontentloaded")
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(1500)
     step_done(page, "lista_proprietà")
 
     # Find and click the property name to go to its dashboard
@@ -2112,7 +2389,7 @@ def add_seasonal_prices(page):
         if link.count() > 0:
             link.first.click()
             page.wait_for_load_state("domcontentloaded")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(800)
             found = True
             print(f"  Proprietà trovata e aperta: {nome}")
     except Exception as e:
@@ -2125,7 +2402,7 @@ def add_seasonal_prices(page):
             if prop_link.count() > 0:
                 prop_link.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 found = True
                 print("  Aperta prima proprietà dalla lista")
         except Exception as e:
@@ -2147,7 +2424,7 @@ def add_seasonal_prices(page):
             if tab.count() > 0:
                 tab.first.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 tab_found = True
                 print(f"  Tab '{tab_text}' aperta")
                 break
@@ -2164,7 +2441,7 @@ def add_seasonal_prices(page):
             if tab_link.count() > 0:
                 tab_link.first.click()
                 page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(800)
                 tab_found = True
                 print("  Tab tariffe aperta (CSS fallback)")
         except Exception as e:
@@ -2190,7 +2467,7 @@ def add_seasonal_prices(page):
                 btn = page.get_by_text(btn_text, exact=False)
                 if btn.count() > 0:
                     btn.first.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     add_clicked = True
                     print(f"  Cliccato '{btn_text}'")
                     break
@@ -2205,7 +2482,7 @@ def add_seasonal_prices(page):
                 ).last
                 if btn.count() > 0:
                     btn.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     add_clicked = True
                     print("  Cliccato bottone 'Aggiungi' (fallback)")
             except Exception:
@@ -2266,7 +2543,7 @@ def add_seasonal_prices(page):
                 if save_btn.count() > 0:
                     save_btn.first.click()
                     page.wait_for_load_state("domcontentloaded")
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     saved = True
                     print(f"  Salvata stagione {i+1} ('{save_text}')")
                     break
@@ -2280,7 +2557,7 @@ def add_seasonal_prices(page):
                 if save_btn.count() > 0:
                     save_btn.first.click()
                     page.wait_for_load_state("domcontentloaded")
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
                     saved = True
                     print(f"  Salvata stagione {i+1} (data-test save)")
             except Exception:
