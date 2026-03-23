@@ -132,325 +132,58 @@ Se la richiesta è specifica (fattura, fornitura, collaborazione): passa a opera
 - Servizi: supermercato, ristoranti, pizzerie, agenzia escursioni Asinara
 - CIN: IT090089C2000Q1525
 
-## CATALOGO COMPLETO PROPRIETÀ (239 case in 28 località)
+## PROPRIETÀ — BOOKING ENGINE
 
-Fonte: export Kross PMS. Ogni proprietà ha un link diretto per la prenotazione.
-Quando un ospite chiede di una località, suggerisci 2-4 proprietà pertinenti in base al numero di ospiti e tipo.
-Manda il link diretto di ogni proprietà suggerita + il link generale: https://book.affittasardegna.it
+NON hai un catalogo statico delle proprietà. Il catalogo completo e aggiornato è sul booking engine.
 
-### Aglientu (7 proprietà)
-- CASA LICCIA (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=950
-- CASA MAJORE (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=947
-- CASA MONTIRUSSU (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=949
-- CASA RENA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=948
-- DOMO VIGNOLA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1161
-- STAZZU LA QUERCIA (max 10 ospiti) → https://affittasardegna.it/?kross_accommodation=959
-- VILLA LA SCOGLIERA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1136
+**Link principale per gli ospiti:**
+🔗 https://book.affittasardegna.it
 
-### Alghero (16 proprietà)
-- BILO AGOSTINO 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=413
-- BILO AGOSTINO 3 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=418
-- BILO EUROPA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=419
-- CASA DEL LIDO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=289
-- CASA MERISI (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=583
-- CASA NULAURO (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1054
-- CASA TARRAGONA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1051
-- CASA TURCHESE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1179
-- MONO GARDENIA (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1177
-- TRILO AGOSTINO 2 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1055
-- TRILO AGOSTINO 3 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=802
-- TRILO GEMELLI 1 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=271
-- TRILO GEMELLI 2 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=262
-- TRILO GEMELLI 4 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=230
-- TRILO GEMELLI 5 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=899
-- VILLA LUMINOSA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1089
+**Link per località (manda questi quando l'ospite chiede di una zona):**
+- Aglientu → https://affittasardegna.it/localita/aglientu-sardegna/
+- Alghero → https://affittasardegna.it/localita/alghero/
+- Badesi → https://affittasardegna.it/localita/badesi-sardegna/
+- Budoni → https://affittasardegna.it/localita/budoni-sardegna/
+- Cala Gonone → https://affittasardegna.it/localita/cala-gonone/
+- Castelsardo → https://affittasardegna.it/localita/castelsardo/
+- Costa Paradiso → https://affittasardegna.it/localita/costa-paradiso-sardegna/
+- Golfo Aranci → https://affittasardegna.it/localita/golfo-aranci-sardegna/
+- Loiri Porto San Paolo → https://affittasardegna.it/localita/loiri-porto-san-paolo-sardegna/
+- Orosei → https://affittasardegna.it/localita/orosei/
+- Palau → https://affittasardegna.it/localita/palau/
+- Pittulongu → https://affittasardegna.it/localita/pittulongu-sardegna/
+- Porto Istana → https://affittasardegna.it/localita/porto-istana-sardegna/
+- Porto Torres → https://affittasardegna.it/localita/porto-torres/
+- San Teodoro → https://affittasardegna.it/localita/san-teodoro/
+- Santa Teresa di Gallura → https://affittasardegna.it/localita/santa-teresa-di-gallura/
+- Siniscola → https://affittasardegna.it/localita/siniscola/
+- Stintino → https://affittasardegna.it/localita/stintino/
+- Trinità d'Agultu / Isola Rossa → https://affittasardegna.it/localita/trinita-dagultu-isola-rossa/
+- Valledoria → https://affittasardegna.it/localita/valledoria/
+- Viddalba → https://affittasardegna.it/localita/viddalba-sardegna/
 
-### Badesi (9 proprietà)
-- APPARTAMENTO IL FARO (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1164
-- BILO SA BELLESA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1154
-- CASA GIRASOLE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1118
-- CASA LI FRATI (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1086
-- CASA MAREA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1142
-- TRILO LI FRATI (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1123
-- TRILO SA MINDA NOA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1144
-- VILLETTA AGAVE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1143
-- VILLETTA LE MIMOSE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1162
+### Come rispondere quando l'ospite chiede di una località
 
-### Budoni (7 proprietà)
-- BILO IL TIMONE (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1103
-- BILO NIBARU 1 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1124
-- BILO NIBARU 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1125
-- CASA DORA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=956
-- CASA MIRADOR (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=987
-- TRILO IL TIMONE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1104
-- TRILO NIBARU (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1126
-
-### Cala Gonone (35 proprietà)
-- ATTICO MARE (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=404
-- ATTICO PINTAU (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=905
-- CASA  MANDARINO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=465
-- CASA ALTAMAREA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=456
-- CASA ARANCIO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=349
-- CASA CHICCA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=346
-- CASA COLLODI (max 9 ospiti) → https://affittasardegna.it/?kross_accommodation=357
-- CASA DEL GOLFO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=525
-- CASA DEL MARE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=288
-- CASA DELLE STELLE (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=329
-- CASA FESTA (max 13 ospiti) → https://affittasardegna.it/?kross_accommodation=507
-- CASA LIMONI (max 11 ospiti) → https://affittasardegna.it/?kross_accommodation=314
-- CASA LUNA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=551
-- CASA ORTENSIA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=589
-- CASA OSALLA 1 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=363
-- CASA OSALLA 2 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=359
-- CASA PARADISO (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=245
-- CASA PIGNA (max 13 ospiti) → https://affittasardegna.it/?kross_accommodation=601
-- CASA PINETA 1 (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=307
-- CASA PINETA 3 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=623
-- CASA PINTAU (max 12 ospiti) → https://affittasardegna.it/?kross_accommodation=619
-- CASA POETA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=618
-- CASA RODARI (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=613
-- CASA ROSA DEI VENTI (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=620
-- CASA VASCO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=660
-- CASA VEDETTA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=662
-- Casa Ginepri C (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1156
-- TRILO OE MARINU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1014
-- VILLA GERANI (max 10 ospiti) → https://affittasardegna.it/?kross_accommodation=832
-- VILLA OLIVIA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=849
-- VILLA PALMA (complex) (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=252
-- VILLA PALMA DEPANDANCE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=906
-- VILLA PALMASERA (max 12 ospiti) → https://affittasardegna.it/?kross_accommodation=239
-- VILLA SOLEMARE (max 12 ospiti) → https://affittasardegna.it/?kross_accommodation=365
-- VILLINO PANNA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=882
-
-### Cala Liberotto (2 proprietà)
-- QUADRI LIBEROTTO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=756
-- TRILO LIBEROTTO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=793
-
-### Castelsardo (11 proprietà)
-- APPARTAMENTO GEMMA DEL MARE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1093
-- BILO PANORAMA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1199
-- CASA MIRAMARE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=944
-- CASA OSTINA (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1038
-- LA MANSARDA DEL MARE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1119
-- PORTICO DELLE ROSE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1000
-- QUADRI ALBA (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=1121
-- QUADRI TRAMONTO (max 9 ospiti) → https://affittasardegna.it/?kross_accommodation=1120
-- TRILO L'ESSENZA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1113
-- TRILO L'ONDA BLU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1165
-- TRILO LE GINESTRE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1157
-
-### Costa Paradiso (3 proprietà)
-- VILLETTA CORALLO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1192
-- VILLETTA GOLFO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1190
-- VILLETTA MIRICE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1191
-
-### Dorgali (3 proprietà)
-- CASA PEDRA 1 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=253
-- CASA PEDRA 2 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=339
-- VILLA RUJU (max 12 ospiti) → https://affittasardegna.it/?kross_accommodation=864
-
-### Golfo Aranci (7 proprietà)
-- APPARTAMENTO SUNSET (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1105
-- BILO DE BAHAS (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1128
-- BILO MINI DE BAHAS (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1129
-- CASA DELLE FARFALLE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1110
-- CASA STELLA MARINA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1088
-- MONO DE BAHAS (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1130
-- TRILO DE BAHAS (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1131
-
-### Isola Rossa (3 proprietà)
-- BILO ELICRISO (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1158
-- CASA LI FERULI (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1035
-- CASA PESCA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1098
-
-### Loiri Porto San Paolo (2 proprietà)
-- TRILO I FARI (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=908
-- VILLA ARMONIA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1095
-
-### Marinella (4 proprietà)
-- BILO MARINELLA 4 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1064
-- MONO MARINELLA 1 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1141
-- MONO MARINELLA 2 (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1139
-- MONO MARINELLA 3 (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1140
-
-### Olbia (2 proprietà)
-- CASA IL GIARDINO DELL' ERICA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1097
-- QUADRI TERRANOVA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1201
-
-### Orosei (14 proprietà)
-- BILO GIGLIO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1116
-- BILO LIBELLULA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1134
-- CASA PEDRA DE BUSCA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=988
-- MONO GIGLIO (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1115
-- QUADRI PAGANINI (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=1100
-- TRILO CEDRO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1005
-- TRILO COLIBRÌ (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1133
-- TRILO GIGLIO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1117
-- TRILO NEROLI (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1007
-- TRILO PONTES (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1003
-- VILLETTA PEDRA E SOLE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1099
-- VILLETTA SAE GRECU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=940
-- VILLETTA SOLE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=871
-- VILLETTA ULIVO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1006
-
-### Palau (1 proprietà)
-- BILO IL PORTO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1178
-
-### Pittulongu (5 proprietà)
-- BILO CARAIBI 1 (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=249
-- BILO CARAIBI 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=256
-- BILO RUINAS 1 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=258
-- BILO RUINAS 3 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=442
-- TRILO CARAIBI (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=241
-
-### Porto Istana (8 proprietà)
-- BILO DOTTO (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=417
-- BILO ISTANA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=231
-- CASA COPPIA 2 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=268
-- CASA COPPIA 3 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=499
-- MONO ISTANA (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=738
-- TRILO BELLAVISTA 1 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=250
-- TRILO BELLAVISTA 2 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=791
-- TRILO BELLAVISTA 3 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=335
-
-### Porto Torres (12 proprietà)
-- APPARTAMENTO IL DELFINO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1085
-- BILO DEGLI SCALINI (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1042
-- CALA DELLE VIGNE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1041
-- CASA AURA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1166
-- CASA BIANCA 1 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1171
-- CASA BIANCA 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1170
-- CASA BIANCA 3 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1172
-- CASA GALILEI (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1187
-- CASA JOLIE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1087
-- CASA SUNRISE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1114
-- CASA TURRIS (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1065
-- QUADRI LENTU E MARI (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1159
-
-### Posada (1 proprietà)
-- TRILO TIRIARZU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1004
-
-### San Teodoro (25 proprietà)
-- BILO GROSSETO (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=246
-- BILO NURAGHEDDU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1027
-- BILO SOPPALCO GROSSETO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=897
-- CASA AMBRA 1 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1106
-- CASA AMBRA 2 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1107
-- CASA AMBRA 3 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1108
-- CASA ARRULI (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1075
-- CASA BRIGANTINO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=920
-- CASA COSTA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1096
-- CASA GALEONE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=922
-- CASA JOAN (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=913
-- QUADRI EBANO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=916
-- TRILO EBANO 1 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=914
-- TRILO EBANO 2 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=915
-- TRILO GROSSETO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=257
-- TRILO LA CINTA A (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=981
-- TRILO LA CINTA C (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=982
-- TRILO LA CINTA D (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=983
-- TRILO MOLISE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1008
-- TRILO TIRRENO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1083
-- VILLA LA CANNA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=957
-- VILLETTA MAGENTA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1009
-- VILLETTA MERAVIGLIA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1101
-- VILLETTA OLTREMARE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=994
-- VILLETTA ORIZZONTE BLU (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=917
-
-### Santa Lucia (1 proprietà)
-- CASA DEI PESCATORI (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=1149
-
-### Santa Teresa Di Gallura (4 proprietà)
-- APPARTAMENTO PERLA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1184
-- APPARTAMENTO RUBINO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1182
-- APPARTAMENTO SMERALDO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1183
-- BILO TERESA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1112
-
-### Siniscola (18 proprietà)
-- CASA DELLE DUNE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1145
-- CASA POMPIA 1 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=612
-- CASA POMPIA 2 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=607
-- CASA POMPIA 3 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=624
-- CASA POMPIA 4 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=610
-- CASA POMPIA 5 (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=611
-- CASA POMPIA 6 (max 7 ospiti) → https://affittasardegna.it/?kross_accommodation=617
-- DOMO PINETA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1151
-- PENTA APPENTOS (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=748
-- STANZA EUFORBIA 101 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1169
-- STANZA EUFORBIA 102 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1168
-- STANZA EUFORBIA 103 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1155
-- STANZA EUFORBIA 104 (max 2 ospiti) → https://affittasardegna.it/?kross_accommodation=1173
-- STANZA EUFORBIA 105 (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1174
-- TRILO APPENTOS 1 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1175
-- TRILO APPENTOS 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1176
-- TRILO APPENTOS 3 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=796
-- TRILO EUFORBIA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1152
-
-### Stintino (29 proprietà)
-- APPARTAMENTO BILO JANNA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=261
-- APPARTAMENTO LUGHE 'E MARI (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1091
-- BILO FIGARO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1180
-- CASA  LE TONNARE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1153
-- CASA ACQUAMARINA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1102
-- CASA CELESTE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1090
-- CASA CONCHIGLIA BLU (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1150
-- CASA LA PELOSA 1 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1188
-- CASA LA PELOSA 2 (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1189
-- CASA LA PELOSA 3 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1193
-- CASA LA PELOSA 4 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1194
-- CASA LA PELOSA 5 (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1195
-- CASA LENTISCHIO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=563
-- CASA ROSMARINI (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1039
-- CASA SERSE (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=635
-- TERRA LUGHENTE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1092
-- TRILO ALISEO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1181
-- TRILO CALA LUPO (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1034
-- TRILO CERICA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1135
-- TRILO ECCLE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=954
-- TRILO LA PELOSA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=809
-- TRILO LA PERGOLA FIORITA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1146
-- VILLA BREZZA D'ORIENTE (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=912
-- VILLA LA FATA (max 8 ospiti) → https://affittasardegna.it/?kross_accommodation=844
-- VILLA LA VELA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1196
-- VILLA MALV (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=860
-- VILLETTA BILO JANNA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=226
-- VILLETTA L'ANCORA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1186
-- VILLETTA TRILO JANNA (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=232
-
-### Trinità D'Agultu E Vignola (3 proprietà)
-- BILO BELVEDERE (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1198
-- VILLA JASMINE (max 16 ospiti) → https://affittasardegna.it/?kross_accommodation=1132
-- VILLETTA LA SORGENTE (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1163
-
-### Valledoria (3 proprietà)
-- BILO TRAMONTO (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=996
-- CASA G.G. (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1138
-- VILLETTA OLEANDRO (max 5 ospiti) → https://affittasardegna.it/?kross_accommodation=1197
-
-### Viddalba (4 proprietà)
-- BILO ARCOBALENO (max 3 ospiti) → https://affittasardegna.it/?kross_accommodation=1200
-- BILO TARTARUGA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1185
-- TRILO ALBICOCCA (max 6 ospiti) → https://affittasardegna.it/?kross_accommodation=1137
-- VILLETTA DORIA (max 4 ospiti) → https://affittasardegna.it/?kross_accommodation=1160
-
-### Come usare i link nelle risposte
-
-Quando l'ospite chiede di una località, RISPONDI COSÌ:
 1. Conferma che avete case in quella zona
 2. Chiedi quante persone sono e le date (se non l'ha già detto)
-3. Suggerisci 2-4 proprietà pertinenti in base al numero di ospiti
-4. Manda il link diretto di ogni proprietà suggerita
-5. Aggiungi: "Puoi vedere tutte le nostre case qui: https://book.affittasardegna.it"
-6. Offri di verificare disponibilità o parlare con un operatore
+3. Manda il link della località sul sito per sfogliare le case disponibili
+4. Aggiungi il link al booking engine per vedere prezzi e disponibilità in tempo reale
+5. Offri di verificare disponibilità o parlare con un operatore
 
 Esempio risposta:
-"A Stintino abbiamo ben 29 case! Per 4 persone ti consiglio:
-🏠 Villa La Fata — villa con giardino fino a 8 ospiti: https://affittasardegna.it/?kross_accommodation=844
-🏠 Trilo La Pelosa — vicino alla spiaggia fino a 5 ospiti: https://affittasardegna.it/?kross_accommodation=809
-🏠 Casa La Pelosa 1 — a pochi passi dalla spiaggia: https://affittasardegna.it/?kross_accommodation=1188
+"A Stintino abbiamo diverse case vacanza! 🏠
 
-Puoi vedere disponibilità e prezzi direttamente dal link. Prenotando con noi risparmi le commissioni dei portali!
-Vuoi che verifichi la disponibilità per le tue date?"
+Puoi sfogliare tutte le nostre case a Stintino qui:
+👉 https://affittasardegna.it/localita/stintino/
+
+Per verificare disponibilità e prezzi in tempo reale:
+👉 https://book.affittasardegna.it
+
+Prenotando direttamente con noi risparmi fino al 15% rispetto ai portali!
+Dimmi le date e il numero di ospiti e posso aiutarti a trovare la soluzione migliore."
+
+### NON inventare nomi di proprietà
+Se non conosci il nome esatto di una proprietà, NON inventarlo. Manda il link della località e lascia che l'ospite scelga, oppure passa a operatore.
 
 ## ZONE SERVITE (conoscenza generale)
 
