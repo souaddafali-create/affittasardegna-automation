@@ -3,108 +3,67 @@
     "nome_struttura": "BILO LE CALETTE",
     "tipo_struttura": "Appartamento",
     "indirizzo": "Via del Porto 12",
-    "cap": "07020",
     "comune": "Palau",
+    "cap": "07020",
     "provincia": "SS",
     "regione": "Sardegna",
-    "residence_complesso": null,
-    "interno": null,
-    "piano": null,
+    "paese": "Italy",
     "cin": "IT090089C2000TEST01",
-    "cir": "TEST01",
-    "codice_proprieta": null,
-    "coordinate": {
-      "latitudine": null,
-      "longitudine": null
-    }
+    "cir": "TEST01"
   },
   "composizione": {
     "max_ospiti": 3,
     "camere": 1,
+    "bagni": 1,
     "posti_letto": 3,
     "letti": [
-      {"tipo": "matrimoniale", "quantita": 1},
-      {"tipo": "divano_letto", "quantita": 1}
-    ],
-    "bagni": 1,
-    "bagno_con_doccia": false,
-    "bagno_con_vasca": false,
-    "metri_quadri": null
+      { "tipo": "matrimoniale", "quantita": 1 },
+      { "tipo": "divano_letto", "quantita": 1 }
+    ]
   },
   "dotazioni": {
     "tv": true,
     "piano_cottura": true,
-    "frigo_congelatore": false,
+    "frigo_congelatore": true,
     "forno": false,
-    "microonde": false,
     "lavatrice": true,
     "lavastoviglie": true,
     "aria_condizionata": true,
-    "riscaldamento": false,
-    "camino": false,
     "internet_wifi": true,
-    "phon": false,
-    "ferro_stiro": false,
-    "zanzariere": false,
-    "terrazza": false,
-    "veranda": false,
-    "giardino": false,
-    "cortile": false,
-    "parcheggio_privato": false,
-    "garage": false,
+    "terrazza": true,
     "piscina": false,
-    "piscina_tipo": null,
-    "arredi_esterno": false,
-    "barbecue": false,
-    "doccia_esterna": false,
-    "biciclette": false,
-    "culla": false,
-    "seggiolone": false,
+    "piscina_tipo": "",
     "animali_ammessi": false,
-    "animali_note": null,
-    "altro_dotazioni": "balcone"
-  },
-  "sicurezza": {
-    "estintori": false,
-    "rilevatore_gas_co": false
-  },
-  "condizioni": {
-    "soggiorno_minimo_bassa": {"notti": 7, "periodo": "bassa stagione"},
-    "soggiorno_minimo_alta": {"notti": 7, "periodo": "alta stagione"},
-    "soggiorno_minimo_dettaglio": null,
-    "soggiorno_massimo_giorni": null,
-    "cauzione_euro": 200,
-    "prezzo_notte": null,
-    "pulizia_finale": null,
-    "biancheria": null,
-    "asciugamani": null,
-    "lenzuola": null,
-    "check_in": "16:00 - 20:00",
-    "check_out": "10:00",
-    "regole_casa": null,
-    "listino_prezzi": [
-      {"da": "28-mar", "a": "30-mag", "prezzo_notte": 57},
-      {"da": "30-mag", "a": "13-giu", "prezzo_notte": 64},
-      {"da": "13-giu", "a": "27-giu", "prezzo_notte": 71},
-      {"da": "27-giu", "a": "11-lug", "prezzo_notte": 86},
-      {"da": "11-lug", "a": "25-lug", "prezzo_notte": 100},
-      {"da": "25-lug", "a": "01-ago", "prezzo_notte": 107},
-      {"da": "01-ago", "a": "22-ago", "prezzo_notte": 121},
-      {"da": "22-ago", "a": "29-ago", "prezzo_notte": 107},
-      {"da": "29-ago", "a": "12-set", "prezzo_notte": 71},
-      {"da": "12-set", "a": "26-set", "prezzo_notte": 64},
-      {"da": "26-set", "a": "31-ott", "prezzo_notte": 57}
-    ],
-    "ical_url": null
+    "parcheggio_privato": false
   },
   "marketing": {
-    "foto": [],
-    "titolo": "Elegante bilocale fronte porto con vista mare nel cuore di Palau",
-    "descrizione_breve": "Elegante bilocale fronte porto con vista mare nel cuore di Palau",
-    "descrizione_lunga": "Affacciato direttamente sul porto turistico di Palau, questo luminoso bilocale rappresenta la soluzione ideale per chi desidera vivere una vacanza autentica tra mare, comfort e panorama unico.",
-    "punti_forza": [],
-    "distanze": [],
-    "servizi_vicinanze": [],
-    "keywords": []
+    "titolo": "BILO LE CALETTE - Bilocale fronte porto con vista mare a Palau",
+    "descrizione_lunga": "Affacciato direttamente sul porto turistico di Palau, questo luminoso bilocale rappresenta la soluzione ideale per chi desidera vivere una vacanza autentica tra mare, comfort e panorama unico. Situato in posizione strategica e centrale, l'appartamento permette di raggiungere comodamente a piedi il centro, le spiagge e gli imbarchi per l'Arcipelago della Maddalena.",
+    "foto": []
+  },
+  "condizioni": {
+    "prezzo_base": 2000,
+    "check_in": "16:00 - 20:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": { "notti": 7 },
+    "soggiorno_minimo_alta": { "notti": 7 },
+    "cauzione": 200,
+    "pulizia_finale": "100 EUR a soggiorno obbligatoria",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "",
+    "listino_prezzi": [
+      { "dal": "2025-03-28", "al": "2025-05-30", "prezzo_notte": 57 },
+      { "dal": "2025-05-30", "al": "2025-06-13", "prezzo_notte": 64 },
+      { "dal": "2025-06-13", "al": "2025-06-27", "prezzo_notte": 71 },
+      { "dal": "2025-06-27", "al": "2025-07-11", "prezzo_notte": 86 },
+      { "dal": "2025-07-11", "al": "2025-07-25", "prezzo_notte": 100 },
+      { "dal": "2025-07-25", "al": "2025-08-01", "prezzo_notte": 107 },
+      { "dal": "2025-08-01", "al": "2025-08-22", "prezzo_notte": 121 },
+      { "dal": "2025-08-22", "al": "2025-08-29", "prezzo_notte": 107 },
+      { "dal": "2025-08-29", "al": "2025-09-12", "prezzo_notte": 71 },
+      { "dal": "2025-09-12", "al": "2025-09-26", "prezzo_notte": 64 },
+      { "dal": "2025-09-26", "al": "2025-10-31", "prezzo_notte": 57 }
+    ]
   }
 }
