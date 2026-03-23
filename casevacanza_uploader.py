@@ -203,20 +203,13 @@ def dismiss_overlay(page):
 
 
 def dismiss_cookie(page):
-    """Chiude il cookie banner CaseVacanza se presente."""
+    """Chiude il cookie banner CaseVacanza prima di qualsiasi click sui contatori."""
     try:
         btn = page.locator('[data-test="accept-button"]:visible').first
         if btn.is_visible(timeout=2000):
             btn.click()
             page.wait_for_timeout(500)
-            print("  Cookie banner chiuso")
-    except Exception:
-        pass
-    try:
-        btn2 = page.locator('[data-test="accept-all-button"]:visible').first
-        if btn2.is_visible(timeout=500):
-            btn2.click()
-            page.wait_for_timeout(300)
+            print("Cookie banner chiuso")
     except Exception:
         pass
 
@@ -1191,6 +1184,9 @@ def insert_property(page):
         - Tutti i letti hanno data-test=counter-add-btn
         - Il testo del grandparent identifica il tipo letto
         """
+        dismiss_cookie(page)
+        page.wait_for_timeout(500)
+
         letti = comp.get("letti", [])
         if not letti:
             print("  ATTENZIONE: nessun dato letti nel JSON, skip")
@@ -1198,10 +1194,6 @@ def insert_property(page):
             return
 
         screenshot(page, "step10_BEFORE_letti")
-
-        # Chiudi cookie banner prima
-        dismiss_cookie(page)
-        page.wait_for_timeout(500)
 
         # Label esatte dalla pagina reale
         LETTO_TESTO = {
