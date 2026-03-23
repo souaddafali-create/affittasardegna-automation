@@ -43,7 +43,10 @@ USER_AGENT = (
 
 def _get_piscina_label():
     """Return the correct CaseVacanza pool label based on piscina_tipo in JSON."""
-    tipo = PROP.get("dotazioni", {}).get("piscina_tipo", "")
+   dot = PROP.get("dotazioni", {})
+    tipo = dot.get("piscina_tipo", "") if isinstance(dot, dict) else ""
+    if not tipo:
+        return None
     if "privata" in tipo.lower():
         return "Piscina (privata)"
     return "Piscina (in comune)"
