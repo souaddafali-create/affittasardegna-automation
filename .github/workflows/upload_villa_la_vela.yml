@@ -25,18 +25,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium
+      - name: Install dependencies
+        run: pip install playwright pillow
 
-      - name: Install Playwright
-        run: |
-          pip install playwright Pillow
-          playwright install chromium --with-deps
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
 
       - name: Run uploader (Villa La Vela)
         env:
