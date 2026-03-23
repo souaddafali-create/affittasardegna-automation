@@ -1,12 +1,12 @@
 name: CaseVacanza - Villa La Vela
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'Villa_La_Vela_DATI.json'
+      - 'casevacanza_uploader.py'
+  workflow_dispatch:
 
 concurrency:
   group: casevacanza-villa-la-vela
