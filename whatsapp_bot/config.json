@@ -1,6 +1,6 @@
 {
   "bot_name": "AffittaSardegna WhatsApp Bot",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "company": {
     "name": "AffittaSardegna",
     "since": 2011,
@@ -8,26 +8,24 @@
     "coverage": "Nord Sardegna — da Alghero a Cala Gonone",
     "hq": "Porto Torres (SS)",
     "phone_booking": "+39 079 4125245",
-    "phone_whatsapp": "+39 347 805 6842",
+    "phone_operators": "+39 349 478 7272",
+    "phone_bot": "+39 347 805 6842",
     "website": "https://affittasardegna.it",
     "booking_engine": "https://book.affittasardegna.it",
-    "booking_system": "Kross Booking (NO API — link diretto al booking engine)",
     "languages": ["IT", "EN", "DE", "FR", "ES", "PL", "SV", "DA", "NL"]
   },
   "whatsapp": {
-    "phone_number": "+393478056842",
-    "provider": "360dialog",
-    "provider_cost": "~8 EUR/mese",
-    "note": "Secondo numero aziendale dedicato al bot. Numero principale (349 478 7272) resta per WhatsApp Web operatori.",
+    "bot_number": "+393478056842",
+    "operator_number": "+393494787272",
+    "waba_id": "915074801021967",
     "meta_app_id": "126921442533925",
     "meta_app_name": "AffittaSardegna Messaging Bot",
-    "blocker": "Verifica numero +39 347 805 6842 su Meta Business Manager con Edoardo"
+    "note": "Bot sul 347, operatori sul 349 via WhatsApp Web"
   },
   "n8n": {
     "instance_url": "https://affittasardegna.app.n8n.cloud",
     "cost": "~20 EUR/mese",
-    "webhook_path": "/webhook/33d39489-b64a-42d4-b571-9a0384059a14",
-    "webhook_test_path": "/webhook-test/33d39489-b64a-42d4-b571-9a0384059a14"
+    "webhook_path": "/webhook/33d39489-b64a-42d4-b571-9a0384059a14"
   },
   "claude_api": {
     "model": "claude-sonnet-4-20250514",
@@ -42,31 +40,16 @@
     "flow_5": "Altro → commercialista, fornitore, consulente → risposta cortese + operatore se specifico"
   },
   "human_handoff": {
+    "method": "WhatsApp diretto a operatore (stesso numero bot, via API)",
     "operators": ["Souad", "Edoardo"],
-    "method": "WhatsApp Web sullo stesso numero",
-    "note": "Il bot risponde automaticamente per info generali. Souad ed Edoardo intervengono via WhatsApp Web per prenotazioni, problemi urgenti, proprietari e trattative."
+    "note": "Quando serve un umano, il bot manda un WhatsApp a OPERATOR_PHONE con il riepilogo"
   },
-  "data_sources": {
-    "properties_detail": "JSON individuali (Il_Faro_Badesi_DATI.json, Villa_La_Vela_DATI.json, ecc.)",
-    "availability_prices": "Link diretto al booking engine: https://book.affittasardegna.it (NO API Kross)",
-    "website": "affittasardegna.it (WordPress + JetEngine)",
-    "note": "Per le proprietà non in JSON, il bot risponde con info generali + link Kross e passa a operatore per dettagli specifici."
-  },
-  "locations_served": [
-    "Alghero", "Stintino", "Porto Torres", "Castelsardo", "Valledoria", "Badesi",
-    "Isola Rossa", "Santa Teresa Gallura", "Palau", "La Maddalena",
-    "Arzachena", "Porto Cervo", "Cannigione", "Baja Sardinia",
-    "Olbia", "Golfo Aranci", "Pittulongu", "Porto Istana", "Loiri Porto San Paolo",
-    "San Teodoro", "Budoni", "Posada", "Siniscola", "Orosei", "Cala Gonone",
-    "Costa Paradiso", "Viddalba", "Trinità d'Agultu"
+  "env_vars_required": [
+    "WHATSAPP_ACCESS_TOKEN — Token permanente Meta Graph API",
+    "ANTHROPIC_API_KEY — API key Anthropic per Claude",
+    "WHATSAPP_BOT_SYSTEM_PROMPT — Contenuto di system_prompt.txt",
+    "OPERATOR_PHONE — Numero operatore principale (formato: 39349XXXXXXX)"
   ],
-  "env_vars_required": {
-    "n8n_credentials": [
-      "WHATSAPP_API_KEY — API key 360dialog",
-      "ANTHROPIC_API_KEY — API key Anthropic per Claude",
-      "OPERATOR_PHONES — Numeri operatori per notifiche (comma-separated)"
-    ]
-  },
   "properties_with_json": [
     {
       "name": "Il Faro",

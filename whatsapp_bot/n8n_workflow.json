@@ -64,20 +64,24 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1024, system: $env.WHATSAPP_BOT_SYSTEM_PROMPT, messages: [{ role: 'user', content: $json.message_text }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1024, system: $env.WHATSAPP_BOT_SYSTEM_PROMPT, messages: [{ role: 'user', content: $json.message_text }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "claude-api",
-      "name": "Claude API - Classify & Respond",
+      "name": "Claude API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1000, 200]
+      "position": [1000, 200],
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "functionCode": "const claudeResponse = $input.first().json;\nconst responseText = claudeResponse.content[0].text;\n\n// Parse structured response from Claude\n// Claude returns JSON with: category, needs_human, response_text, priority\nlet parsed;\ntry {\n  parsed = JSON.parse(responseText);\n} catch (e) {\n  // If Claude didn't return JSON, treat as direct response\n  parsed = {\n    category: 'altro',\n    needs_human: true,\n    response_text: responseText,\n    priority: 'normal'\n  };\n}\n\n// Get original message data from previous node\nconst msgData = $('Extract Message Data').first().json;\n\nreturn [{\n  json: {\n    ...msgData,\n    bot_response: parsed.response_text,\n    category: parsed.category,\n    needs_human: parsed.needs_human,\n    priority: parsed.priority || 'normal',\n    summary: parsed.summary || ''\n  }\n}];"
+        "functionCode": "const claudeResult = $input.first().json;\nconst msgData = $('Extract Message Data').first().json;\n\n// Check if Claude API failed\nconst hasError = claudeResult.error || !claudeResult.content;\n\nlet parsed;\nif (hasError) {\n  // FALLBACK: Claude is down or errored\n  parsed = {\n    category: 'altro',\n    needs_human: true,\n    priority: 'high',\n    response_text: 'Grazie per il messaggio! Un operatore del team AffittaSardegna ti risponderà a breve.',\n    summary: 'Claude API non disponibile — messaggio passato direttamente agli operatori'\n  };\n} else {\n  // Normal path: parse Claude response\n  const responseText = claudeResult.content[0].text;\n  try {\n    let clean = responseText.trim();\n    if (clean.startsWith('```')) {\n      clean = clean.split('\\n', 2)[1] || clean.substring(3);\n      clean = clean.replace(/```\\s*$/, '');\n    }\n    parsed = JSON.parse(clean.trim());\n  } catch (e) {\n    // Claude responded but not valid JSON — treat as needing human\n    parsed = {\n      category: 'altro',\n      needs_human: true,\n      priority: 'normal',\n      response_text: 'Grazie per il messaggio! Un operatore del team AffittaSardegna ti risponderà a breve.',\n      summary: 'Risposta Claude non parsabile: ' + responseText.substring(0, 200)\n    };\n  }\n}\n\nreturn [{\n  json: {\n    ...msgData,\n    bot_response: parsed.response_text || 'Grazie, ti ricontatteremo a breve.',\n    category: parsed.category || 'altro',\n    needs_human: parsed.needs_human !== undefined ? parsed.needs_human : true,\n    priority: parsed.priority || 'normal',\n    summary: parsed.summary || '',\n    claude_failed: hasError\n  }\n}];"
       },
       "id": "parse-response",
-      "name": "Parse Claude Response",
+      "name": "Parse Response (with Fallback)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [1250, 200]
@@ -127,13 +131,26 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.HUMAN_INBOX_WEBHOOK_URL }}",
+        "url": "=https://graph.facebook.com/v21.0/{{ $('Extract Message Data').first().json.phone_number_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ phone: $json.sender_phone, name: $json.sender_name, category: $json.category, priority: $json.priority, message: $json.message_text, bot_response: $json.bot_response, summary: $json.summary, timestamp: $json.timestamp }) }}"
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $env.OPERATOR_PHONE, type: 'text', text: { body: '📋 *Richiesta da gestire*\\n\\n👤 ' + ($json.sender_name || $json.sender_phone) + '\\n📞 +' + $json.sender_phone + '\\n📂 ' + $json.category + '\\n⚡ ' + $json.priority + '\\n💬 ' + $json.message_text.substring(0, 300) + '\\n\\n📝 ' + $json.summary } }) }}"
       },
-      "id": "notify-human",
-      "name": "Notify Human Inbox",
+      "id": "notify-operator",
+      "name": "Notify Operator (WhatsApp)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [1750, 300]
@@ -166,25 +183,25 @@
       "main": [
         [
           {
-            "node": "Claude API - Classify & Respond",
+            "node": "Claude API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Claude API - Classify & Respond": {
+    "Claude API": {
       "main": [
         [
           {
-            "node": "Parse Claude Response",
+            "node": "Parse Response (with Fallback)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse Claude Response": {
+    "Parse Response (with Fallback)": {
       "main": [
         [
           {
@@ -204,7 +221,7 @@
       "main": [
         [
           {
-            "node": "Notify Human Inbox",
+            "node": "Notify Operator (WhatsApp)",
             "type": "main",
             "index": 0
           }

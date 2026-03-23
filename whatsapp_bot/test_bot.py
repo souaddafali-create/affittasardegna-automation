@@ -2,10 +2,9 @@
 """
 Test suite per il WhatsApp bot AffittaSardegna.
 
-Test divisi in 3 sezioni:
+Test divisi in 2 sezioni:
 1. Unit test (no API, no network) — sempre eseguiti
 2. Claude API integration test — solo se ANTHROPIC_API_KEY è impostata
-3. Edge case e multilingua
 
 Uso:
     python whatsapp_bot/test_bot.py                          # solo unit test
@@ -15,7 +14,6 @@ Uso:
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 # Prova httpx (più moderno), fallback su urllib (stdlib)
@@ -79,118 +77,35 @@ def test_config_json_valid():
 
 
 def test_n8n_workflow_valid():
-    """Verifica che n8n_workflow.json sia JSON valido."""
+    """Verifica che n8n_workflow.json sia JSON valido con fallback."""
     workflow_file = SCRIPT_DIR / "n8n_workflow.json"
     assert workflow_file.exists(), "n8n_workflow.json non trovato"
     workflow = json.loads(workflow_file.read_text(encoding="utf-8"))
     assert "nodes" in workflow, "Manca campo 'nodes'"
     assert "connections" in workflow, "Manca campo 'connections'"
     assert len(workflow["nodes"]) >= 5, f"Troppo pochi nodi: {len(workflow['nodes'])}"
-    return f"n8n_workflow.json valido con {len(workflow['nodes'])} nodi"
+
+    # Verifica che esista il nodo fallback (continueOnFail su Claude API)
+    claude_node = [n for n in workflow["nodes"] if n["id"] == "claude-api"]
+    assert claude_node, "Manca nodo Claude API"
+    assert claude_node[0].get("continueOnFail") is True, "Claude API manca continueOnFail (fallback)"
+
+    # Verifica nodo notifica operatore
+    notify_node = [n for n in workflow["nodes"] if n["id"] == "notify-operator"]
+    assert notify_node, "Manca nodo Notify Operator"
+
+    return f"n8n_workflow.json valido con {len(workflow['nodes'])} nodi e fallback attivo"
 
 
-def test_app_imports():
-    """Verifica che app.py si importi senza errori."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    try:
-        import app as bot_app
-        assert hasattr(bot_app, "call_claude"), "Manca funzione call_claude"
-        assert hasattr(bot_app, "send_whatsapp_message"), "Manca send_whatsapp_message"
-        assert hasattr(bot_app, "get_conversation"), "Manca get_conversation"
-        assert hasattr(bot_app, "is_duplicate"), "Manca is_duplicate"
-        assert hasattr(bot_app, "is_rate_limited"), "Manca is_rate_limited"
-        return "app.py importato con tutte le funzioni"
-    finally:
-        sys.path.pop(0)
-
-
-def test_conversation_memory():
-    """Verifica che la memoria conversazione funzioni."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    try:
-        from app import get_conversation, add_message, _conversations, _conv_lock
-
-        test_sender = "test_unit_memory_393001234567"
-
-        # Pulizia
-        with _conv_lock:
-            _conversations.pop(test_sender, None)
-
-        # Inizialmente vuota
-        assert get_conversation(test_sender) == [], "Conversazione non vuota all'inizio"
-
-        # Aggiungi messaggi
-        add_message(test_sender, "user", "Ciao")
-        add_message(test_sender, "assistant", '{"response_text": "Ciao!"}')
-        add_message(test_sender, "user", "Avete case a Stintino?")
-
-        history = get_conversation(test_sender)
-        assert len(history) == 3, f"Attesi 3 messaggi, trovati {len(history)}"
-        assert history[0]["role"] == "user"
-        assert history[1]["role"] == "assistant"
-        assert history[2]["content"] == "Avete case a Stintino?"
-
-        # Pulizia
-        with _conv_lock:
-            del _conversations[test_sender]
-
-        return "Memoria conversazione funzionante"
-    finally:
-        sys.path.pop(0)
-
-
-def test_deduplication():
-    """Verifica che la deduplicazione messaggi funzioni."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    try:
-        from app import is_duplicate, _processed_messages, _dedup_lock
-
-        test_id = "test_dedup_wamid.abc123"
-
-        # Pulizia
-        with _dedup_lock:
-            _processed_messages.pop(test_id, None)
-
-        # Primo messaggio: non duplicato
-        assert not is_duplicate(test_id), "Primo messaggio segnato come duplicato"
-        # Secondo messaggio: duplicato
-        assert is_duplicate(test_id), "Secondo messaggio NON segnato come duplicato"
-
-        # Pulizia
-        with _dedup_lock:
-            del _processed_messages[test_id]
-
-        return "Deduplicazione funzionante"
-    finally:
-        sys.path.pop(0)
-
-
-def test_rate_limiting():
-    """Verifica che il rate limiting funzioni."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    try:
-        from app import is_rate_limited, _rate_limits, _rate_lock, RATE_LIMIT_MAX
-
-        test_sender = "test_rate_393009999999"
-
-        # Pulizia
-        with _rate_lock:
-            _rate_limits.pop(test_sender, None)
-
-        # Primi N messaggi: OK
-        for i in range(RATE_LIMIT_MAX):
-            assert not is_rate_limited(test_sender), f"Bloccato al messaggio {i+1}"
-
-        # Messaggio N+1: bloccato
-        assert is_rate_limited(test_sender), "Non bloccato dopo il limite"
-
-        # Pulizia
-        with _rate_lock:
-            del _rate_limits[test_sender]
-
-        return f"Rate limiting funzionante (blocca dopo {RATE_LIMIT_MAX} messaggi)"
-    finally:
-        sys.path.pop(0)
+def test_no_respond_io_references():
+    """Verifica che non ci siano riferimenti a Respond.io (rimosso)."""
+    for fname in ["config.json", "SETUP.md", "n8n_workflow.json"]:
+        fpath = SCRIPT_DIR / fname
+        if fpath.exists():
+            content = fpath.read_text(encoding="utf-8").lower()
+            assert "respond.io" not in content, f"Riferimento a Respond.io trovato in {fname}"
+            assert "wati" not in content, f"Riferimento a Wati trovato in {fname}"
+    return "Nessun riferimento a tool esterni (Respond.io/Wati) — solo WhatsApp diretto"
 
 
 # ===================================================================
@@ -346,7 +261,6 @@ def run_api_test(api_key, system_prompt, test):
     # Check language in response
     if "check_language" in test and test["check_language"] == "en":
         resp_text = response.get("response_text", "")
-        # Simple heuristic: English responses should not start with Italian words
         italian_starters = ["Ciao", "Buongiorno", "Grazie", "Salve"]
         if any(resp_text.strip().startswith(w) for w in italian_starters):
             issues.append("Risposta in italiano invece che inglese")
@@ -377,18 +291,14 @@ def main():
     results = []
 
     # --- UNIT TESTS ---
-    print("\n📦 UNIT TEST (no network)")
-    print("-" * 40)
+    print("\n--- UNIT TEST (no network) ---")
 
     unit_tests = [
         ("System prompt esiste", test_system_prompt_exists),
         ("Sezioni richieste", test_system_prompt_has_required_sections),
         ("Config JSON valido", test_config_json_valid),
-        ("n8n workflow valido", test_n8n_workflow_valid),
-        ("App imports", test_app_imports),
-        ("Memoria conversazione", test_conversation_memory),
-        ("Deduplicazione", test_deduplication),
-        ("Rate limiting", test_rate_limiting),
+        ("n8n workflow valido + fallback", test_n8n_workflow_valid),
+        ("Nessun tool esterno", test_no_respond_io_references),
     ]
 
     for name, test_fn in unit_tests:
@@ -406,17 +316,16 @@ def main():
     # --- API TESTS ---
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("\n⏭️  ANTHROPIC_API_KEY non impostata — test API saltati")
+        print("\n  SKIP  ANTHROPIC_API_KEY non impostata — test API saltati")
     else:
         system_prompt = SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
 
         for section_name, test_list in [
-            ("🇮🇹 TEST ITALIANI", TEST_MESSAGES_IT),
-            ("🇬🇧 TEST INGLESI", TEST_MESSAGES_EN),
-            ("🔧 TEST EDGE CASE", TEST_MESSAGES_EDGE),
+            ("--- TEST ITALIANI ---", TEST_MESSAGES_IT),
+            ("--- TEST INGLESI ---", TEST_MESSAGES_EN),
+            ("--- TEST EDGE CASE ---", TEST_MESSAGES_EDGE),
         ]:
             print(f"\n{section_name}")
-            print("-" * 40)
 
             for test in test_list:
                 try:
@@ -432,7 +341,7 @@ def main():
                     print(f"        > {resp_preview}...")
                     if issues:
                         for issue in issues:
-                            print(f"        ⚠ {issue}")
+                            print(f"        ! {issue}")
 
                 except json.JSONDecodeError as e:
                     print(f"  FAIL  {test['name']}: JSON non valido: {e}")

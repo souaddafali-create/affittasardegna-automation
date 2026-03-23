@@ -36,7 +36,10 @@ jobs:
         run: |
           test -s whatsapp_bot/system_prompt.txt && echo "system_prompt.txt: OK"
 
-      - name: Test bot responses
+      - name: Run unit tests
+        run: python whatsapp_bot/test_bot.py
+
+      - name: Run API integration tests
         if: env.ANTHROPIC_API_KEY != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
