@@ -8,20 +8,20 @@
     "coverage": "Nord Sardegna — da Alghero a Cala Gonone",
     "hq": "Porto Torres (SS)",
     "phone_booking": "+39 079 4125245",
-    "phone_whatsapp": "+39 349 478 7272",
+    "phone_whatsapp": "+39 347 805 6842",
     "website": "https://affittasardegna.it",
     "booking_engine": "https://book.affittasardegna.it",
     "booking_system": "Kross Booking (NO API — link diretto al booking engine)",
     "languages": ["IT", "EN", "DE", "FR", "ES", "PL", "SV", "DA", "NL"]
   },
   "whatsapp": {
-    "phone_number": "+393494787272",
+    "phone_number": "+393478056842",
     "provider": "360dialog",
     "provider_cost": "~8 EUR/mese",
-    "note": "Numero principale — NON toccare. Operatori rispondono via WhatsApp Web.",
+    "note": "Secondo numero aziendale dedicato al bot. Numero principale (349 478 7272) resta per WhatsApp Web operatori.",
     "meta_app_id": "126921442533925",
     "meta_app_name": "AffittaSardegna Messaging Bot",
-    "blocker": "Verifica numero WhatsApp Business con Edoardo su Meta Business Manager"
+    "blocker": "Verifica numero +39 347 805 6842 su Meta Business Manager con Edoardo"
   },
   "n8n": {
     "instance_url": "https://affittasardegna.app.n8n.cloud",

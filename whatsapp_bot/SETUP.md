@@ -80,10 +80,10 @@ Dopo la verifica:
 1. Sezione **Numeri di telefono** → clicca il numero WhatsApp Business
 2. Se non hai ancora un numero Business:
    - Opzione A: Usa il numero di test Meta (per sviluppo)
-   - Opzione B: Registra 3494787272 come WhatsApp Business API
+   - Opzione B: Registra 3478056842 (secondo numero aziendale) come WhatsApp Business API
 
-   **ATTENZIONE**: Registrare il 3494787272 come Business API disabilita WhatsApp normale su quel numero.
-   Valuta se usare un secondo numero dedicato al bot.
+   **NOTA**: Il numero principale 3494787272 resta per WhatsApp Web degli operatori.
+   Il bot usa il secondo numero aziendale +39 347 805 6842.
 
 ## Passaggio 4 — Configura Credenziali n8n
 
