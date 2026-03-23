@@ -945,6 +945,100 @@ def insert_property(page):
     try_step(page, "step19_prezzo", do_step19)
     click_save_and_verify(page, "prezzo")
 
+    # --- Step 20b: Aggiungi prezzi stagionali nel wizard ---
+    def do_step20b():
+        listino = PROP.get("condizioni", {}).get("listino_prezzi") or []
+        if not listino:
+            print("  Nessun listino prezzi — skip stagioni wizard")
+            return
+
+        # Consolida stagioni
+        seasons = consolidate_seasonal_prices()
+        print(f"  Stagioni da inserire nel wizard: {len(seasons)}")
+
+        for i, season in enumerate(seasons):
+            da = season["da"]
+            a = season["a"]
+            prezzo = str(season["prezzo_notte"])
+            print(f"  Stagione {i+1}: {da} → {a} = €{prezzo}")
+
+            # Clicca Aggiungi prezzo stagionale
+            clicked = False
+            for btn_text in ["Aggiungi prezzo stagionale", "Aggiungi stagione", "Aggiungi prezzo"]:
+                try:
+                    btn = page.get_by_text(btn_text, exact=False)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        btn.first.click()
+                        page.wait_for_timeout(1000)
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+
+            if not clicked:
+                print(f"  [WARN] Bottone aggiungi stagione non trovato")
+                continue
+
+            # Compila date con date picker
+            page.wait_for_timeout(500)
+
+            # Data inizio — cerca dropdown/input Da
+            try:
+                da_input = page.locator("[data-test='season-start-date']")
+                if da_input.count() == 0:
+                    da_input = page.locator("input").filter(has_text="Da").first
+                if da_input.count() == 0:
+                    # Prendi il primo date input visibile
+                    date_inputs = page.locator("input[type='date']")
+                    if date_inputs.count() > 0:
+                        date_inputs.first.fill(da)
+                        print(f"    Data inizio: {da}")
+            except Exception as e:
+                print(f"    [WARN] Data inizio: {e}")
+
+            # Data fine
+            try:
+                date_inputs = page.locator("input[type='date']")
+                if date_inputs.count() > 1:
+                    date_inputs.last.fill(a)
+                    print(f"    Data fine: {a}")
+            except Exception as e:
+                print(f"    [WARN] Data fine: {e}")
+
+            # Prezzo per notte
+            try:
+                for ph in ["Prezzo per notte", "Prezzo", "notte"]:
+                    f = page.get_by_placeholder(ph, exact=False)
+                    if f.count() > 0:
+                        f.last.fill(prezzo)
+                        print(f"    Prezzo: €{prezzo}")
+                        break
+                else:
+                    # Fallback: input number visibile
+                    num_inputs = page.locator("input[type='number']")
+                    if num_inputs.count() > 0:
+                        num_inputs.last.fill(prezzo)
+                        print(f"    Prezzo: €{prezzo} (number input)")
+            except Exception as e:
+                print(f"    [WARN] Prezzo stagione: {e}")
+
+            # Salva stagione
+            page.wait_for_timeout(300)
+            for save_text in ["Salva", "Conferma", "Aggiungi", "OK"]:
+                try:
+                    save_btn = page.get_by_role("button", name=save_text)
+                    if save_btn.count() > 0 and save_btn.last.is_visible():
+                        save_btn.last.click()
+                        page.wait_for_timeout(1000)
+                        print(f"    Stagione {i+1} salvata")
+                        break
+                except Exception:
+                    continue
+
+        step_done(page, "stagioni_wizard")
+
+    try_step(page, "step20b_stagioni", do_step20b)
+
     def do_step26():
         ical_url = PROP.get("condizioni", {}).get("ical_url")
         if ical_url:
