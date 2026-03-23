@@ -1,6 +1,11 @@
 """
 WhatsApp Bot webhook server for AffittaSardegna.
 Receives messages via Meta Cloud API, responds using Claude, sends replies back.
+
+Features:
+- Conversation memory (last 20 messages per sender, 24h TTL)
+- Message deduplication (ignores already-processed message IDs)
+- Rate limiting (max 10 messages per minute per sender)
 """
 
 import hashlib
@@ -8,6 +13,8 @@ import hmac
 import json
 import logging
 import os
+import time
+import threading
 import urllib.request
 import urllib.parse
 
@@ -29,6 +36,26 @@ OPERATOR_PHONES = os.environ.get("OPERATOR_PHONES", "").split(",")
 
 SYSTEM_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "system_prompt.txt")
 
+# --- Conversation memory ---
+# {phone_number: {"messages": [{"role": ..., "content": ...}], "updated": timestamp}}
+_conversations = {}
+_conv_lock = threading.Lock()
+CONV_MAX_MESSAGES = 20  # keep last 20 messages per conversation
+CONV_TTL_SECONDS = 24 * 60 * 60  # expire after 24 hours of inactivity
+
+# --- Message deduplication ---
+# Set of recently processed message IDs (with timestamps for cleanup)
+_processed_messages = {}  # {message_id: timestamp}
+_dedup_lock = threading.Lock()
+DEDUP_TTL_SECONDS = 60 * 5  # remember message IDs for 5 minutes
+
+# --- Rate limiting ---
+# {phone_number: [timestamp, timestamp, ...]}
+_rate_limits = {}
+_rate_lock = threading.Lock()
+RATE_LIMIT_MAX = 10  # max messages per window
+RATE_LIMIT_WINDOW = 60  # window in seconds
+
 
 def load_system_prompt():
     with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
@@ -45,19 +72,98 @@ def verify_signature(payload, signature):
     return hmac.compare_digest(f"sha256={expected}", signature)
 
 
-def call_claude(user_message, sender_name=""):
-    """Call Claude API and return structured response."""
+# --- Conversation memory helpers ---
+
+def _cleanup_expired():
+    """Remove expired conversations, dedup entries, and rate limit entries."""
+    now = time.time()
+    with _conv_lock:
+        expired = [k for k, v in _conversations.items()
+                   if now - v["updated"] > CONV_TTL_SECONDS]
+        for k in expired:
+            del _conversations[k]
+
+    with _dedup_lock:
+        expired = [k for k, v in _processed_messages.items()
+                   if now - v > DEDUP_TTL_SECONDS]
+        for k in expired:
+            del _processed_messages[k]
+
+    with _rate_lock:
+        expired = [k for k, v in _rate_limits.items() if not v]
+        for k in expired:
+            del _rate_limits[k]
+
+
+def get_conversation(sender):
+    """Get conversation history for a sender."""
+    with _conv_lock:
+        conv = _conversations.get(sender)
+        if conv and (time.time() - conv["updated"]) < CONV_TTL_SECONDS:
+            return list(conv["messages"])
+        return []
+
+
+def add_message(sender, role, content):
+    """Add a message to conversation history."""
+    with _conv_lock:
+        if sender not in _conversations:
+            _conversations[sender] = {"messages": [], "updated": time.time()}
+        conv = _conversations[sender]
+        conv["messages"].append({"role": role, "content": content})
+        # Keep only last N messages
+        if len(conv["messages"]) > CONV_MAX_MESSAGES:
+            conv["messages"] = conv["messages"][-CONV_MAX_MESSAGES:]
+        conv["updated"] = time.time()
+
+
+def is_duplicate(message_id):
+    """Check if a message ID was already processed."""
+    with _dedup_lock:
+        if message_id in _processed_messages:
+            return True
+        _processed_messages[message_id] = time.time()
+        return False
+
+
+def is_rate_limited(sender):
+    """Check if sender has exceeded rate limit. Returns True if blocked."""
+    now = time.time()
+    with _rate_lock:
+        if sender not in _rate_limits:
+            _rate_limits[sender] = []
+        # Remove timestamps outside the window
+        _rate_limits[sender] = [
+            t for t in _rate_limits[sender]
+            if now - t < RATE_LIMIT_WINDOW
+        ]
+        if len(_rate_limits[sender]) >= RATE_LIMIT_MAX:
+            return True
+        _rate_limits[sender].append(now)
+        return False
+
+
+# --- Claude API ---
+
+def call_claude(user_message, sender, sender_name=""):
+    """Call Claude API with conversation history and return structured response."""
     system_prompt = load_system_prompt()
+
+    # Build user content with sender info
     if sender_name:
         user_content = f"[Mittente: {sender_name}]\n{user_message}"
     else:
         user_content = user_message
 
+    # Get conversation history and append new user message
+    history = get_conversation(sender)
+    history.append({"role": "user", "content": user_content})
+
     body = json.dumps({
         "model": "claude-sonnet-4-20250514",
         "max_tokens": 1024,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_content}]
+        "messages": history,
     }).encode()
 
     req = urllib.request.Request(
@@ -75,8 +181,12 @@ def call_claude(user_message, sender_name=""):
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             text = data["content"][0]["text"]
+
+            # Save to conversation memory
+            add_message(sender, "user", user_content)
+            add_message(sender, "assistant", text)
+
             # Parse the JSON response from Claude
-            # Handle case where Claude wraps JSON in markdown code blocks
             clean = text.strip()
             if clean.startswith("```"):
                 clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
@@ -147,7 +257,14 @@ def notify_operators(sender, sender_name, message, claude_response):
 
 @app.route("/", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "AffittaSardegna WhatsApp Bot"})
+    """Health check endpoint."""
+    with _conv_lock:
+        active_conversations = len(_conversations)
+    return jsonify({
+        "status": "ok",
+        "service": "AffittaSardegna WhatsApp Bot",
+        "active_conversations": active_conversations,
+    })
 
 
 @app.route("/webhook", methods=["GET"])
@@ -177,6 +294,9 @@ def handle_webhook():
     if not body:
         return "OK", 200
 
+    # Periodic cleanup of expired data
+    _cleanup_expired()
+
     try:
         for entry in body.get("entry", []):
             for change in entry.get("changes", []):
@@ -187,10 +307,21 @@ def handle_webhook():
                     if msg.get("type") != "text":
                         continue
 
+                    # Deduplication: skip already-processed messages
+                    message_id = msg.get("id", "")
+                    if message_id and is_duplicate(message_id):
+                        logger.info("Skipping duplicate message: %s", message_id)
+                        continue
+
                     sender = msg["from"]
                     text = msg["text"]["body"]
-                    sender_name = ""
 
+                    # Rate limiting
+                    if is_rate_limited(sender):
+                        logger.warning("Rate limited sender: %s", sender)
+                        continue
+
+                    sender_name = ""
                     # Try to get sender name from contacts
                     contacts = value.get("contacts", [])
                     if contacts:
@@ -202,8 +333,8 @@ def handle_webhook():
                         sender_name, sender, text[:100]
                     )
 
-                    # Get Claude's response
-                    claude_resp = call_claude(text, sender_name)
+                    # Get Claude's response (with conversation history)
+                    claude_resp = call_claude(text, sender, sender_name)
                     response_text = claude_resp.get("response_text", "")
 
                     # Send auto-reply
