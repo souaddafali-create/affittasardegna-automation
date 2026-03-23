@@ -1,0 +1,110 @@
+{
+  "identificativi": {
+    "nome_struttura": "BILO LE CALETTE",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via del Porto 12",
+    "cap": "07020",
+    "comune": "Palau",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "residence_complesso": null,
+    "interno": null,
+    "piano": null,
+    "cin": "IT090089C2000TEST01",
+    "cir": "TEST01",
+    "codice_proprieta": null,
+    "coordinate": {
+      "latitudine": null,
+      "longitudine": null
+    }
+  },
+  "composizione": {
+    "max_ospiti": 3,
+    "camere": 1,
+    "posti_letto": 3,
+    "letti": [
+      {"tipo": "matrimoniale", "quantita": 1},
+      {"tipo": "divano_letto", "quantita": 1}
+    ],
+    "bagni": 1,
+    "bagno_con_doccia": false,
+    "bagno_con_vasca": false,
+    "metri_quadri": null
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": false,
+    "forno": false,
+    "microonde": false,
+    "lavatrice": true,
+    "lavastoviglie": true,
+    "aria_condizionata": true,
+    "riscaldamento": false,
+    "camino": false,
+    "internet_wifi": true,
+    "phon": false,
+    "ferro_stiro": false,
+    "zanzariere": false,
+    "terrazza": false,
+    "veranda": false,
+    "giardino": false,
+    "cortile": false,
+    "parcheggio_privato": false,
+    "garage": false,
+    "piscina": false,
+    "piscina_tipo": null,
+    "arredi_esterno": false,
+    "barbecue": false,
+    "doccia_esterna": false,
+    "biciclette": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": false,
+    "animali_note": null,
+    "altro_dotazioni": "balcone"
+  },
+  "sicurezza": {
+    "estintori": false,
+    "rilevatore_gas_co": false
+  },
+  "condizioni": {
+    "soggiorno_minimo_bassa": {"notti": 7, "periodo": "bassa stagione"},
+    "soggiorno_minimo_alta": {"notti": 7, "periodo": "alta stagione"},
+    "soggiorno_minimo_dettaglio": null,
+    "soggiorno_massimo_giorni": null,
+    "cauzione_euro": 200,
+    "prezzo_notte": null,
+    "pulizia_finale": null,
+    "biancheria": null,
+    "asciugamani": null,
+    "lenzuola": null,
+    "check_in": "16:00 - 20:00",
+    "check_out": "10:00",
+    "regole_casa": null,
+    "listino_prezzi": [
+      {"da": "28-mar", "a": "30-mag", "prezzo_notte": 57},
+      {"da": "30-mag", "a": "13-giu", "prezzo_notte": 64},
+      {"da": "13-giu", "a": "27-giu", "prezzo_notte": 71},
+      {"da": "27-giu", "a": "11-lug", "prezzo_notte": 86},
+      {"da": "11-lug", "a": "25-lug", "prezzo_notte": 100},
+      {"da": "25-lug", "a": "01-ago", "prezzo_notte": 107},
+      {"da": "01-ago", "a": "22-ago", "prezzo_notte": 121},
+      {"da": "22-ago", "a": "29-ago", "prezzo_notte": 107},
+      {"da": "29-ago", "a": "12-set", "prezzo_notte": 71},
+      {"da": "12-set", "a": "26-set", "prezzo_notte": 64},
+      {"da": "26-set", "a": "31-ott", "prezzo_notte": 57}
+    ],
+    "ical_url": null
+  },
+  "marketing": {
+    "foto": [],
+    "titolo": "Elegante bilocale fronte porto con vista mare nel cuore di Palau",
+    "descrizione_breve": "Elegante bilocale fronte porto con vista mare nel cuore di Palau",
+    "descrizione_lunga": "Affacciato direttamente sul porto turistico di Palau, questo luminoso bilocale rappresenta la soluzione ideale per chi desidera vivere una vacanza autentica tra mare, comfort e panorama unico.",
+    "punti_forza": [],
+    "distanze": [],
+    "servizi_vicinanze": [],
+    "keywords": []
+  }
+}
