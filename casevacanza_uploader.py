@@ -303,6 +303,9 @@ def _generate_placeholder_jpeg(path, width, height, color_index=0):
 
 
 def calculate_base_price():
+    prezzo_base = PROP.get("condizioni", {}).get("prezzo_base")
+    if prezzo_base:
+        return prezzo_base
     listino = PROP.get("condizioni", {}).get("listino_prezzi") or []
     if listino:
         prezzi = sorted(p["prezzo_notte"] for p in listino if p.get("prezzo_notte"))
