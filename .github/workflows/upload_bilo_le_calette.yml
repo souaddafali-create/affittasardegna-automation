@@ -1,52 +1,69 @@
-name: CaseVacanza - Bilo Le Calette
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'Bilo_Le_Calette_DATI.json'
-      - 'casevacanza_uploader.py'
-  workflow_dispatch:
-
-concurrency:
-  group: casevacanza-bilo-le-calette
-  cancel-in-progress: true
-
-jobs:
-  upload:
-    runs-on: ubuntu-latest
-    environment: Default
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium
-
-      - name: Install Playwright
-        run: |
-          pip install playwright Pillow
-          playwright install chromium --with-deps
-
-      - name: Run uploader (Bilo Le Calette)
-        env:
-          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
-          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
-          PROPERTY_DATA: Bilo_Le_Calette_DATI.json
-        run: xvfb-run python casevacanza_uploader.py
-
-      - name: Upload debug artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bilo-le-calette-debug-screenshots
-          path: screenshots/
+{
+  "identificativi": {
+    "nome_struttura": "BILO LE CALETTE",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via del Porto 12",
+    "comune": "Palau",
+    "cap": "07020",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "paese": "Italy",
+    "cin": "IT090089C2000TEST01",
+    "cir": "TEST01"
+  },
+  "composizione": {
+    "max_ospiti": 3,
+    "camere": 1,
+    "bagni": 1,
+    "posti_letto": 3,
+    "letti": [
+      { "tipo": "matrimoniale", "quantita": 1 },
+      { "tipo": "divano_letto", "quantita": 1 }
+    ]
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": true,
+    "forno": false,
+    "lavatrice": true,
+    "lavastoviglie": true,
+    "aria_condizionata": true,
+    "internet_wifi": true,
+    "terrazza": true,
+    "piscina": false,
+    "piscina_tipo": "",
+    "animali_ammessi": false,
+    "parcheggio_privato": false
+  },
+  "marketing": {
+    "titolo": "BILO LE CALETTE - Bilocale fronte porto con vista mare a Palau",
+    "descrizione_lunga": "Affacciato direttamente sul porto turistico di Palau, questo luminoso bilocale rappresenta la soluzione ideale per chi desidera vivere una vacanza autentica tra mare, comfort e panorama unico.",
+    "foto": []
+  },
+  "condizioni": {
+    "prezzo_base": 2000,
+    "check_in": "16:00 - 20:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": { "notti": 7 },
+    "soggiorno_minimo_alta": { "notti": 7 },
+    "cauzione": 200,
+    "pulizia_finale": "100 EUR a soggiorno obbligatoria",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "",
+    "listino_prezzi": [
+      { "dal": "2025-03-28", "al": "2025-05-30", "prezzo_notte": 57 },
+      { "dal": "2025-05-30", "al": "2025-06-13", "prezzo_notte": 64 },
+      { "dal": "2025-06-13", "al": "2025-06-27", "prezzo_notte": 71 },
+      { "dal": "2025-06-27", "al": "2025-07-11", "prezzo_notte": 86 },
+      { "dal": "2025-07-11", "al": "2025-07-25", "prezzo_notte": 100 },
+      { "dal": "2025-07-25", "al": "2025-08-01", "prezzo_notte": 107 },
+      { "dal": "2025-08-01", "al": "2025-08-22", "prezzo_notte": 121 },
+      { "dal": "2025-08-22", "al": "2025-08-29", "prezzo_notte": 107 },
+      { "dal": "2025-08-29", "al": "2025-09-12", "prezzo_notte": 71 },
+      { "dal": "2025-09-12", "al": "2025-09-26", "prezzo_notte": 64 },
+      { "dal": "2025-09-26", "al": "2025-10-31", "prezzo_notte": 57 }
+    ]
+  }
+}
