@@ -224,7 +224,7 @@ def _handle_otp(page, label=""):
         wait(page, 1000)
         screenshot(page, f"otp_inserito_{label}")
 
-        page.click('button[type="submit"]', timeout=10_000)
+        page.click('button[type="submit"]', timeout=120_000)
         wait(page, 5000)
         screenshot(page, f"dopo_otp_{label}")
         print("  Codice di verifica inviato.")
@@ -240,19 +240,19 @@ def login(page):
     print("Login Booking Extranet...")
     if INTERACTIVE:
         print("  (modalità interattiva — il browser si aprirà visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
+    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=120_000)
     wait(page, 3000)
     screenshot(page, "login_page")
 
     # ── Email ──
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=15_000)
+    page.wait_for_selector(email_sel, timeout=120_000)
     human_type(page, email_sel, EMAIL)
     wait(page, 1000)
     screenshot(page, "email_inserita")
 
     # Click continua
-    page.click('button[type="submit"]', timeout=10_000)
+    page.click('button[type="submit"]', timeout=120_000)
     wait(page, 5000)
     screenshot(page, "dopo_email")
 
@@ -268,12 +268,12 @@ def login(page):
     # ── Password ──
     pw_sel = 'input[type="password"], input[name="password"], #password'
     try:
-        page.wait_for_selector(pw_sel, timeout=15_000)
+        page.wait_for_selector(pw_sel, timeout=120_000)
         human_type(page, pw_sel, PASSWORD)
         wait(page, 1000)
         screenshot(page, "password_inserita")
 
-        page.click('button[type="submit"]', timeout=10_000)
+        page.click('button[type="submit"]', timeout=120_000)
         wait(page, 8000)
         screenshot(page, "dopo_login")
     except Exception:
@@ -297,7 +297,7 @@ def navigate_to_add_property(page):
     print("Navigazione all'Extranet (admin.booking.com)...")
 
     # Step 1: vai all'Extranet gestore (non il sito clienti)
-    page.goto("https://admin.booking.com/", wait_until="networkidle", timeout=60_000)
+    page.goto("https://admin.booking.com/", wait_until="domcontentloaded", timeout=120_000)
     wait(page, 5000)
     screenshot(page, "extranet_home")
     save_html(page, "extranet_home")
@@ -311,7 +311,7 @@ def navigate_to_add_property(page):
     # proviamo il percorso alternativo join.booking.com
     if "admin.booking.com" not in page.url:
         print(f"  Redirect fuori dall'Extranet ({page.url}), provo join.booking.com...")
-        page.goto("https://join.booking.com/", wait_until="networkidle", timeout=60_000)
+        page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=120_000)
         wait(page, 5000)
         screenshot(page, "join_page")
         save_html(page, "join_page")
@@ -343,8 +343,8 @@ def navigate_to_add_property(page):
     print("  Pulsante non trovato, provo URL diretto wizard...")
     page.goto(
         "https://join.booking.com/hotel/registration/start",
-        wait_until="networkidle",
-        timeout=60_000,
+        wait_until="domcontentloaded",
+        timeout=120_000,
     )
     wait(page, 5000)
     screenshot(page, "wizard_diretto")
