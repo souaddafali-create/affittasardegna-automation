@@ -294,14 +294,62 @@ def login(page):
 
 def navigate_to_add_property(page):
     """Navigate to 'List your property' on Booking Extranet."""
-    print("Navigazione a 'Aggiungi nuova struttura'...")
+    print("Navigazione all'Extranet (admin.booking.com)...")
 
-    # Try the Extranet join/list-property URL
-    page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
+    # Step 1: vai all'Extranet gestore (non il sito clienti)
+    page.goto("https://admin.booking.com/", wait_until="networkidle", timeout=60_000)
     wait(page, 5000)
-    screenshot(page, "join_page")
-    save_html(page, "join_page")
-    print(f"  URL: {page.url}")
+    screenshot(page, "extranet_home")
+    save_html(page, "extranet_home")
+    print(f"  URL Extranet: {page.url}")
+
+    # Se Booking redirige al login o al sito clienti, potrebbe servire
+    # un secondo tentativo dopo aver gestito eventuali CAPTCHA/redirect
+    _handle_captcha(page, "extranet_home")
+
+    # Se siamo finiti su booking.com (sito clienti) invece dell'extranet,
+    # proviamo il percorso alternativo join.booking.com
+    if "admin.booking.com" not in page.url:
+        print(f"  Redirect fuori dall'Extranet ({page.url}), provo join.booking.com...")
+        page.goto("https://join.booking.com/", wait_until="networkidle", timeout=60_000)
+        wait(page, 5000)
+        screenshot(page, "join_page")
+        save_html(page, "join_page")
+        print(f"  URL join: {page.url}")
+        _handle_captcha(page, "join_page")
+
+    # Step 2: cerca il link/pulsante "Aggiungi nuova struttura" / "List your property"
+    print("  Cerco 'Aggiungi nuova struttura'...")
+    for label in [
+        "Aggiungi nuova struttura",
+        "Registra la tua struttura",
+        "List your property",
+        "Add a new property",
+        "Add new property",
+        "Nuova struttura",
+    ]:
+        try:
+            btn = page.get_by_text(label, exact=False)
+            if btn.count() > 0:
+                btn.first.click()
+                print(f"  Click: '{label}'")
+                wait(page, 5000)
+                screenshot(page, "dopo_click_nuova_struttura")
+                return
+        except Exception:
+            continue
+
+    # Fallback: link diretto al wizard
+    print("  Pulsante non trovato, provo URL diretto wizard...")
+    page.goto(
+        "https://join.booking.com/hotel/registration/start",
+        wait_until="networkidle",
+        timeout=60_000,
+    )
+    wait(page, 5000)
+    screenshot(page, "wizard_diretto")
+    save_html(page, "wizard_diretto")
+    print(f"  URL wizard: {page.url}")
 
 
 # ---------------------------------------------------------------------------
