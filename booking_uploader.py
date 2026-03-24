@@ -33,8 +33,9 @@ with open(DATA_FILE, encoding="utf-8") as _f:
 
 print(f"Proprietà: {PROP['identificativi']['nome_struttura']} (da {DATA_FILE})")
 
-EMAIL = os.environ["BK_EMAIL"]
-PASSWORD = os.environ["BK_PASSWORD"]
+# Credenziali opzionali con --skip-login
+EMAIL = os.environ.get("BK_EMAIL", "")
+PASSWORD = os.environ.get("BK_PASSWORD", "")
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -854,10 +855,16 @@ def insert_property(page):
 def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
+    # --skip-login: apre il browser su booking.com, tu fai login manualmente,
+    # poi lo script continua con navigazione e wizard.
+    skip_login = "--skip-login" in sys.argv
+
     # SEMPRE browser visibile in modalità interattiva (Windows locale)
     headless = not INTERACTIVE
     print(f"\nBrowser: {'headless' if headless else 'VISIBILE'} "
           f"(INTERACTIVE={INTERACTIVE})")
+    if skip_login:
+        print("  Modalità --skip-login: fai login tu nel browser.")
 
     with sync_playwright() as p:
         launch_args = [
@@ -889,7 +896,20 @@ def main():
             print("playwright-stealth non trovato, procedo senza stealth.")
 
         try:
-            login(page)
+            if skip_login:
+                # Apri booking.com e lascia fare login all'utente
+                page.goto("https://www.booking.com/",
+                          wait_until="domcontentloaded", timeout=120_000)
+                wait(page, 3000)
+                _dismiss_cookie_banner(page)
+                screenshot(page, "skip_login_pagina")
+                input("\n>>> Fai login nel browser (email, CAPTCHA, OTP, password).\n"
+                      ">>> Quando sei loggato e vedi la homepage, premi INVIO... ")
+                screenshot(page, "dopo_login_manuale")
+                print(f"  URL dopo login manuale: {page.url}")
+            else:
+                login(page)
+
             navigate_to_add_property(page)
             screenshot(page, "pagina_iniziale_wizard")
             insert_property(page)
