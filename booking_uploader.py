@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import random
 import sys
 import tempfile
@@ -8,8 +9,13 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-# Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
-INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
+# Modalità interattiva: se il terminale è un TTY, se INTERACTIVE=1,
+# oppure se siamo su Windows (dove si presume esecuzione locale).
+INTERACTIVE = (
+    sys.stdin.isatty()
+    or os.environ.get("INTERACTIVE", "") == "1"
+    or (platform.system() == "Windows" and os.environ.get("CI") is None)
+)
 
 # --- Carica dati proprietà dal file JSON ---
 DATA_FILE = os.environ.get(
@@ -178,6 +184,57 @@ def _page_has_otp(page):
     return has_keyword and has_otp_input
 
 
+def _handle_captcha(page, label=""):
+    """Controlla e gestisce CAPTCHA se presente. Riutilizzabile in più punti."""
+    if _page_has_captcha(page):
+        tag = f" ({label})" if label else ""
+        print(f"  *** CAPTCHA RILEVATO{tag} ***")
+        screenshot(page, f"captcha_{label or 'generic'}")
+        save_html(page, f"captcha_{label or 'generic'}")
+        _wait_for_interactive(
+            page,
+            f"CAPTCHA rilevato{tag}! Risolvilo nel browser, poi premi INVIO.",
+            lambda p: not _page_has_captcha(p),
+        )
+        print("  CAPTCHA superato.")
+        screenshot(page, f"captcha_superato_{label or 'generic'}")
+        wait(page, 3000)
+
+
+def _handle_otp(page, label=""):
+    """Controlla e gestisce OTP se presente. Riutilizzabile in più punti."""
+    if not _page_has_otp(page):
+        print(f"  Nessun OTP richiesto ({label}), procedo.")
+        return
+
+    tag = f" ({label})" if label else ""
+    print(f"  *** CODICE DI VERIFICA EMAIL RICHIESTO{tag} ***")
+    screenshot(page, f"otp_richiesto_{label}")
+    save_html(page, f"otp_pagina_{label}")
+
+    if INTERACTIVE:
+        code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
+        otp_sel = (
+            "input[name*='otp'], input[name*='code'], input[name*='pin'], "
+            "input[name*='token'], input[type='tel'], "
+            "input[autocomplete='one-time-code']"
+        )
+        otp_field = page.locator(otp_sel).first
+        otp_field.fill(code)
+        wait(page, 1000)
+        screenshot(page, f"otp_inserito_{label}")
+
+        page.click('button[type="submit"]', timeout=10_000)
+        wait(page, 5000)
+        screenshot(page, f"dopo_otp_{label}")
+        print("  Codice di verifica inviato.")
+    else:
+        raise RuntimeError(
+            "Booking richiede un codice di verifica email. "
+            "Eseguire lo script in locale con INTERACTIVE=1."
+        )
+
+
 def login(page):
     """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi."""
     print("Login Booking Extranet...")
@@ -200,62 +257,13 @@ def login(page):
     screenshot(page, "dopo_email")
 
     # ── CAPTCHA ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO ***")
-        screenshot(page, "captcha")
-        save_html(page, "captcha")
-        _wait_for_interactive(
-            page,
-            "CAPTCHA rilevato! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        print("  CAPTCHA superato.")
-        screenshot(page, "captcha_superato")
-        wait(page, 3000)
+    _handle_captcha(page, "post_email")
 
     # ── Codice di verifica email (OTP) ──
-    if _page_has_otp(page):
-        print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
-        screenshot(page, "otp_richiesto")
-        save_html(page, "otp_pagina")
-
-        if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            # Trova il campo OTP e compila
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
-            wait(page, 1000)
-            screenshot(page, "otp_inserito")
-
-            # Submit OTP
-            page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp")
-            print("  Codice di verifica inviato.")
-        else:
-            # In CI non possiamo chiedere input — fallisce
-            raise RuntimeError(
-                "Booking richiede un codice di verifica email. "
-                "Eseguire lo script in locale con INTERACTIVE=1."
-            )
-    else:
-        print("  Nessun OTP richiesto, procedo.")
+    _handle_otp(page, "pre_password")
 
     # ── Secondo CAPTCHA (possibile dopo OTP) ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO (post-OTP) ***")
-        screenshot(page, "captcha_post_otp")
-        _wait_for_interactive(
-            page,
-            "Secondo CAPTCHA! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        wait(page, 3000)
+    _handle_captcha(page, "post_otp")
 
     # ── Password ──
     pw_sel = 'input[type="password"], input[name="password"], #password'
@@ -272,6 +280,10 @@ def login(page):
         # Alcuni flussi (es. magic link) saltano la password
         print("  Campo password non trovato — potrebbe essere login senza password.")
         screenshot(page, "no_password")
+
+    # ── CAPTCHA o OTP possono apparire anche dopo la password ──
+    _handle_captcha(page, "post_password")
+    _handle_otp(page, "post_password")
 
     print(f"  URL dopo login: {page.url}")
 
@@ -847,17 +859,22 @@ def main():
     # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
     # In CI: headless
     headless = not INTERACTIVE
-    print(f"Browser: {'headless' if headless else 'visibile'} "
+    print(f"Browser: {'headless' if headless else 'VISIBILE'} "
           f"(INTERACTIVE={INTERACTIVE})")
 
     with sync_playwright() as p:
+        launch_args = [
+            "--disable-blink-features=AutomationControlled",
+        ]
+        # --no-sandbox serve in CI/Linux, non necessario su Windows locale
+        if platform.system() != "Windows":
+            launch_args.append("--no-sandbox")
+            launch_args.append("--disable-dev-shm-usage")
+
         browser = p.chromium.launch(
             headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
+            slow_mo=300 if INTERACTIVE else 0,  # rallenta per visibilità
+            args=launch_args,
         )
         context = browser.new_context(
             locale="it-IT",
@@ -880,12 +897,24 @@ def main():
             navigate_to_add_property(page)
             screenshot(page, "pagina_iniziale")
             insert_property(page)
+        except Exception as e:
+            print(f"\n*** ERRORE: {e} ***")
+            try:
+                screenshot(page, "errore_finale")
+                save_html(page, "errore_finale")
+            except Exception:
+                pass
+            if INTERACTIVE:
+                input("\n>>> Errore durante l'esecuzione. Premi INVIO per chiudere il browser... ")
+            raise
         finally:
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
             except Exception:
                 pass
+            if INTERACTIVE:
+                input("\n>>> Esecuzione completata. Premi INVIO per chiudere il browser... ")
             browser.close()
 
 
