@@ -337,9 +337,11 @@ def navigate_to_add_property(page):
     # ── Prova a cliccare "Registra la tua struttura" / "List your property" ──
     # Visibile nello header del sito clienti booking.com
     for label in [
+        "Registra il tuo immobile",
         "Registra la tua struttura",
         "List your property",
         "Aggiungi nuova struttura",
+        "Metti in affitto",
     ]:
         try:
             link = page.get_by_text(label, exact=False)
