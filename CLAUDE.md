@@ -84,7 +84,7 @@ Contratto proprietà + CIN
         ├──► casevacanza_uploader.py  → CaseVacanza.it
         └──► booking_uploader.py      → Booking Extranet
 
-WhatsApp (349 478 7272)
+WhatsApp (347 805 6842)
         │
         ▼
   360dialog → n8n webhook → Claude AI → risposta + handoff umano
@@ -97,7 +97,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 ## 🤖 WhatsApp Bot
 
 **Stack:** Claude API + n8n Cloud + 360dialog
-**Numero:** +39 349 478 7272
+**Numero:** +39 347 805 6842
 
 ### 5 path conversazionali:
 
