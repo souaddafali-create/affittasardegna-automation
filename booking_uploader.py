@@ -167,8 +167,25 @@ SERVIZI = _build_servizi_booking()
 # ---------------------------------------------------------------------------
 
 def _page_has_captcha(page):
+    """Rileva CAPTCHA reali. Evita falsi positivi da testo generico."""
+    # Cerca iframe o elementi CAPTCHA specifici (reCAPTCHA, hCaptcha, Arkose)
+    captcha_iframes = page.locator(
+        "iframe[src*='captcha'], iframe[src*='recaptcha'], "
+        "iframe[src*='hcaptcha'], iframe[src*='arkoselabs'], "
+        "iframe[title*='captcha' i]"
+    ).count()
+    if captcha_iframes > 0:
+        return True
+    # Cerca div/elementi CAPTCHA noti
+    captcha_els = page.locator(
+        ".g-recaptcha, .h-captcha, #captcha, [data-captcha], "
+        "[class*='captcha' i], #challenge"
+    ).count()
+    if captcha_els > 0:
+        return True
+    # Fallback testo — solo "captcha" (NON "human" che causa falsi positivi)
     html = page.content().lower()
-    return "captcha" in html or "human" in html or "choose all" in html
+    return "choose all" in html and "images" in html
 
 
 def _page_has_otp(page):
@@ -240,15 +257,10 @@ def _dismiss_cookie_banner(page):
 # ---------------------------------------------------------------------------
 
 def login(page):
-    """Accesso a Booking.com con supporto OTP e CAPTCHA manuali.
+    """Accesso a Booking.com — ogni passaggio ha try/except con pausa manuale.
 
-    Flusso:
-    1. Vai a account.booking.com/sign-in
-    2. Inserisci email → submit
-    3. Gestisci CAPTCHA/OTP se appaiono
-    4. Inserisci password → submit
-    5. Gestisci CAPTCHA/OTP post-password
-    6. Verifica login riuscito
+    Se qualcosa fallisce, lo script NON crasha: fa screenshot e chiede
+    all'utente di intervenire manualmente nel browser.
     """
     print("\n=== LOGIN BOOKING ===")
     if INTERACTIVE:
@@ -270,15 +282,25 @@ def login(page):
 
     # ── Email ──
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=120_000)
-    human_type(page, email_sel, EMAIL)
-    wait(page, 1000)
-    screenshot(page, "email_inserita")
+    try:
+        page.wait_for_selector(email_sel, timeout=30_000)
+        human_type(page, email_sel, EMAIL)
+        wait(page, 1000)
+        screenshot(page, "email_inserita")
 
-    # Click submit
-    page.click('button[type="submit"]', timeout=120_000)
-    wait(page, 5000)
-    screenshot(page, "dopo_email")
+        # Click submit
+        page.click('button[type="submit"]', timeout=120_000)
+        wait(page, 5000)
+        screenshot(page, "dopo_email")
+    except Exception as e:
+        print(f"  Campo email non trovato: {e}")
+        screenshot(page, "email_non_trovata")
+        save_html(page, "email_non_trovata")
+        if INTERACTIVE:
+            input("\n>>> Campo email non trovato. Inserisci email e clicca Continua nel browser, poi premi INVIO... ")
+            screenshot(page, "dopo_email_manuale")
+        else:
+            raise
 
     # ── CAPTCHA post-email ──
     _handle_captcha(page, "post_email")
@@ -292,7 +314,7 @@ def login(page):
     # ── Password ──
     pw_sel = 'input[type="password"], input[name="password"], #password'
     try:
-        page.wait_for_selector(pw_sel, timeout=120_000)
+        page.wait_for_selector(pw_sel, timeout=30_000)
         human_type(page, pw_sel, PASSWORD)
         wait(page, 1000)
         screenshot(page, "password_inserita")
@@ -301,8 +323,11 @@ def login(page):
         wait(page, 8000)
         screenshot(page, "dopo_login")
     except Exception:
-        print("  Campo password non trovato — potrebbe essere login senza password.")
+        print("  Campo password non trovato.")
         screenshot(page, "no_password")
+        if INTERACTIVE:
+            input("\n>>> Password non trovata. Inserisci la password nel browser e fai login, poi premi INVIO... ")
+            screenshot(page, "dopo_password_manuale")
 
     # ── CAPTCHA/OTP post-password ──
     _handle_captcha(page, "post_password")
@@ -312,6 +337,13 @@ def login(page):
     _dismiss_cookie_banner(page)
 
     print(f"  URL dopo login: {page.url}")
+    screenshot(page, "login_completato")
+
+    # ── Verifica finale: sei loggato? ──
+    if INTERACTIVE:
+        input("\n>>> Login completato? Se non sei loggato, fai login manualmente nel browser, poi premi INVIO... ")
+        screenshot(page, "dopo_verifica_login")
+
     print("  Login completato.\n")
 
 
