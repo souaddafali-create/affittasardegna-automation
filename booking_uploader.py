@@ -250,20 +250,20 @@ def _dismiss_cookie_banner(page):
 
 
 def login(page):
-    """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi.
+    """Accesso a Booking.com con supporto OTP e CAPTCHA interattivi.
 
-    Strategia: navigare prima a admin.booking.com (extranet). Booking
-    redirige automaticamente al login SSO con i parametri corretti per
-    tornare all'extranet dopo l'autenticazione. Se facessimo login su
-    account.booking.com direttamente, finiremmo sul sito clienti.
+    Strategia: fare login normalmente su account.booking.com, poi navigare
+    a 'Registra la tua struttura' (join.booking.com). Per account senza
+    strutture, admin.booking.com redirige al sito clienti — quindi usiamo
+    il percorso join.booking.com dopo il login.
     """
-    print("Login Booking Extranet...")
+    print("Login Booking...")
     if INTERACTIVE:
         print("  (modalità interattiva — il browser si aprirà visibile)")
 
-    # ── Vai all'Extranet: Booking redirige al login SSO con redirect_uri=admin ──
-    print("  Navigo a admin.booking.com (verrò rediretto al login)...")
-    page.goto("https://admin.booking.com/", wait_until="domcontentloaded", timeout=120_000)
+    # ── Login SSO normale ──
+    print("  Navigo alla pagina di login...")
+    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=120_000)
     wait(page, 5000)
     screenshot(page, "login_redirect")
     print(f"  URL dopo redirect: {page.url}")
@@ -316,18 +316,7 @@ def login(page):
     _dismiss_cookie_banner(page)
 
     print(f"  URL dopo login: {page.url}")
-
-    # ── Verifica: siamo sull'extranet? ──
-    if "admin.booking.com" in page.url:
-        print("  Login Extranet riuscito!")
-    else:
-        print(f"  ATTENZIONE: non siamo sull'Extranet ({page.url})")
-        print("  Provo navigazione esplicita a admin.booking.com...")
-        page.goto("https://admin.booking.com/", wait_until="domcontentloaded", timeout=120_000)
-        wait(page, 5000)
-        _dismiss_cookie_banner(page)
-        screenshot(page, "retry_extranet")
-        print(f"  URL dopo retry: {page.url}")
+    print("  Login completato.")
 
 
 # ---------------------------------------------------------------------------
@@ -335,84 +324,46 @@ def login(page):
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
-    """Trova e clicca 'Aggiungi nuova struttura' nell'Extranet.
+    """Dopo il login siamo sul sito clienti. Naviga a 'Registra la tua struttura'.
 
-    A questo punto dovremmo già essere su admin.booking.com dopo il login.
-    Se non lo siamo, proviamo la catena di fallback.
+    Strategia:
+    1. Cerca il link 'Registra la tua struttura' nella pagina corrente
+    2. Se non lo trova, vai diretto a join.booking.com
     """
-    print("Navigazione a 'Aggiungi nuova struttura'...")
+    print("Navigazione a 'Registra la tua struttura'...")
     screenshot(page, "pre_navigazione")
-    save_html(page, "pre_navigazione")
     print(f"  URL attuale: {page.url}")
 
-    # ── Se non siamo sull'extranet, naviga esplicitamente ──
-    if "admin.booking.com" not in page.url:
-        print("  Non siamo sull'Extranet, navigo a admin.booking.com...")
-        page.goto("https://admin.booking.com/", wait_until="domcontentloaded", timeout=120_000)
-        wait(page, 5000)
-        _dismiss_cookie_banner(page)
-        _handle_captcha(page, "extranet_nav")
-        screenshot(page, "extranet_home")
-        save_html(page, "extranet_home")
-        print(f"  URL Extranet: {page.url}")
-
-    # ── Cerca il link/pulsante "Aggiungi nuova struttura" ──
-    print("  Cerco 'Aggiungi nuova struttura'...")
+    # ── Prova a cliccare "Registra la tua struttura" / "List your property" ──
+    # Visibile nello header del sito clienti booking.com
     for label in [
-        "Aggiungi nuova struttura",
         "Registra la tua struttura",
         "List your property",
-        "Add a new property",
-        "Add new property",
-        "Nuova struttura",
-        "New property",
+        "Aggiungi nuova struttura",
     ]:
         try:
-            btn = page.get_by_text(label, exact=False)
-            if btn.count() > 0:
-                btn.first.click()
+            link = page.get_by_text(label, exact=False)
+            if link.count() > 0 and link.first.is_visible():
+                link.first.click()
                 print(f"  Click: '{label}'")
-                wait(page, 5000)
-                screenshot(page, "dopo_click_nuova_struttura")
+                wait(page, 8000)
+                _dismiss_cookie_banner(page)
+                _handle_captcha(page, "dopo_registra")
+                screenshot(page, "dopo_registra_struttura")
+                print(f"  URL: {page.url}")
                 return
         except Exception:
             continue
 
-    # ── Fallback 1: join.booking.com (registrazione nuova proprietà) ──
-    print("  Pulsante non trovato, provo join.booking.com...")
+    # ── Fallback: vai diretto a join.booking.com ──
+    print("  Link non trovato, navigo a join.booking.com...")
     page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=120_000)
-    wait(page, 5000)
+    wait(page, 8000)
     _dismiss_cookie_banner(page)
     _handle_captcha(page, "join_page")
     screenshot(page, "join_page")
     save_html(page, "join_page")
-    print(f"  URL join: {page.url}")
-
-    # Se join.booking.com ha un pulsante per iniziare
-    for label in ["Get started", "Inizia", "Registra", "List your property", "Start"]:
-        try:
-            btn = page.get_by_text(label, exact=False)
-            if btn.count() > 0:
-                btn.first.click()
-                print(f"  Click: '{label}'")
-                wait(page, 5000)
-                screenshot(page, "dopo_click_join")
-                return
-        except Exception:
-            continue
-
-    # ── Fallback 2: URL diretto al wizard ──
-    print("  Provo URL diretto wizard...")
-    page.goto(
-        "https://join.booking.com/hotel/registration/start",
-        wait_until="domcontentloaded",
-        timeout=120_000,
-    )
-    wait(page, 5000)
-    _dismiss_cookie_banner(page)
-    screenshot(page, "wizard_diretto")
-    save_html(page, "wizard_diretto")
-    print(f"  URL wizard: {page.url}")
+    print(f"  URL: {page.url}")
 
 
 # ---------------------------------------------------------------------------
