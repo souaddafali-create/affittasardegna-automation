@@ -320,39 +320,25 @@ def login(page):
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
-    """Dopo il login, naviga a admin.booking.com (Extranet) e poi a
-    'Registra la tua struttura'.
+    """Dopo il login, naviga alla pagina di registrazione nuova struttura.
 
-    Il problema noto: dopo il login Booking manda su booking.com/index
-    (sito clienti). Dobbiamo andare esplicitamente su admin.booking.com.
+    Problema noto: admin.booking.com fa redirect a booking.com/index (sito
+    clienti) perché l'account non ha ancora strutture. Quindi:
+    1. Prima prova a cliccare "List your property" nella pagina corrente
+    2. Se non funziona, vai diretto a join.booking.com/sign-in
+    NON andare su admin.booking.com — fa solo redirect inutile.
     """
-    print("=== NAVIGAZIONE A EXTRANET ===")
+    print("=== NAVIGAZIONE A REGISTRAZIONE STRUTTURA ===")
     screenshot(page, "pre_navigazione")
     print(f"  URL attuale: {page.url}")
 
-    # ── Step 1: Vai su admin.booking.com ──
-    print("  Navigo a admin.booking.com...")
-    page.goto("https://admin.booking.com",
-              wait_until="domcontentloaded", timeout=120_000)
-    wait(page, 8000)
-    _dismiss_cookie_banner(page)
-    _handle_captcha(page, "extranet")
-    _handle_otp(page, "extranet")
-    screenshot(page, "extranet_pagina")
-    print(f"  URL extranet: {page.url}")
-
-    # ── Step 2: Pausa manuale per verificare ──
-    if INTERACTIVE:
-        input("\n>>> Sei su admin.booking.com? Naviga manualmente se necessario, poi premi INVIO... ")
-        screenshot(page, "dopo_pausa_extranet")
-        print(f"  URL dopo pausa: {page.url}")
-
-    # ── Step 3: Cerca "Registra la tua struttura" / "List your property" ──
-    print("  Cerco link per registrare nuova struttura...")
+    # ── Step 1: Cerca "List your property" / "Registra la tua struttura" ──
+    # nella pagina corrente (booking.com/index dopo login)
+    print("  Cerco link 'List your property' nella pagina corrente...")
     for label in [
+        "List your property",
         "Registra il tuo immobile",
         "Registra la tua struttura",
-        "List your property",
         "Aggiungi nuova struttura",
         "Metti in affitto",
         "Add a new property",
@@ -368,12 +354,16 @@ def navigate_to_add_property(page):
                 _handle_captcha(page, "dopo_registra")
                 screenshot(page, "dopo_registra_struttura")
                 print(f"  URL: {page.url}")
+
+                if INTERACTIVE:
+                    input("\n>>> Sei sulla pagina di registrazione? Premi INVIO per continuare... ")
+                    screenshot(page, "dopo_pausa_registrazione")
                 return
         except Exception:
             continue
 
-    # ── Fallback: vai diretto a join.booking.com ──
-    print("  Link non trovato, provo join.booking.com...")
+    # ── Step 2: Fallback — vai diretto a join.booking.com ──
+    print("  Link non trovato nella pagina, vado diretto a join.booking.com...")
     page.goto("https://join.booking.com/",
               wait_until="domcontentloaded", timeout=120_000)
     wait(page, 8000)
