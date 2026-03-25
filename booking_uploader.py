@@ -1,4 +1,3 @@
-import json
 import os
 import random
 import sys
@@ -6,17 +5,137 @@ import tempfile
 import time
 import urllib.request
 
+import gspread
 from playwright.sync_api import sync_playwright
 
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
-# --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+# ---------------------------------------------------------------------------
+# Carica dati proprietà dal Google Sheet
+# Sheet ID: 1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA
+# Riga selezionata via PROPERTY_ROW (default 2 = prima riga dati dopo header)
+# Auth: service account JSON (env GOOGLE_SA_KEY o file service_account.json)
+# ---------------------------------------------------------------------------
+SHEET_ID = "1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA"
+PROPERTY_ROW = int(os.environ.get("PROPERTY_ROW", "2"))
+
+_sa_path = os.environ.get(
+    "GOOGLE_SA_KEY",
+    os.path.join(os.path.dirname(__file__), "service_account.json"),
 )
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+_gc = gspread.service_account(filename=_sa_path)
+_sheet = _gc.open_by_key(SHEET_ID).sheet1
+_row = _sheet.row_values(PROPERTY_ROW)
+
+
+def _cell(col_letter):
+    """Restituisce il valore dalla riga corrente per la colonna indicata (es. 'B', 'AQ')."""
+    idx = gspread.utils.column_letter_to_index(col_letter) - 1  # 0-based
+    if idx < len(_row):
+        return _row[idx].strip() if _row[idx] else ""
+    return ""
+
+
+def _cell_bool(col_letter):
+    """Restituisce True se la cella contiene 'SI' / 'Sì' / 'yes' (case-insensitive)."""
+    val = _cell(col_letter).lower()
+    return val in ("si", "sì", "yes", "true", "1")
+
+
+def _cell_int(col_letter, default=0):
+    """Restituisce il valore intero di una cella, o default se vuota/non numerica."""
+    val = _cell(col_letter)
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
+
+
+# --- Mappatura colonne Sheet → chiavi dotazioni ---
+# Colonne Z–AM contengono SI/NO per ciascuna dotazione.
+# Adattare le lettere se l'ordine nel foglio cambia.
+_DOTAZIONI_COL_MAP = {
+    "Z": "tv",
+    "AA": "aria_condizionata",
+    "AB": "riscaldamento",
+    "AC": "internet_wifi",
+    "AD": "lavatrice",
+    "AE": "lavastoviglie",
+    "AF": "piano_cottura",
+    "AG": "forno",
+    "AH": "microonde",
+    "AI": "frigo_congelatore",
+    "AJ": "phon",
+    "AK": "ferro_stiro",
+    "AL": "terrazza",
+    "AM": "animali_ammessi",
+}
+
+
+def _build_dotazioni():
+    dot = {}
+    for col, key in _DOTAZIONI_COL_MAP.items():
+        dot[key] = _cell_bool(col)
+    # Campi extra non in Z-AM: derivati o vuoti
+    dot["piscina"] = _cell_bool("AN") if len(_row) > gspread.utils.column_letter_to_index("AN") - 1 else False
+    dot["arredi_esterno"] = _cell_bool("AO") if len(_row) > gspread.utils.column_letter_to_index("AO") - 1 else False
+    dot["barbecue"] = _cell_bool("AP") if len(_row) > gspread.utils.column_letter_to_index("AP") - 1 else False
+    dot["altro_dotazioni"] = ""
+    return dot
+
+
+def _build_prezzo_notte():
+    """Colonna AQ = prezzo settimanale → diviso 7 per notte."""
+    val = _cell("AQ")
+    try:
+        settimanale = float(val)
+        return round(settimanale / 7)
+    except (ValueError, TypeError):
+        return None
+
+
+def _build_prop_from_sheet():
+    """Costruisce il dict PROP con la stessa struttura dei file JSON proprietà."""
+    return {
+        "identificativi": {
+            "nome_struttura": _cell("B"),
+            "tipo_struttura": "Appartamento",
+            "indirizzo": _cell("E"),
+            "cap": _cell("G"),
+            "comune": _cell("F"),
+            "provincia": "",
+            "regione": "Sardegna",
+            "cin": _cell("D"),
+            "cir": "",
+        },
+        "composizione": {
+            "max_ospiti": _cell_int("I"),
+            "camere": _cell_int("J"),
+            "posti_letto": _cell_int("I"),
+            "letti": [],  # non disponibile nello Sheet — compilare a mano in extranet
+            "bagni": _cell_int("K"),
+            "metri_quadri": _cell_int("L") or None,
+        },
+        "dotazioni": _build_dotazioni(),
+        "condizioni": {
+            "prezzo_notte": _build_prezzo_notte(),
+            "cauzione_euro": None,
+            "check_in": _cell("M"),
+            "check_out": _cell("N"),
+            "regole_casa": "",
+        },
+        "marketing": {
+            "titolo": _cell("B"),
+            "descrizione_breve": "",
+            "descrizione_lunga": _cell("Q"),
+        },
+        "foto_urls": [_cell(c) for c in ("AY", "AZ", "BA", "BB") if _cell(c)],
+    }
+
+
+PROP = _build_prop_from_sheet()
+print(f"Dati caricati da Google Sheet, riga {PROPERTY_ROW}: {PROP['identificativi']['nome_struttura']}")
 
 EMAIL = os.environ["BK_EMAIL"]
 PASSWORD = os.environ["BK_PASSWORD"]
