@@ -6,17 +6,111 @@ import tempfile
 import time
 import urllib.request
 
+import gspread
+
 from playwright.sync_api import sync_playwright
 
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
-# --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
-)
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+# --- Carica dati proprietà dal Google Sheet via gspread ---
+SHEET_ID = "1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA"
+SHEET_NAME = "MASTER_PROPRIETÀ"
+
+# Riga della proprietà da usare (nome struttura o indice 0-based, default prima riga dati)
+PROPERTY_NAME = os.environ.get("PROPERTY_NAME", "")
+
+
+def _parse_cell(value):
+    """Converte il valore di una cella nel tipo Python appropriato."""
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return value
+    v = value.strip()
+    if v == "":
+        return None
+    low = v.lower()
+    if low in ("true", "vero", "sì", "si"):
+        return True
+    if low in ("false", "falso", "no"):
+        return False
+    # Prova a parsare come numero
+    try:
+        if "." in v:
+            return float(v)
+        return int(v)
+    except ValueError:
+        pass
+    # Prova a parsare come JSON (per array/oggetti inline)
+    if v.startswith("[") or v.startswith("{"):
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return v
+
+
+def _unflatten(flat_dict):
+    """Converte un dict con chiavi dot-notation in un dict annidato.
+
+    Es: {"identificativi.nome_struttura": "Il Faro"} →
+        {"identificativi": {"nome_struttura": "Il Faro"}}
+    """
+    result = {}
+    for key, value in flat_dict.items():
+        parts = key.split(".")
+        d = result
+        for part in parts[:-1]:
+            d = d.setdefault(part, {})
+        d[parts[-1]] = value
+    return result
+
+
+def _load_from_gsheet():
+    """Legge i dati proprietà dal Google Sheet MASTER_PROPRIETÀ."""
+    # Autenticazione: service account (file o dict da env var)
+    creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        gc = gspread.service_account_from_dict(creds_dict)
+    elif creds_path:
+        gc = gspread.service_account(filename=creds_path)
+    else:
+        # Default: cerca ~/.config/gspread/service_account.json
+        gc = gspread.service_account()
+
+    sh = gc.open_by_key(SHEET_ID)
+    ws = sh.worksheet(SHEET_NAME)
+    records = ws.get_all_records()
+
+    if not records:
+        raise RuntimeError(f"Nessun dato trovato nel foglio '{SHEET_NAME}'")
+
+    # Seleziona la riga della proprietà
+    if PROPERTY_NAME:
+        row = None
+        for r in records:
+            nome = r.get("identificativi.nome_struttura", r.get("nome_struttura", ""))
+            if str(nome).strip().lower() == PROPERTY_NAME.strip().lower():
+                row = r
+                break
+        if row is None:
+            raise RuntimeError(
+                f"Proprietà '{PROPERTY_NAME}' non trovata nel foglio '{SHEET_NAME}'"
+            )
+    else:
+        row = records[0]
+
+    # Parsa i valori e costruisci il dict annidato
+    parsed = {k: _parse_cell(v) for k, v in row.items()}
+    prop = _unflatten(parsed)
+    print(f"  Dati caricati da Google Sheet: {SHEET_ID} / {SHEET_NAME}")
+    return prop
+
+
+PROP = _load_from_gsheet()
 
 EMAIL = os.environ["BK_EMAIL"]
 PASSWORD = os.environ["BK_PASSWORD"]
