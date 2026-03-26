@@ -33,15 +33,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium
 
-      - name: Install Playwright
+      - name: Install dependencies
         run: |
-          pip install playwright Pillow
+          pip install -r requirements.txt
           playwright install chromium --with-deps
 
       - name: Run uploader
         env:
           CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
           CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: xvfb-run python casevacanza_uploader.py
 
       - name: Upload debug artifacts
