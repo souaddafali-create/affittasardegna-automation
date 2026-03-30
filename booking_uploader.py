@@ -6,18 +6,14 @@ import tempfile
 import time
 import urllib.request
 
-import gspread
-
 from playwright.sync_api import sync_playwright
 
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
-# --- Carica dati proprietà dal Google Sheet via gspread ---
+# --- Carica dati proprietà: Google Sheet (gspread) oppure fallback JSON locale ---
 SHEET_ID = "1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA"
 SHEET_NAME = "MASTER_PROPRIETÀ"
-
-# Riga della proprietà da usare (nome struttura o indice 0-based, default prima riga dati)
 PROPERTY_NAME = os.environ.get("PROPERTY_NAME", "")
 
 
@@ -35,14 +31,12 @@ def _parse_cell(value):
         return True
     if low in ("false", "falso", "no"):
         return False
-    # Prova a parsare come numero
     try:
         if "." in v:
             return float(v)
         return int(v)
     except ValueError:
         pass
-    # Prova a parsare come JSON (per array/oggetti inline)
     if v.startswith("[") or v.startswith("{"):
         try:
             return json.loads(v)
@@ -52,11 +46,7 @@ def _parse_cell(value):
 
 
 def _unflatten(flat_dict):
-    """Converte un dict con chiavi dot-notation in un dict annidato.
-
-    Es: {"identificativi.nome_struttura": "Il Faro"} →
-        {"identificativi": {"nome_struttura": "Il Faro"}}
-    """
+    """Converte un dict con chiavi dot-notation in un dict annidato."""
     result = {}
     for key, value in flat_dict.items():
         parts = key.split(".")
@@ -69,7 +59,8 @@ def _unflatten(flat_dict):
 
 def _load_from_gsheet():
     """Legge i dati proprietà dal Google Sheet MASTER_PROPRIETÀ."""
-    # Autenticazione: service account (file o dict da env var)
+    import gspread
+
     creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
     creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     if creds_json:
@@ -78,7 +69,6 @@ def _load_from_gsheet():
     elif creds_path:
         gc = gspread.service_account(filename=creds_path)
     else:
-        # Default: cerca ~/.config/gspread/service_account.json
         gc = gspread.service_account()
 
     sh = gc.open_by_key(SHEET_ID)
@@ -88,7 +78,6 @@ def _load_from_gsheet():
     if not records:
         raise RuntimeError(f"Nessun dato trovato nel foglio '{SHEET_NAME}'")
 
-    # Seleziona la riga della proprietà
     if PROPERTY_NAME:
         row = None
         for r in records:
@@ -103,14 +92,33 @@ def _load_from_gsheet():
     else:
         row = records[0]
 
-    # Parsa i valori e costruisci il dict annidato
     parsed = {k: _parse_cell(v) for k, v in row.items()}
     prop = _unflatten(parsed)
     print(f"  Dati caricati da Google Sheet: {SHEET_ID} / {SHEET_NAME}")
     return prop
 
 
-PROP = _load_from_gsheet()
+def _load_from_json():
+    """Fallback: legge i dati proprietà da file JSON locale."""
+    data_file = os.environ.get(
+        "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+    )
+    with open(data_file, encoding="utf-8") as f:
+        prop = json.load(f)
+    print(f"  Dati caricati da JSON locale: {data_file}")
+    return prop
+
+
+def _load_property():
+    """Se ci sono credenziali Google usa lo Sheet, altrimenti JSON locale."""
+    creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    if creds_json or creds_path:
+        return _load_from_gsheet()
+    return _load_from_json()
+
+
+PROP = _load_property()
 
 EMAIL = os.environ["BK_EMAIL"]
 PASSWORD = os.environ["BK_PASSWORD"]

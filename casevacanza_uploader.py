@@ -4,15 +4,11 @@ import re
 import tempfile
 import urllib.request
 
-import gspread
-
 from playwright.sync_api import sync_playwright
 
-# --- Carica dati proprietà dal Google Sheet via gspread ---
+# --- Carica dati proprietà: Google Sheet (gspread) oppure fallback JSON locale ---
 SHEET_ID = "1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA"
 SHEET_NAME = "MASTER_PROPRIETÀ"
-
-# Riga della proprietà da usare (nome struttura, default prima riga dati)
 PROPERTY_NAME = os.environ.get("PROPERTY_NAME", "")
 
 
@@ -58,6 +54,8 @@ def _unflatten(flat_dict):
 
 def _load_from_gsheet():
     """Legge i dati proprietà dal Google Sheet MASTER_PROPRIETÀ."""
+    import gspread
+
     creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
     creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     if creds_json:
@@ -95,10 +93,30 @@ def _load_from_gsheet():
     return prop
 
 
-PROP = _load_from_gsheet()
+def _load_from_json():
+    """Fallback: legge i dati proprietà da file JSON locale."""
+    data_file = os.environ.get(
+        "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+    )
+    with open(data_file, encoding="utf-8") as f:
+        prop = json.load(f)
+    print(f"  Dati caricati da JSON locale: {data_file}")
+    return prop
 
-# --- Verifica dati letti dal Google Sheet ---
-print(f"=== DATI LETTI DAL GOOGLE SHEET ===")
+
+def _load_property():
+    """Se ci sono credenziali Google usa lo Sheet, altrimenti JSON locale."""
+    creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    if creds_json or creds_path:
+        return _load_from_gsheet()
+    return _load_from_json()
+
+
+PROP = _load_property()
+
+# --- Verifica dati caricati ---
+print(f"=== DATI PROPRIETÀ CARICATI ===")
 print(f"Nome: {PROP['identificativi']['nome_struttura']}")
 print(f"Tipo: {PROP['identificativi']['tipo_struttura']}")
 print(f"Indirizzo: {PROP['identificativi']['indirizzo']}")
