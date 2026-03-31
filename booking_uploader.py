@@ -281,8 +281,22 @@ def navigate_to_add_property(page):
     """Navigate to 'List your property' on Booking Extranet."""
     print("Navigazione a 'Aggiungi nuova struttura'...")
 
-    # Try the Extranet join/list-property URL
-    page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
+    # Prima prova il link diretto "Inserisci il tuo immobile" nella pagina
+    try:
+        for label in ["Inserisci il tuo immobile", "List your property", "Registra la tua struttura"]:
+            link = page.get_by_text(label, exact=False)
+            if link.count() > 0:
+                link.first.click()
+                wait(page, 5000)
+                print(f"  Cliccato: '{label}'")
+                screenshot(page, "dopo_click_inserisci")
+                print(f"  URL: {page.url}")
+                return
+    except Exception as e:
+        print(f"  Link non cliccabile: {e}")
+
+    # Fallback: URL diretto al wizard di registrazione
+    page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
     wait(page, 5000)
     screenshot(page, "join_page")
     save_html(page, "join_page")
