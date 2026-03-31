@@ -47,7 +47,7 @@
     "check_out": "10:00",
     "soggiorno_minimo_bassa": { "notti": 7 },
     "soggiorno_minimo_alta": { "notti": 7 },
-    "cauzione": 200,
+    "cauzione_euro": 200,
     "pulizia_finale": "100 EUR a soggiorno obbligatoria",
     "asciugamani": "",
     "lenzuola": "",
