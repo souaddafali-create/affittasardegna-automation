@@ -279,27 +279,13 @@ def login(page):
 
 def navigate_to_add_property(page):
     """Navigate to 'List your property' on Booking Extranet."""
-    print("Navigazione a 'Aggiungi nuova struttura'...")
-
-    # Prima prova il link diretto "Inserisci il tuo immobile" nella pagina
-    try:
-        for label in ["Inserisci il tuo immobile", "List your property", "Registra la tua struttura"]:
-            link = page.get_by_text(label, exact=False)
-            if link.count() > 0:
-                link.first.click()
-                wait(page, 5000)
-                print(f"  Cliccato: '{label}'")
-                screenshot(page, "dopo_click_inserisci")
-                print(f"  URL: {page.url}")
-                return
-    except Exception as e:
-        print(f"  Link non cliccabile: {e}")
-
-    # Fallback: URL diretto al wizard di registrazione
-    page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
-    wait(page, 5000)
-    screenshot(page, "join_page")
-    save_html(page, "join_page")
+    print("\n" + "="*60)
+    print("  CLICCA 'Inserisci il tuo immobile' nel browser!")
+    print("  Quando sei sulla pagina del wizard, torna qui")
+    print("  e premi INVIO.")
+    print("="*60)
+    input("\n>>> Premi INVIO quando sei sul wizard di inserimento... ")
+    screenshot(page, "wizard_inizio")
     print(f"  URL: {page.url}")
 
 
