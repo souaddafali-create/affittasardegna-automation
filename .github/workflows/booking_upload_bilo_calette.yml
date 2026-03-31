@@ -1,0 +1,43 @@
+name: Booking Uploader - Bilo Le Calette
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'booking_uploader.py'
+      - 'Bilo_Le_Calette_DATI.json'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright playwright-stealth
+          playwright install chromium --with-deps
+
+      - name: Run Booking uploader (Bilo Le Calette)
+        env:
+          BK_EMAIL: ${{ secrets.BK_EMAIL }}
+          BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
+          PROPERTY_DATA: Bilo_Le_Calette_DATI.json
+        run: xvfb-run python booking_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilo-le-calette-booking-screenshots
+          path: screenshots_booking/

@@ -273,6 +273,32 @@ def login(page):
         print("  Campo password non trovato — potrebbe essere login senza password.")
         screenshot(page, "no_password")
 
+    # ── OTP post-password (2FA dopo login) ──
+    if _page_has_otp(page):
+        print("  *** CODICE 2FA POST-PASSWORD RICHIESTO ***")
+        screenshot(page, "otp_post_password")
+        save_html(page, "otp_post_password")
+
+        if INTERACTIVE:
+            code = input("\n>>> Inserisci il codice 2FA ricevuto via email: ").strip()
+            otp_sel = (
+                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
+                "input[name*='token'], input[type='tel'], "
+                "input[autocomplete='one-time-code']"
+            )
+            otp_field = page.locator(otp_sel).first
+            otp_field.fill(code)
+            wait(page, 1000)
+            page.click('button[type="submit"]', timeout=10_000)
+            wait(page, 5000)
+            screenshot(page, "dopo_otp_post_password")
+            print("  Codice 2FA inviato.")
+        else:
+            raise RuntimeError(
+                "Booking richiede un codice 2FA post-password. "
+                "Eseguire in locale con INTERACTIVE=1."
+            )
+
     print(f"  URL dopo login: {page.url}")
 
 
@@ -729,8 +755,17 @@ def insert_property(page):
 
         cond = PROP.get("condizioni", {})
 
-        # Prezzo a notte — solo se presente nel JSON
+        # Prezzo a notte — dal JSON (prezzo_notte diretto, oppure mediana del listino)
         prezzo = cond.get("prezzo_notte")
+        if prezzo is None:
+            # Calcola mediana dal listino_prezzi se disponibile
+            listino = cond.get("listino_prezzi", [])
+            if listino:
+                prezzi_listino = sorted(p["prezzo_notte"] for p in listino if p.get("prezzo_notte"))
+                if prezzi_listino:
+                    mid = len(prezzi_listino) // 2
+                    prezzo = prezzi_listino[mid]
+                    print(f"  Prezzo calcolato (mediana listino): {prezzo}")
         if prezzo is not None:
             prezzo_str = str(prezzo)
             for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
@@ -744,8 +779,8 @@ def insert_property(page):
 
         wait(page, 1000)
 
-        # Cauzione — solo se presente nel JSON
-        cauzione_val = cond.get("cauzione_euro")
+        # Cauzione — solo se presente nel JSON (supporta sia cauzione_euro che cauzione)
+        cauzione_val = cond.get("cauzione_euro") or cond.get("cauzione")
         if cauzione_val is not None:
             cauzione = str(cauzione_val)
             for label in ["Cauzione", "Deposit", "Damage deposit"]:

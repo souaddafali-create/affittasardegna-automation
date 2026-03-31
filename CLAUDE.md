@@ -116,6 +116,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 |------|-------------|
 | `Il_Faro_Badesi_DATI.json` | Dati completi della proprietà "Il Faro" a Badesi (SS). Fonte unica: tutti gli uploader leggono da qui. |
 | `Villa_La_Vela_DATI.json` | Dati completi della proprietà "Villa La Vela" a Stintino (SS). Villa con piscina privata, 6 ospiti. Include coordinate GPS, listino multi-periodo e iCal. |
+| `Bilo_Le_Calette_DATI.json` | Dati completi della proprietà "Bilo Le Calette" a Palau (SS). Bilocale fronte porto, 3 ospiti. Listino multi-periodo, cauzione 200 EUR. |
 
 ### Uploader
 
@@ -131,6 +132,7 @@ Ogni uploader legge il JSON, fa login sul portale, compila il wizard di inserime
 | `.github/workflows/upload.yml` | Push su `main` (se cambia `casevacanza_uploader.py` o il JSON) + manual | Esegue `casevacanza_uploader.py` con xvfb. Artifact: `screenshots/`. |
 | `.github/workflows/booking_upload.yml` | Push su `main` (se cambia `booking_uploader.py` o il JSON) + manual | Esegue `booking_uploader.py` con xvfb e stealth. Artifact: `screenshots_booking/`. |
 | `.github/workflows/upload_villa_la_vela.yml` | Push su `main` (se cambia uploader o `Villa_La_Vela_DATI.json`) + manual | Esegue `casevacanza_uploader.py` con `PROPERTY_DATA=Villa_La_Vela_DATI.json`. Artifact: `villa-la-vela-debug-screenshots/`. |
+| `.github/workflows/booking_upload_bilo_calette.yml` | Push su `main` (se cambia uploader o `Bilo_Le_Calette_DATI.json`) + manual | Esegue `booking_uploader.py` con `PROPERTY_DATA=Bilo_Le_Calette_DATI.json`. Artifact: `bilo-le-calette-booking-screenshots/`. |
 | `.github/workflows/booking_explore.yml` | Solo manual | Script esplorativo inline per Booking.com. Non usa il JSON. |
 | `.github/workflows/explore_wizard.yml` | Solo manual | Esegue `explore_wizard.py` per mappare il wizard CaseVacanza. Artifact: `wizard-exploration/`. |
 
