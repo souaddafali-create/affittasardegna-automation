@@ -306,18 +306,35 @@ def login(page):
 # Navigazione a "Aggiungi nuova struttura"
 # ---------------------------------------------------------------------------
 
+def _dismiss_cookie_banner(page):
+    """Chiude il banner cookie se presente."""
+    for label in ["Accetto", "Accetta", "Accept", "Accept all"]:
+        try:
+            btn = page.get_by_role("button", name=label)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cookie banner chiuso ('{label}')")
+                wait(page, 1000)
+                return
+        except Exception:
+            continue
+
+
 def navigate_to_add_property(page):
-    """Navigate to 'List your property' — clicca il link nella navbar, poi entra nel wizard."""
+    """Navigate to 'List your property' — gestisce nuova scheda e landing page.
+
+    Returns the page (possibly a new popup tab) where the wizard starts.
+    """
     print("Navigazione a 'Inserisci il tuo immobile'...")
 
-    # Dopo il login siamo sulla homepage di Booking.com.
-    # Il link "Inserisci il tuo immobile" è nella barra di navigazione in alto.
     wait(page, 3000)
+    _dismiss_cookie_banner(page)
     screenshot(page, "prima_click_inserisci")
 
-    clicked = False
+    # "Inserisci il tuo immobile" apre tipicamente una NUOVA SCHEDA (target=_blank).
+    # Usiamo expect_popup() per intercettarla.
+    new_page = None
 
-    # Prova a cliccare il link/bottone nella navbar
     for label in [
         "Inserisci il tuo immobile",
         "List your property",
@@ -326,81 +343,76 @@ def navigate_to_add_property(page):
         try:
             link = page.get_by_role("link", name=label)
             if link.count() > 0:
-                link.first.click()
-                clicked = True
-                print(f"  Cliccato link: '{label}'")
+                # Intercetta la nuova scheda
+                with page.context.expect_page(timeout=10_000) as new_page_info:
+                    link.first.click()
+                new_page = new_page_info.value
+                print(f"  Cliccato link: '{label}' → nuova scheda aperta")
                 break
         except Exception:
-            continue
-
-    if not clicked:
-        for label in [
-            "Inserisci il tuo immobile",
-            "List your property",
-        ]:
+            # Se non apre nuova scheda, prova click normale
             try:
-                el = page.get_by_text(label, exact=False)
-                if el.count() > 0:
-                    el.first.click()
-                    clicked = True
-                    print(f"  Cliccato testo: '{label}'")
+                link = page.get_by_role("link", name=label)
+                if link.count() > 0:
+                    link.first.click()
+                    print(f"  Cliccato link: '{label}' (stessa scheda)")
                     break
             except Exception:
                 continue
 
-    if not clicked:
-        print("  Link non trovato nella pagina, navigo direttamente...")
+    # Se non abbiamo trovato il link, naviga direttamente
+    if new_page is None and "join.booking.com" not in page.url:
+        print("  Link non trovato o stessa scheda, navigo direttamente...")
         page.goto(
             "https://join.booking.com/",
             wait_until="networkidle",
             timeout=30_000,
         )
 
-    wait(page, 5000)
-    screenshot(page, "landing_join")
-    save_html(page, "landing_join")
-    print(f"  URL landing: {page.url}")
+    # Usa la nuova scheda se aperta, altrimenti resta sulla stessa
+    wizard_page = new_page if new_page else page
+    wizard_page.wait_for_load_state("networkidle", timeout=15_000)
+    wait(wizard_page, 3000)
+    _dismiss_cookie_banner(wizard_page)
+    screenshot(wizard_page, "landing_join")
+    save_html(wizard_page, "landing_join")
+    print(f"  URL landing: {wizard_page.url}")
 
-    # Ora siamo sulla landing page join.booking.com — clicca "Get started now"
-    # o "Continue your registration" per entrare nel wizard vero
-    entered = False
-    for label in [
-        "Get started now",
-        "Inizia ora",
-        "Inizia subito",
-        "Comincia ora",
-        "Continue your registration",
-        "Continua la registrazione",
-    ]:
-        try:
-            btn = page.get_by_role("link", name=label)
-            if btn.count() > 0:
-                btn.first.click()
-                entered = True
-                print(f"  Cliccato: '{label}'")
-                break
-            btn = page.get_by_role("button", name=label)
-            if btn.count() > 0:
-                btn.first.click()
-                entered = True
-                print(f"  Cliccato button: '{label}'")
-                break
-            btn = page.get_by_text(label, exact=False)
-            if btn.count() > 0:
-                btn.first.click()
-                entered = True
-                print(f"  Cliccato testo: '{label}'")
-                break
-        except Exception:
-            continue
+    # Se siamo su join.booking.com, clicca "Get started now"
+    if "join.booking.com" in wizard_page.url:
+        for label in [
+            "Get started now",
+            "Inizia ora",
+            "Inizia subito",
+            "Comincia ora",
+            "Continue your registration",
+            "Continua la registrazione",
+        ]:
+            try:
+                btn = wizard_page.get_by_role("link", name=label)
+                if btn.count() > 0:
+                    btn.first.click()
+                    print(f"  Cliccato: '{label}'")
+                    break
+                btn = wizard_page.get_by_role("button", name=label)
+                if btn.count() > 0:
+                    btn.first.click()
+                    print(f"  Cliccato button: '{label}'")
+                    break
+                btn = wizard_page.get_by_text(label, exact=False)
+                if btn.count() > 0:
+                    btn.first.click()
+                    print(f"  Cliccato testo: '{label}'")
+                    break
+            except Exception:
+                continue
 
-    if not entered:
-        print("  ATTENZIONE: pulsante 'Get started' non trovato!")
+        wait(wizard_page, 8000)
 
-    wait(page, 8000)
-    screenshot(page, "dopo_get_started")
-    save_html(page, "dopo_get_started")
-    print(f"  URL wizard: {page.url}")
+    screenshot(wizard_page, "dopo_get_started")
+    save_html(wizard_page, "dopo_get_started")
+    print(f"  URL wizard: {wizard_page.url}")
+    return wizard_page
 
 
 # ---------------------------------------------------------------------------
@@ -997,9 +1009,9 @@ def main():
 
         try:
             login(page)
-            navigate_to_add_property(page)
-            screenshot(page, "pagina_iniziale")
-            insert_property(page)
+            wizard_page = navigate_to_add_property(page)
+            screenshot(wizard_page, "pagina_iniziale")
+            insert_property(wizard_page)
         finally:
             try:
                 screenshot(page, "final_state")
