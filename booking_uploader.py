@@ -166,14 +166,26 @@ def _page_has_captcha(page):
 
 
 def _page_has_otp(page):
-    """Rileva se Booking sta chiedendo un codice di verifica email."""
+    """Rileva se Booking sta chiedendo un codice di verifica email.
+    Più restrittivo per evitare falsi positivi sulla homepage."""
+    url = page.url.lower()
+
+    # Se siamo sulla homepage di Booking, NON è un OTP
+    if "booking.com/index" in url or url.rstrip("/").endswith("booking.com"):
+        return False
+
+    # Controlla che siamo su una pagina di autenticazione
+    auth_urls = ["account.booking.com", "sign-in", "verify", "auth"]
+    if not any(u in url for u in auth_urls):
+        return False
+
     html = page.content().lower()
-    otp_keywords = ["verification", "verifica", "codice", "code", "confirm", "pin"]
+    otp_keywords = ["verification code", "codice di verifica", "enter the code",
+                     "inserisci il codice", "sent you a code", "inviato un codice"]
     has_keyword = any(kw in html for kw in otp_keywords)
     has_otp_input = page.locator(
         "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-        "input[name*='token'], input[type='tel'], "
-        "input[autocomplete='one-time-code']"
+        "input[name*='token'], input[autocomplete='one-time-code']"
     ).count() > 0
     return has_keyword and has_otp_input
 
@@ -270,8 +282,18 @@ def login(page):
         screenshot(page, "dopo_login")
     except Exception:
         # Alcuni flussi (es. magic link) saltano la password
-        print("  Campo password non trovato — potrebbe essere login senza password.")
+        print("  Campo password non trovato.")
         screenshot(page, "no_password")
+        if INTERACTIVE:
+            _wait_for_interactive(
+                page,
+                "Completa il login manualmente nel browser (password, OTP, ecc.), "
+                "poi premi INVIO quando sei sulla homepage loggato.",
+                lambda p: "booking.com/index" in p.url.lower()
+                or "admin.booking.com" in p.url.lower(),
+            )
+            screenshot(page, "dopo_login_manuale")
+            print(f"  Login manuale completato. URL: {page.url}")
 
     # ── OTP post-password (2FA dopo login) ──
     if _page_has_otp(page):
