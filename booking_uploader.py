@@ -136,7 +136,7 @@ SERVIZI = _build_servizi_booking()
 # Login Booking Extranet
 # ---------------------------------------------------------------------------
 
-def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=300):
+def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=600):
     """Pausa interattiva: chiede input da terminale oppure aspetta che l'utente
     agisca direttamente sul browser (modalità headless=False).
 
@@ -183,13 +183,13 @@ def login(page):
     print("Login Booking Extranet...")
     if INTERACTIVE:
         print("  (modalità interattiva — il browser si aprirà visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
+    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
     wait(page, 3000)
     screenshot(page, "login_page")
 
     # ── Email ──
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=15_000)
+    page.wait_for_selector(email_sel, timeout=30_000)
     human_type(page, email_sel, EMAIL)
     wait(page, 1000)
     screenshot(page, "email_inserita")
@@ -219,30 +219,27 @@ def login(page):
         screenshot(page, "otp_richiesto")
         save_html(page, "otp_pagina")
 
-        if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            # Trova il campo OTP e compila
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
-            wait(page, 1000)
-            screenshot(page, "otp_inserito")
+        print("\n" + "="*60)
+        print("  CONTROLLA LA TUA EMAIL per il codice di verifica!")
+        print("  Hai tutto il tempo che ti serve.")
+        print("="*60)
+        code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
+        # Trova il campo OTP e compila
+        otp_sel = (
+            "input[name*='otp'], input[name*='code'], input[name*='pin'], "
+            "input[name*='token'], input[type='tel'], "
+            "input[autocomplete='one-time-code']"
+        )
+        otp_field = page.locator(otp_sel).first
+        otp_field.fill(code)
+        wait(page, 1000)
+        screenshot(page, "otp_inserito")
 
-            # Submit OTP
-            page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp")
-            print("  Codice di verifica inviato.")
-        else:
-            # In CI non possiamo chiedere input — fallisce
-            raise RuntimeError(
-                "Booking richiede un codice di verifica email. "
-                "Eseguire lo script in locale con INTERACTIVE=1."
-            )
+        # Submit OTP
+        page.click('button[type="submit"]', timeout=10_000)
+        wait(page, 5000)
+        screenshot(page, "dopo_otp")
+        print("  Codice di verifica inviato.")
     else:
         print("  Nessun OTP richiesto, procedo.")
 
