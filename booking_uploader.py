@@ -307,49 +307,62 @@ def login(page):
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
-    """Navigate to 'List your property' on Booking Extranet."""
-    print("Navigazione a 'Aggiungi nuova struttura'...")
+    """Navigate to 'List your property' — clicca il link nella navbar di Booking."""
+    print("Navigazione a 'Inserisci il tuo immobile'...")
 
-    # 1) Vai all'Extranet (pannello partner)
-    page.goto("https://admin.booking.com/", wait_until="networkidle", timeout=30_000)
-    wait(page, 5000)
-    screenshot(page, "extranet_home")
-    save_html(page, "extranet_home")
-    print(f"  URL Extranet: {page.url}")
+    # Dopo il login siamo sulla homepage di Booking.com.
+    # Il link "Inserisci il tuo immobile" è nella barra di navigazione in alto.
+    # Cerchiamo e clicchiamo direttamente quel link.
+    wait(page, 3000)
+    screenshot(page, "prima_click_inserisci")
 
-    # 2) Cerca e clicca "Inserisci il tuo immobile" / "List your property"
     clicked = False
+
+    # Prova a cliccare il link/bottone nella navbar
     for label in [
         "Inserisci il tuo immobile",
-        "Aggiungi una nuova struttura",
-        "Aggiungi struttura",
         "List your property",
-        "Add a new property",
-        "Add new property",
+        "Registra la tua struttura",
     ]:
         try:
-            btn = page.get_by_text(label, exact=False)
-            if btn.count() > 0:
-                btn.first.click()
+            link = page.get_by_role("link", name=label)
+            if link.count() > 0:
+                link.first.click()
                 clicked = True
-                print(f"  Cliccato: '{label}'")
+                print(f"  Cliccato link: '{label}'")
                 break
         except Exception:
             continue
 
     if not clicked:
-        # Fallback: link diretto al wizard di registrazione proprietà
-        print("  Pulsante non trovato, provo URL diretto...")
+        # Fallback: cerca come testo generico (potrebbe essere un <a> o <button>)
+        for label in [
+            "Inserisci il tuo immobile",
+            "List your property",
+        ]:
+            try:
+                el = page.get_by_text(label, exact=False)
+                if el.count() > 0:
+                    el.first.click()
+                    clicked = True
+                    print(f"  Cliccato testo: '{label}'")
+                    break
+            except Exception:
+                continue
+
+    if not clicked:
+        # Ultimo fallback: URL diretto
+        print("  Link non trovato nella pagina, navigo direttamente...")
         page.goto(
-            "https://join.booking.com/hotel/list-your-property/",
+            "https://account.booking.com/register",
             wait_until="networkidle",
             timeout=30_000,
         )
 
-    wait(page, 5000)
+    wait(page, 8000)
     screenshot(page, "dopo_click_inserisci")
     save_html(page, "dopo_click_inserisci")
-    print(f"  URL: {page.url}")
+    print(f"  URL dopo navigazione: {page.url}")
 
 
 # ---------------------------------------------------------------------------
