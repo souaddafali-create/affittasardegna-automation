@@ -310,11 +310,45 @@ def navigate_to_add_property(page):
     """Navigate to 'List your property' on Booking Extranet."""
     print("Navigazione a 'Aggiungi nuova struttura'...")
 
-    # Try the Extranet join/list-property URL
-    page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
+    # 1) Vai all'Extranet (pannello partner)
+    page.goto("https://admin.booking.com/", wait_until="networkidle", timeout=30_000)
     wait(page, 5000)
-    screenshot(page, "join_page")
-    save_html(page, "join_page")
+    screenshot(page, "extranet_home")
+    save_html(page, "extranet_home")
+    print(f"  URL Extranet: {page.url}")
+
+    # 2) Cerca e clicca "Inserisci il tuo immobile" / "List your property"
+    clicked = False
+    for label in [
+        "Inserisci il tuo immobile",
+        "Aggiungi una nuova struttura",
+        "Aggiungi struttura",
+        "List your property",
+        "Add a new property",
+        "Add new property",
+    ]:
+        try:
+            btn = page.get_by_text(label, exact=False)
+            if btn.count() > 0:
+                btn.first.click()
+                clicked = True
+                print(f"  Cliccato: '{label}'")
+                break
+        except Exception:
+            continue
+
+    if not clicked:
+        # Fallback: link diretto al wizard di registrazione proprietà
+        print("  Pulsante non trovato, provo URL diretto...")
+        page.goto(
+            "https://join.booking.com/hotel/list-your-property/",
+            wait_until="networkidle",
+            timeout=30_000,
+        )
+
+    wait(page, 5000)
+    screenshot(page, "dopo_click_inserisci")
+    save_html(page, "dopo_click_inserisci")
     print(f"  URL: {page.url}")
 
 
