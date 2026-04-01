@@ -43,7 +43,7 @@
   },
   "condizioni": {
     "prezzo_base": 2000,
-    "check_in": "16:00 - 20:00",
+    "check_in": "17:00 su appuntamento",
     "check_out": "10:00",
     "soggiorno_minimo_bassa": { "notti": 7 },
     "soggiorno_minimo_alta": { "notti": 7 },
