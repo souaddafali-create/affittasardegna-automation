@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import statistics
 import sys
 import tempfile
 import time
@@ -8,10 +9,10 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-# Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
+# Modalita interattiva: se il terminale e un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
-# --- Carica dati proprietà dal file JSON ---
+# --- Carica dati proprieta dal file JSON ---
 DATA_FILE = os.environ.get(
     "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
 )
@@ -54,7 +55,6 @@ def wait(page, ms=5000):
 
 
 def human_type(page, selector, text):
-    """Digita come un umano con pause random."""
     page.click(selector)
     time.sleep(random.uniform(0.3, 0.7))
     for char in text:
@@ -72,6 +72,24 @@ def try_step(page, step_name, func):
         save_html(page, f"errore_{step_name}")
 
 
+def click_continue(page):
+    for txt in ["Continua", "Continue", "Avanti", "Next"]:
+        try:
+            btn = page.get_by_role("button", name=txt)
+            if btn.count() > 0:
+                btn.first.click()
+                wait(page)
+                return
+        except Exception:
+            continue
+    # Fallback: button[type=submit]
+    try:
+        page.click('button[type="submit"]', timeout=5000)
+        wait(page)
+    except Exception:
+        print("  Pulsante continua non trovato")
+
+
 def download_placeholder_photos(count=5):
     paths = []
     tmp_dir = tempfile.mkdtemp()
@@ -85,10 +103,22 @@ def download_placeholder_photos(count=5):
     return paths
 
 
+def compute_price(cond):
+    """Calcola prezzo notte dal JSON: prezzo_notte diretto o mediana listino."""
+    prezzo = cond.get("prezzo_notte")
+    if prezzo is not None:
+        return int(prezzo)
+    listino = cond.get("listino_prezzi", [])
+    if listino:
+        prezzi = [p["prezzo_notte"] for p in listino if p.get("prezzo_notte")]
+        if prezzi:
+            return int(statistics.median(prezzi))
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Booking Extranet: mappatura dotazioni
 # REGOLA: spunta SOLO le dotazioni con valore true nel JSON.
-#         Se false o assente, NON spuntare. Zero eccezioni.
 # ---------------------------------------------------------------------------
 
 DOTAZIONI_BOOKING = {
@@ -116,8 +146,6 @@ DOTAZIONI_BOOKING = {
 
 
 def _build_servizi_booking():
-    """Restituisce la lista dei servizi attivi (true) da selezionare su Booking.
-    Legge SOLO dal JSON — se un servizio è false, NON viene incluso."""
     dot = PROP["dotazioni"]
     servizi = []
     for key, label in DOTAZIONI_BOOKING.items():
@@ -131,19 +159,23 @@ def _build_servizi_booking():
 
 SERVIZI = _build_servizi_booking()
 
+# Mappa tipo letto JSON -> label Booking
+LETTO_LABELS = {
+    "matrimoniale": ["Letto matrimoniale"],
+    "francese": ["Letto Queen-size"],
+    "singolo": ["Letto singolo"],
+    "divano_letto": ["Divano letto matrimoniale", "Divano letto"],
+    "divano_letto_singolo": ["Divano letto singolo"],
+    "king": ["Letto King-size"],
+    "castello": ["Letto a castello"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Login Booking Extranet
 # ---------------------------------------------------------------------------
 
 def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=300):
-    """Pausa interattiva: chiede input da terminale oppure aspetta che l'utente
-    agisca direttamente sul browser (modalità headless=False).
-
-    - Se INTERACTIVE: mostra un prompt e attende INVIO.
-    - Altrimenti (CI): attende fino a ``timeout_s`` che ``check_done_fn(page)``
-      restituisca True (polling ogni 5s), poi fallisce.
-    """
     if INTERACTIVE:
         input(f"\n>>> {prompt_msg}\n>>> Premi INVIO quando hai finito... ")
     else:
@@ -155,18 +187,12 @@ def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=300):
         raise TimeoutError(f"Timeout ({timeout_s}s) in attesa di: {prompt_msg}")
 
 
-def _has_password_field(page):
-    """Restituisce True se nella pagina c'è un campo password visibile."""
-    return page.locator('input[type="password"]:visible').count() > 0
-
-
 def _page_has_captcha(page):
     html = page.content().lower()
     return "captcha" in html or "human" in html or "choose all" in html
 
 
 def _page_has_otp(page):
-    """Rileva se Booking sta chiedendo un codice di verifica email."""
     html = page.content().lower()
     otp_keywords = ["verification", "verifica", "codice", "code", "confirm", "pin"]
     has_keyword = any(kw in html for kw in otp_keywords)
@@ -179,98 +205,81 @@ def _page_has_otp(page):
 
 
 def login(page):
-    """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi."""
     print("Login Booking Extranet...")
     if INTERACTIVE:
-        print("  (modalità interattiva — il browser si aprirà visibile)")
+        print("  (modalita interattiva - browser visibile)")
     page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
     wait(page, 3000)
     screenshot(page, "login_page")
+    save_html(page, "login_page")
 
-    # ── Email ──
+    # Email
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
     page.wait_for_selector(email_sel, timeout=15_000)
     human_type(page, email_sel, EMAIL)
     wait(page, 1000)
     screenshot(page, "email_inserita")
 
-    # Click continua
     page.click('button[type="submit"]', timeout=10_000)
     wait(page, 5000)
     screenshot(page, "dopo_email")
 
-    # ── CAPTCHA ──
+    # CAPTCHA
     if _page_has_captcha(page):
         print("  *** CAPTCHA RILEVATO ***")
         screenshot(page, "captcha")
         save_html(page, "captcha")
         _wait_for_interactive(
-            page,
-            "CAPTCHA rilevato! Risolvilo nel browser.",
+            page, "CAPTCHA rilevato! Risolvilo nel browser.",
             lambda p: not _page_has_captcha(p),
         )
         print("  CAPTCHA superato.")
-        screenshot(page, "captcha_superato")
         wait(page, 3000)
 
-    # ── Codice di verifica email (OTP) ──
+    # OTP
     if _page_has_otp(page):
         print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
         screenshot(page, "otp_richiesto")
         save_html(page, "otp_pagina")
-
         if INTERACTIVE:
             code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            # Trova il campo OTP e compila
             otp_sel = (
                 "input[name*='otp'], input[name*='code'], input[name*='pin'], "
                 "input[name*='token'], input[type='tel'], "
                 "input[autocomplete='one-time-code']"
             )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
+            page.locator(otp_sel).first.fill(code)
             wait(page, 1000)
-            screenshot(page, "otp_inserito")
-
-            # Submit OTP
             page.click('button[type="submit"]', timeout=10_000)
             wait(page, 5000)
             screenshot(page, "dopo_otp")
-            print("  Codice di verifica inviato.")
         else:
-            # In CI non possiamo chiedere input — fallisce
             raise RuntimeError(
                 "Booking richiede un codice di verifica email. "
                 "Eseguire lo script in locale con INTERACTIVE=1."
             )
-    else:
-        print("  Nessun OTP richiesto, procedo.")
 
-    # ── Secondo CAPTCHA (possibile dopo OTP) ──
+    # Secondo CAPTCHA (post-OTP)
     if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO (post-OTP) ***")
-        screenshot(page, "captcha_post_otp")
+        print("  *** CAPTCHA post-OTP ***")
         _wait_for_interactive(
-            page,
-            "Secondo CAPTCHA! Risolvilo nel browser.",
+            page, "Secondo CAPTCHA! Risolvilo nel browser.",
             lambda p: not _page_has_captcha(p),
         )
         wait(page, 3000)
 
-    # ── Password ──
+    # Password
     pw_sel = 'input[type="password"], input[name="password"], #password'
     try:
         page.wait_for_selector(pw_sel, timeout=15_000)
         human_type(page, pw_sel, PASSWORD)
         wait(page, 1000)
         screenshot(page, "password_inserita")
-
         page.click('button[type="submit"]', timeout=10_000)
         wait(page, 8000)
         screenshot(page, "dopo_login")
     except Exception:
-        # Alcuni flussi (es. magic link) saltano la password
-        print("  Campo password non trovato — potrebbe essere login senza password.")
+        print("  Campo password non trovato - login senza password.")
         screenshot(page, "no_password")
 
     print(f"  URL dopo login: {page.url}")
@@ -281,10 +290,7 @@ def login(page):
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
-    """Navigate to 'List your property' on Booking Extranet."""
     print("Navigazione a 'Aggiungi nuova struttura'...")
-
-    # Try the Extranet join/list-property URL
     page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
     wait(page, 5000)
     screenshot(page, "join_page")
@@ -293,235 +299,130 @@ def navigate_to_add_property(page):
 
 
 # ---------------------------------------------------------------------------
-# Inserimento proprietà su Booking Extranet
+# Wizard 13 step: Name -> Address -> ChannelManager -> Bedroom ->
+#   Facilities -> Services -> Languages -> HouseRules -> HostProfile ->
+#   Photos -> RequestToBook -> PaymentMode -> Price
 # ---------------------------------------------------------------------------
 
 def insert_property(page):
-    """Complete the Booking Extranet property insertion wizard."""
     ident = PROP["identificativi"]
     comp = PROP["composizione"]
-    photo_paths = download_placeholder_photos(5)
+    dot = PROP["dotazioni"]
+    cond = PROP.get("condizioni", {})
+    mktg = PROP.get("marketing", {})
 
-    # --- Step 1: Seleziona tipo struttura ---
-    print("Step 1: Tipo struttura — Appartamento")
+    # ── Step 1: Name ──
+    print("Step 1/13: Nome struttura")
 
-    def do_step1():
-        screenshot(page, "tipo_struttura_pagina")
-        save_html(page, "step1_tipo")
-        # Booking usa "Apartment" o "Appartamento" a seconda della lingua
-        for label in ["Appartamento", "Apartment", "Appartamenti"]:
-            try:
-                btn = page.get_by_text(label, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    print(f"  Tipo selezionato: {label}")
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "tipo_selezionato")
+    def do_name():
+        screenshot(page, "name_page")
+        save_html(page, "step01_name")
 
-    try_step(page, "step1_tipo", do_step1)
-
-    # --- Step 2: Quante strutture stai inserendo? → 1 ---
-    print("Step 2: Numero strutture")
-
-    def do_step2():
-        for label in ["Una", "One", "1"]:
-            try:
-                btn = page.get_by_text(label, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    print(f"  Selezionato: {label}")
-                    break
-            except Exception:
-                continue
-        wait(page)
-        # Click continua/next
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_numero")
-
-    try_step(page, "step2_numero", do_step2)
-
-    # --- Step 3: Nome struttura ---
-    print("Step 3: Nome struttura")
-
-    def do_step3():
-        screenshot(page, "nome_pagina")
-        save_html(page, "step3_nome")
-        # Prova diversi selettori per il campo nome
-        nome_field = page.get_by_label("Nome della struttura")
-        if nome_field.count() == 0:
-            nome_field = page.get_by_label("Property name")
-        if nome_field.count() == 0:
-            nome_field = page.locator(
+        for label in ["Nome della struttura", "Property name"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(ident["nome_struttura"])
+                print(f"  Nome: {ident['nome_struttura']}")
+                break
+        else:
+            field = page.locator(
                 "input[name*='name'], input[name*='nome'], "
                 "input[placeholder*='nome'], input[placeholder*='name']"
             )
-        if nome_field.count() > 0:
-            nome_field.first.fill(ident["nome_struttura"])
-            print(f"  Nome: {ident['nome_struttura']}")
-        else:
-            print("  Campo nome non trovato")
-        wait(page)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_nome")
-
-    try_step(page, "step3_nome", do_step3)
-
-    # --- Step 4: Indirizzo ---
-    print("Step 4: Indirizzo")
-
-    def do_step4():
-        screenshot(page, "indirizzo_pagina")
-        save_html(page, "step4_indirizzo")
-
-        # Indirizzo
-        addr_field = page.get_by_label("Indirizzo")
-        if addr_field.count() == 0:
-            addr_field = page.get_by_label("Street address")
-        if addr_field.count() == 0:
-            addr_field = page.locator("input[name*='address'], input[name*='street']")
-        if addr_field.count() > 0:
-            addr_field.first.fill(ident["indirizzo"])
-            print(f"  Indirizzo: {ident['indirizzo']}")
+            if field.count() > 0:
+                field.first.fill(ident["nome_struttura"])
+                print(f"  Nome (fallback): {ident['nome_struttura']}")
 
         wait(page, 1000)
+        click_continue(page)
+        screenshot(page, "after_name")
 
-        # Città
-        city_field = page.get_by_label("Città")
-        if city_field.count() == 0:
-            city_field = page.get_by_label("City")
-        if city_field.count() == 0:
-            city_field = page.locator("input[name*='city'], input[name*='citta']")
-        if city_field.count() > 0:
-            city_field.first.fill(ident["comune"])
-            print(f"  Città: {ident['comune']}")
+    try_step(page, "step01_name", do_name)
 
+    # ── Step 2: Address ──
+    print("Step 2/13: Indirizzo")
+
+    def do_address():
+        screenshot(page, "address_page")
+        save_html(page, "step02_address")
+
+        # Via
+        for label in ["Indirizzo", "Street address"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(ident["indirizzo"])
+                print(f"  Indirizzo: {ident['indirizzo']}")
+                break
+        else:
+            field = page.locator("input[name*='address'], input[name*='street']")
+            if field.count() > 0:
+                field.first.fill(ident["indirizzo"])
+        wait(page, 1000)
+
+        # Citta
+        for label in ["Citta", "City", "Comune"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(ident["comune"])
+                print(f"  Citta: {ident['comune']}")
+                break
+        else:
+            field = page.locator("input[name*='city'], input[name*='citta']")
+            if field.count() > 0:
+                field.first.fill(ident["comune"])
         wait(page, 1000)
 
         # CAP
-        cap_field = page.get_by_label("CAP")
-        if cap_field.count() == 0:
-            cap_field = page.get_by_label("Zip code")
-        if cap_field.count() == 0:
-            cap_field = page.get_by_label("Codice postale")
-        if cap_field.count() == 0:
-            cap_field = page.locator("input[name*='zip'], input[name*='postal']")
-        if cap_field.count() > 0:
-            cap_field.first.fill(ident["cap"])
-            print(f"  CAP: {ident['cap']}")
-
+        for label in ["CAP", "Codice postale", "Zip code", "Postal code"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(ident["cap"])
+                print(f"  CAP: {ident['cap']}")
+                break
+        else:
+            field = page.locator("input[name*='zip'], input[name*='postal'], input[name*='cap']")
+            if field.count() > 0:
+                field.first.fill(ident["cap"])
         wait(page, 1000)
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
+        click_continue(page)
+        screenshot(page, "after_address")
+
+    try_step(page, "step02_address", do_address)
+
+    # ── Step 3: Channel Manager ──
+    print("Step 3/13: Channel Manager (skip)")
+
+    def do_channel_manager():
+        screenshot(page, "channel_manager_page")
+        save_html(page, "step03_channel_manager")
+
+        # Cerca "No" / "Non uso un channel manager" / skip
+        for txt in ["No", "Non uso un channel manager",
+                     "I don't use a channel manager",
+                     "No, I don't"]:
             try:
-                btn = page.get_by_text(txt, exact=True)
+                btn = page.get_by_text(txt, exact=False)
                 if btn.count() > 0:
                     btn.first.click()
+                    print(f"  Channel Manager: skip ({txt})")
                     break
             except Exception:
                 continue
-        wait(page)
-        screenshot(page, "dopo_indirizzo")
-
-    try_step(page, "step4_indirizzo", do_step4)
-
-    # --- Step 5: Composizione (ospiti, camere, bagni) ---
-    print("Step 5: Composizione")
-
-    def do_step5():
-        screenshot(page, "composizione_pagina")
-        save_html(page, "step5_composizione")
-
-        # Ospiti
-        for label in ["Ospiti", "Guests", "Numero massimo di ospiti"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["max_ospiti"]))
-                print(f"  Ospiti: {comp['max_ospiti']}")
-                break
 
         wait(page, 1000)
+        click_continue(page)
+        screenshot(page, "after_channel_manager")
 
-        # Camere da letto
-        for label in ["Camere da letto", "Bedrooms"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["camere"]))
-                print(f"  Camere: {comp['camere']}")
-                break
+    try_step(page, "step03_channel_manager", do_channel_manager)
 
-        wait(page, 1000)
-
-        # Bagni
-        for label in ["Bagni", "Bathrooms"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["bagni"]))
-                print(f"  Bagni: {comp['bagni']}")
-                break
-
-        wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_composizione")
-
-    try_step(page, "step5_composizione", do_step5)
-
-    # --- Step 6: Letti (dal JSON composizione.letti) ---
-    print("Step 6: Configurazione letti")
-
-    # Mappa tipo letto JSON → label parziale su Booking (match parziale)
-    # Le label complete sono es. "Letto matrimoniale (ca. 140 x 200 cm)"
-    LETTO_LABELS_BOOKING = {
-        "matrimoniale": ["Letto matrimoniale"],
-        "francese": ["Letto Queen-size"],
-        "singolo": ["Letto singolo"],
-        "divano_letto": ["Divano letto matrimoniale", "Divano letto singolo"],
-        "divano_letto_singolo": ["Divano letto singolo"],
-        "king": ["Letto King-size"],
-        "castello": ["Letto a castello"],
-    }
+    # ── Step 4: Bedroom ──
+    print("Step 4/13: Configurazione camere e letti")
 
     def _click_bed_plus(partial_label, clicks):
-        """Clicca il pulsante '+' N volte per un tipo letto su Booking.
-        Booking usa contatori +/- per ogni tipo letto, non campi di testo."""
-        # Trova il testo del letto nella pagina
         label_el = page.get_by_text(partial_label, exact=False)
         if label_el.count() == 0:
             return False
-
-        # Risali al container riga che contiene i pulsanti +/-
-        # Il '+' è tipicamente l'ultimo button nella riga
         try:
             plus = label_el.first.locator(
                 "xpath=ancestor::*[.//button][1]//button[last()]"
@@ -533,8 +434,6 @@ def insert_property(page):
                 return True
         except Exception:
             pass
-
-        # Fallback: cerca il primo '+' button che segue il label nel DOM
         try:
             plus = label_el.first.locator(
                 "xpath=following::button[normalize-space()='+'][1]"
@@ -546,107 +445,278 @@ def insert_property(page):
                 return True
         except Exception:
             pass
-
         return False
 
-    def do_step6():
-        screenshot(page, "letti_pagina")
-        save_html(page, "step6_letti")
+    def do_bedroom():
+        screenshot(page, "bedroom_page")
+        save_html(page, "step04_bedroom")
 
+        # Numero camere da letto
+        for label in ["Camere da letto", "Bedrooms", "Numero di camere"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(str(comp["camere"]))
+                print(f"  Camere: {comp['camere']}")
+                break
+        wait(page, 1000)
+
+        # Letti per tipo
         letti = comp.get("letti", [])
-        if not letti:
-            print("  ATTENZIONE: nessun dato letti nel JSON, skip")
-
         for letto in letti:
             tipo = letto["tipo"]
             quantita = letto["quantita"]
-            labels = LETTO_LABELS_BOOKING.get(tipo, [])
+            labels = LETTO_LABELS.get(tipo, [])
             if not labels:
                 print(f"  Tipo letto sconosciuto: {tipo}, skip")
                 continue
             found = False
             for label in labels:
                 if _click_bed_plus(label, quantita):
-                    print(f"  {label}: +{quantita} (dal JSON)")
+                    print(f"  {label}: +{quantita}")
                     found = True
                     break
             if not found:
-                # Fallback: prova fill() su input con label
                 for label in labels:
                     field = page.get_by_label(label)
                     if field.count() > 0:
                         field.first.fill(str(quantita))
-                        print(f"  {label}: {quantita} via fill (dal JSON)")
+                        print(f"  {label}: {quantita} via fill")
                         found = True
                         break
             if not found:
-                print(f"  Label non trovata per tipo '{tipo}', skip")
+                print(f"  Label non trovata per '{tipo}', skip")
             wait(page, 500)
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
+        click_continue(page)
+        screenshot(page, "after_bedroom")
+
+    try_step(page, "step04_bedroom", do_bedroom)
+
+    # ── Step 5: Facilities ──
+    print("Step 5/13: Servizi e dotazioni")
+
+    def do_facilities():
+        screenshot(page, "facilities_page")
+        save_html(page, "step05_facilities")
+
+        # Bagni
+        for label in ["Bagni", "Bathrooms", "Numero di bagni"]:
+            field = page.get_by_label(label)
+            if field.count() > 0:
+                field.first.fill(str(comp["bagni"]))
+                print(f"  Bagni: {comp['bagni']}")
+                break
+        wait(page, 1000)
+
+        # Metri quadri (se presente nel JSON)
+        mq = comp.get("metri_quadri")
+        if mq:
+            for label in ["Dimensione", "Size", "Metri quadri", "Square meters"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(str(mq))
+                    print(f"  Metri quadri: {mq}")
                     break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_letti")
+            wait(page, 1000)
 
-    try_step(page, "step6_letti", do_step6)
-
-    # --- Step 7: Servizi/Dotazioni ---
-    print("Step 7: Servizi e dotazioni")
-
-    def do_step7():
-        screenshot(page, "servizi_pagina")
-        save_html(page, "step7_servizi")
-
+        # Dotazioni - SOLO quelle con true nel JSON
         for servizio in SERVIZI:
             try:
                 btn = page.get_by_text(servizio, exact=True)
                 if btn.count() > 0:
                     btn.first.click()
                     page.wait_for_timeout(500)
-                    print(f"  Servizio selezionato: {servizio}")
+                    print(f"  Dotazione: {servizio}")
                 else:
-                    # Prova con checkbox/label
                     cb = page.locator(f"label:has-text('{servizio}')")
                     if cb.count() > 0:
                         cb.first.click()
                         page.wait_for_timeout(500)
-                        print(f"  Servizio selezionato (label): {servizio}")
+                        print(f"  Dotazione (label): {servizio}")
                     else:
-                        print(f"  Servizio non trovato: {servizio}")
+                        print(f"  Dotazione non trovata: {servizio}")
             except Exception as e:
-                print(f"  Errore servizio {servizio}: {e}")
+                print(f"  Errore dotazione {servizio}: {e}")
 
         wait(page)
+        click_continue(page)
+        screenshot(page, "after_facilities")
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
+    try_step(page, "step05_facilities", do_facilities)
+
+    # ── Step 6: Services ──
+    print("Step 6/13: Servizi extra (colazione, parcheggio)")
+
+    def do_services():
+        screenshot(page, "services_page")
+        save_html(page, "step06_services")
+
+        # Colazione: non offriamo colazione -> seleziona "No"
+        for txt in ["No", "Non offriamo la colazione",
+                     "No breakfast", "We don't offer breakfast"]:
+            try:
+                btn = page.get_by_text(txt, exact=False)
+                if btn.count() > 0:
+                    btn.first.click()
+                    print(f"  Colazione: No")
+                    break
+            except Exception:
+                continue
+        wait(page, 1000)
+
+        # Parcheggio dal JSON
+        has_parking = dot.get("parcheggio_privato") is True or \
+            "parcheggio" in (dot.get("altro_dotazioni") or "").lower()
+        if has_parking:
+            for txt in ["Si", "Yes", "Parcheggio disponibile",
+                         "Parking available"]:
+                try:
+                    btn = page.get_by_text(txt, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        print("  Parcheggio: Si")
+                        break
+                except Exception:
+                    continue
+            wait(page, 1000)
+            # Gratuito / incluso
+            for txt in ["Gratuito", "Free", "Incluso"]:
+                try:
+                    btn = page.get_by_text(txt, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        print(f"  Parcheggio: {txt}")
+                        break
+                except Exception:
+                    continue
+        wait(page, 1000)
+
+        click_continue(page)
+        screenshot(page, "after_services")
+
+    try_step(page, "step06_services", do_services)
+
+    # ── Step 7: Languages ──
+    print("Step 7/13: Lingue parlate")
+
+    def do_languages():
+        screenshot(page, "languages_page")
+        save_html(page, "step07_languages")
+
+        # Seleziona Italiano (dovrebbe essere gia selezionato)
+        for txt in ["Italiano", "Italian"]:
             try:
                 btn = page.get_by_text(txt, exact=True)
                 if btn.count() > 0:
                     btn.first.click()
+                    print(f"  Lingua: {txt}")
                     break
             except Exception:
                 continue
-        wait(page)
-        screenshot(page, "dopo_servizi")
+        wait(page, 1000)
 
-    try_step(page, "step7_servizi", do_step7)
+        click_continue(page)
+        screenshot(page, "after_languages")
 
-    # --- Step 8: Foto ---
-    print("Step 8: Upload foto")
+    try_step(page, "step07_languages", do_languages)
 
-    def do_step8():
-        screenshot(page, "foto_pagina")
-        save_html(page, "step8_foto")
+    # ── Step 8: House Rules ──
+    print("Step 8/13: Regole della casa")
 
+    def do_house_rules():
+        screenshot(page, "house_rules_page")
+        save_html(page, "step08_house_rules")
+
+        # Check-in
+        checkin = cond.get("check_in", "")
+        if checkin:
+            for label in ["Check-in", "Orario check-in", "Check-in from",
+                          "Check-in dalle"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(checkin)
+                    print(f"  Check-in: {checkin}")
+                    break
+            wait(page, 1000)
+
+        # Check-out
+        checkout = cond.get("check_out", "")
+        if checkout:
+            for label in ["Check-out", "Orario check-out", "Check-out until",
+                          "Check-out entro"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(checkout)
+                    print(f"  Check-out: {checkout}")
+                    break
+            wait(page, 1000)
+
+        # Animali
+        animali = dot.get("animali_ammessi", False)
+        if animali:
+            for txt in ["Si", "Yes", "Animali ammessi"]:
+                try:
+                    btn = page.get_by_text(txt, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        print("  Animali: ammessi")
+                        break
+                except Exception:
+                    continue
+        else:
+            for txt in ["No", "Non ammessi", "No pets"]:
+                try:
+                    btn = page.get_by_text(txt, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        print("  Animali: non ammessi")
+                        break
+                except Exception:
+                    continue
+        wait(page, 1000)
+
+        # Fumo: non fumare (dalle regole casa)
+        regole = cond.get("regole_casa", "") or ""
+        if "non fumare" in regole.lower() or "no smoking" in regole.lower():
+            for txt in ["Non fumare", "No smoking", "Vietato fumare"]:
+                try:
+                    btn = page.get_by_text(txt, exact=False)
+                    if btn.count() > 0:
+                        btn.first.click()
+                        print("  Fumo: vietato")
+                        break
+                except Exception:
+                    continue
+        wait(page, 1000)
+
+        click_continue(page)
+        screenshot(page, "after_house_rules")
+
+    try_step(page, "step08_house_rules", do_house_rules)
+
+    # ── Step 9: Host Profile ──
+    print("Step 9/13: Profilo host (skip)")
+
+    def do_host_profile():
+        screenshot(page, "host_profile_page")
+        save_html(page, "step09_host_profile")
+
+        # Skip - non compilare nulla, solo continua
+        click_continue(page)
+        screenshot(page, "after_host_profile")
+
+    try_step(page, "step09_host_profile", do_host_profile)
+
+    # ── Step 10: Photos ──
+    print("Step 10/13: Upload foto")
+
+    def do_photos():
+        screenshot(page, "photos_page")
+        save_html(page, "step10_photos")
+
+        photo_paths = download_placeholder_photos(5)
         uploaded = False
+
         for selector in ["input[type='file']", "input[accept*='image']"]:
             try:
                 fi = page.locator(selector)
@@ -671,136 +741,114 @@ def insert_property(page):
 
         if uploaded:
             wait(page, 10_000)
-            screenshot(page, "foto_caricate")
+            screenshot(page, "photos_uploaded")
         else:
             print("  SKIP foto")
-            screenshot(page, "foto_skip")
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
+        click_continue(page)
+        screenshot(page, "after_photos")
+
+    try_step(page, "step10_photos", do_photos)
+
+    # ── Step 11: Request to Book ──
+    print("Step 11/13: Modalita prenotazione")
+
+    def do_request_to_book():
+        screenshot(page, "request_to_book_page")
+        save_html(page, "step11_request_to_book")
+
+        # Seleziona "Tutte le richieste" / "I'll review each request"
+        # per avere controllo sulle prenotazioni
+        for txt in ["tutte le richieste", "I'll review",
+                     "Voglio approvare", "Request to book"]:
             try:
-                btn = page.get_by_text(txt, exact=True)
+                btn = page.get_by_text(txt, exact=False)
                 if btn.count() > 0:
                     btn.first.click()
+                    print("  Prenotazione: approvazione manuale")
                     break
             except Exception:
                 continue
-        wait(page)
-
-    try_step(page, "step8_foto", do_step8)
-
-    # --- Step 9: Descrizione ---
-    print("Step 9: Descrizione")
-
-    def do_step9():
-        screenshot(page, "descrizione_pagina")
-        save_html(page, "step9_descrizione")
-
-        desc = PROP["marketing"]["descrizione_lunga"]
-        desc_field = page.locator("textarea").first
-        if desc_field.count() > 0:
-            desc_field.fill(desc)
-            print("  Descrizione compilata")
-        else:
-            print("  Campo descrizione non trovato")
-
         wait(page, 1000)
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_descrizione")
+        click_continue(page)
+        screenshot(page, "after_request_to_book")
 
-    try_step(page, "step9_descrizione", do_step9)
+    try_step(page, "step11_request_to_book", do_request_to_book)
 
-    # --- Step 10: Prezzo e condizioni (dal JSON, niente hardcoded) ---
-    print("Step 10: Prezzo e condizioni")
+    # ── Step 12: Payment Mode ──
+    print("Step 12/13: Modalita pagamento")
 
-    def do_step10():
-        screenshot(page, "prezzo_pagina")
-        save_html(page, "step10_prezzo")
+    def do_payment_mode():
+        screenshot(page, "payment_mode_page")
+        save_html(page, "step12_payment_mode")
 
-        cond = PROP.get("condizioni", {})
-
-        # Prezzo a notte — solo se presente nel JSON
-        prezzo = cond.get("prezzo_notte")
-        if prezzo is not None:
-            prezzo_str = str(prezzo)
-            for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    field.first.fill(prezzo_str)
-                    print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
-                    break
-        else:
-            print("  Prezzo non presente nel JSON — lascio vuoto")
-
-        wait(page, 1000)
-
-        # Cauzione — solo se presente nel JSON
+        # Cauzione - solo se presente nel JSON
         cauzione_val = cond.get("cauzione_euro")
         if cauzione_val is not None:
-            cauzione = str(cauzione_val)
-            for label in ["Cauzione", "Deposit", "Damage deposit"]:
+            for label in ["Cauzione", "Deposit", "Damage deposit",
+                          "Deposito cauzionale"]:
                 field = page.get_by_label(label)
                 if field.count() > 0:
-                    field.first.fill(cauzione)
-                    print(f"  Cauzione: {cauzione} EUR (dal JSON)")
+                    field.first.fill(str(cauzione_val))
+                    print(f"  Cauzione: {cauzione_val} EUR")
                     break
+            wait(page, 1000)
+
+        click_continue(page)
+        screenshot(page, "after_payment_mode")
+
+    try_step(page, "step12_payment_mode", do_payment_mode)
+
+    # ── Step 13: Price ──
+    print("Step 13/13: Prezzo")
+
+    def do_price():
+        screenshot(page, "price_page")
+        save_html(page, "step13_price")
+
+        prezzo = compute_price(cond)
+        if prezzo is not None:
+            for label in ["Prezzo per notte", "Price per night", "Prezzo",
+                          "Tariffa per notte", "Nightly rate"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(str(prezzo))
+                    print(f"  Prezzo: {prezzo} EUR/notte")
+                    break
+            else:
+                field = page.locator(
+                    "input[name*='price'], input[name*='rate'], "
+                    "input[name*='prezzo'], input[name*='tariffa']"
+                )
+                if field.count() > 0:
+                    field.first.fill(str(prezzo))
+                    print(f"  Prezzo (fallback): {prezzo} EUR/notte")
         else:
-            print("  Cauzione non presente nel JSON — lascio vuoto")
-
+            print("  Prezzo non presente nel JSON - lascio vuoto")
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_prezzo")
-
-    try_step(page, "step10_prezzo", do_step10)
-
-    # --- Step 11: Codici identificativi (CIN/CIR) ---
-    print("Step 11: Codici identificativi (CIN/CIR)")
-
-    def do_step11():
-        screenshot(page, "codici_pagina")
-        save_html(page, "step11_codici")
-
-        cin = ident["cin"]
-        cir = ident.get("cir", "")
 
         # CIN
-        for label in ["CIN", "Codice Identificativo Nazionale"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(cin)
-                print(f"  CIN: {cin}")
-                break
-        else:
-            cin_field = page.locator(
-                "input[name*='cin'], input[name*='CIN'], input[placeholder*='CIN']"
-            )
-            if cin_field.count() > 0:
-                cin_field.first.fill(cin)
-                print(f"  CIN (fallback): {cin}")
-
-        wait(page, 1000)
+        cin = ident.get("cin", "")
+        if cin:
+            for label in ["CIN", "Codice Identificativo Nazionale"]:
+                field = page.get_by_label(label)
+                if field.count() > 0:
+                    field.first.fill(cin)
+                    print(f"  CIN: {cin}")
+                    break
+            else:
+                field = page.locator(
+                    "input[name*='cin'], input[name*='CIN'], "
+                    "input[placeholder*='CIN']"
+                )
+                if field.count() > 0:
+                    field.first.fill(cin)
+                    print(f"  CIN (fallback): {cin}")
+            wait(page, 1000)
 
         # CIR
+        cir = ident.get("cir", "")
         if cir:
             for label in ["CIR", "Codice Identificativo Regionale"]:
                 field = page.get_by_label(label)
@@ -808,33 +856,14 @@ def insert_property(page):
                     field.first.fill(cir)
                     print(f"  CIR: {cir}")
                     break
+            wait(page, 1000)
 
-        wait(page, 1000)
+        # NON cliccare submit finale - solo screenshot
+        screenshot(page, "final_review")
+        save_html(page, "step13_final")
+        print("Wizard completato! NON inviato - verifica manuale.")
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
-        wait(page)
-        screenshot(page, "dopo_codici")
-
-    try_step(page, "step11_codici", do_step11)
-
-    # --- Step 12: Pagina finale — solo screenshot, NON inviare ---
-    print("Step 12: Pagina finale — SOLO screenshot")
-
-    def do_step12():
-        wait(page)
-        screenshot(page, "pagina_finale")
-        save_html(page, "step12_finale")
-        print("Flusso Booking completato! NON inviato per la verifica.")
-
-    try_step(page, "step12_finale", do_step12)
+    try_step(page, "step13_price", do_price)
 
 
 # ---------------------------------------------------------------------------
@@ -844,8 +873,6 @@ def insert_property(page):
 def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-    # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
-    # In CI: headless
     headless = not INTERACTIVE
     print(f"Browser: {'headless' if headless else 'visibile'} "
           f"(INTERACTIVE={INTERACTIVE})")
@@ -867,7 +894,6 @@ def main():
         )
         page = context.new_page()
 
-        # Stealth opzionale (se playwright-stealth è installato)
         try:
             from playwright_stealth import stealth_sync
             stealth_sync(page)
