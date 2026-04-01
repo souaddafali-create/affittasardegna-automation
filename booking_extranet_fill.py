@@ -394,10 +394,7 @@ def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     print(f"Proprietà: {PROP['identificativi']['nome_struttura']} (da {DATA_FILE})")
 
-    if not os.path.exists(SESSION_FILE):
-        print(f"ERRORE: {SESSION_FILE} non trovato.")
-        print("  Esegui prima booking_uploader.py per salvare la sessione.")
-        sys.exit(1)
+    EMAIL = os.environ.get("BK_EMAIL", "")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -405,38 +402,106 @@ def main():
             args=["--no-sandbox", "--disable-dev-shm-usage",
                    "--disable-blink-features=AutomationControlled"],
         )
-        context = browser.new_context(
+
+        # Prova a caricare sessione salvata, altrimenti parti senza
+        ctx_kwargs = dict(
             locale="it-IT",
             viewport={"width": 1366, "height": 768},
             user_agent=USER_AGENT,
             java_script_enabled=True,
-            storage_state=SESSION_FILE,
         )
+        if os.path.exists(SESSION_FILE):
+            ctx_kwargs["storage_state"] = SESSION_FILE
+            print(f"  Sessione caricata da {SESSION_FILE}")
+
+        context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
 
         try:
-            # Rileva hotel_id
+            # --- LOGIN ---
             hotel_id = HOTEL_ID
-            if not hotel_id:
-                # Vai all'Extranet per rilevare l'ID
+
+            if hotel_id:
+                # Vai direttamente all'Extranet
+                url = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id={hotel_id}&lang=it"
+                page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+                wait(page, 5000)
+            else:
                 page.goto("https://admin.booking.com/", wait_until="domcontentloaded", timeout=60_000)
                 wait(page, 5000)
+
+            screenshot(page, "extranet_iniziale")
+
+            # Se siamo su una pagina di login, fai login manualmente
+            if "sign-in" in page.url or "account.booking.com" in page.url or "Accedi" in page.content()[:3000]:
+                print("\n=== LOGIN NECESSARIO ===")
+
+                # Inserisci email se disponibile
+                if EMAIL:
+                    try:
+                        email_sel = 'input[type="email"], input[name="loginname"], input[name="username"]'
+                        e = page.locator(email_sel)
+                        if e.count() > 0 and e.first.is_visible():
+                            e.first.fill(EMAIL)
+                            print(f"  Email inserita: {EMAIL}")
+                            # Clicca Avanti/Submit
+                            for btn_text in ["Avanti", "Next", "Accedi", "Sign in"]:
+                                btn = page.get_by_role("button", name=btn_text)
+                                if btn.count() > 0:
+                                    btn.first.click()
+                                    break
+                            wait(page, 3000)
+                    except Exception:
+                        pass
+
+                print("  Completa il login nel browser (password, OTP, ecc.)")
+                input(">>> Premi INVIO quando sei nell'Extranet... ")
+                wait(page, 3000)
+                screenshot(page, "dopo_login")
+
+                # Salva sessione
+                context.storage_state(path=SESSION_FILE)
+                print(f"  Sessione salvata: {SESSION_FILE}")
+
+            # Rileva hotel_id se non fornito
+            if not hotel_id:
                 hotel_id = detect_hotel_id(page)
                 if not hotel_id:
-                    print("  Hotel ID non rilevato dall'URL.")
-                    hotel_id = input(">>> Inserisci l'hotel_id (lo trovi nell'URL): ").strip()
+                    # Cerca nell'HTML
+                    import re
+                    match = re.search(r'hotel_id[=:][\s"]*(\d+)', page.content())
+                    if match:
+                        hotel_id = match.group(1)
+                if not hotel_id:
+                    hotel_id = input(">>> Hotel ID non trovato. Inseriscilo (es. 16088667): ").strip()
 
             print(f"  Hotel ID: {hotel_id}")
+            print(f"  URL: {page.url}")
 
-            # Compila ogni sezione
-            fill_servizi_dotazioni(page, hotel_id)
-            fill_metratura_dotazioni(page, hotel_id)
-            fill_condizioni(page, hotel_id)
-            fill_profilo(page, hotel_id)
-            fill_gestione_camere(page, hotel_id)
+            # --- COMPILA SEZIONI ---
+            for section_name, section_fn in [
+                ("Servizi e dotazioni", fill_servizi_dotazioni),
+                ("Metratura e dotazioni", fill_metratura_dotazioni),
+                ("Condizioni della struttura", fill_condizioni),
+                ("Profilo / Descrizione", fill_profilo),
+                ("Gestione camere", fill_gestione_camere),
+            ]:
+                try:
+                    section_fn(page, hotel_id)
+                except Exception as e:
+                    print(f"\n  ERRORE in {section_name}: {e}")
+                    screenshot(page, f"errore_{section_name.replace(' ','_')}")
+                    save_html(page, f"errore_{section_name.replace(' ','_')}")
+                    input(f">>> '{section_name}' fallito. Completa nel browser, poi INVIO: ")
+
+            # Salva sessione aggiornata
+            try:
+                context.storage_state(path=SESSION_FILE)
+            except Exception:
+                pass
 
             print("\n=== COMPLETATO ===")
-            print("  Tutte le sezioni sono state compilate.")
+            print("  Controlla nel browser che tutto sia corretto.")
             print("  Controlla nel browser che tutto sia corretto.")
 
             # Salva sessione aggiornata
