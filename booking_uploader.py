@@ -572,7 +572,7 @@ def insert_property(page):
 
     # Ciclo adattivo: prova a compilare e cliccare Continua
     # fino a raggiungere la pagina finale o il limite di step
-    max_adaptive_steps = 20
+    max_adaptive_steps = 40
     for step_n in range(1, max_adaptive_steps + 1):
       try:
         screenshot(page, f"adaptive_step_{step_n:02d}")
@@ -643,6 +643,27 @@ def insert_property(page):
                 f.first.fill(ident["cin"])
                 print(f"  CIN: {ident['cin']}")
                 filled = True
+        except Exception:
+            pass
+
+        # CIR
+        try:
+            cir = ident.get("cir", "")
+            if cir:
+                f = page.locator("input[name*='cir'], input[name*='CIR']")
+                if f.count() > 0 and f.first.is_visible():
+                    f.first.fill(cir)
+                    print(f"  CIR: {cir}")
+                    filled = True
+        except Exception:
+            pass
+
+        # Partita IVA / Codice Fiscale (se richiesto)
+        try:
+            f = page.locator("input[name*='vat'], input[name*='tax'], input[name*='fiscal']")
+            if f.count() > 0 and f.first.is_visible() and not f.first.input_value():
+                # Lascia vuoto — non abbiamo questo dato nel JSON
+                pass
         except Exception:
             pass
 
