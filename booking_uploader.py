@@ -814,20 +814,30 @@ def main():
                 insert_property(wizard_page)
             except Exception as e:
                 print(f"\n  ⚠ ERRORE DURANTE IL WIZARD: {e}")
-                screenshot(wizard_page, "errore_wizard")
-                save_html(wizard_page, "errore_wizard")
-                if INTERACTIVE:
-                    print("  Il browser resta APERTO. Puoi completare manualmente.")
-                    input(">>> Premi INVIO quando vuoi chiudere... ")
+                try:
+                    screenshot(wizard_page, "errore_wizard")
+                    save_html(wizard_page, "errore_wizard")
+                except Exception:
+                    pass
 
             # Aggiorna sessione anche alla fine
             try:
                 context.storage_state(path=SESSION_FILE)
             except Exception:
                 pass
+        except Exception as e:
+            print(f"\n  ⚠ ERRORE GENERALE: {e}")
         finally:
             if INTERACTIVE:
-                input("\n>>> Premi INVIO per chiudere il browser... ")
+                print("\n" + "=" * 50)
+                print("  BROWSER APERTO — puoi lavorare manualmente.")
+                print("  Scrivi 'chiudi' + INVIO per chiudere.")
+                print("=" * 50)
+                while True:
+                    resp = input(">>> ").strip().lower()
+                    if resp in ("chiudi", "close", "exit", "quit", "stop"):
+                        break
+                    print("  Browser ancora aperto. Scrivi 'chiudi' per uscire.")
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
