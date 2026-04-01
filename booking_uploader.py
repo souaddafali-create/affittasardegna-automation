@@ -204,6 +204,42 @@ def _dismiss_cookie_banner(page):
             continue
 
 
+def _click_continue(page):
+    """Clicca il pulsante Continua/Next nel wizard Booking.
+    Prova: data-testid, automation_id, ruolo button, testo."""
+    # Selettori specifici Booking
+    for sel in [
+        "button[data-testid*='continue']",
+        "button[data-testid*='next']",
+        "button[data-testid*='submit']",
+        "[id*='automation_id'][id*='continue']",
+        "[id*='automation_id'][id*='next']",
+    ]:
+        try:
+            btn = page.locator(sel)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cliccato continua: {sel}")
+                return True
+        except Exception:
+            continue
+
+    # Fallback testo
+    for txt in ["Continua", "Continue", "Avanti", "Next",
+                 "Salva e continua", "Save and continue"]:
+        try:
+            btn = page.get_by_role("button", name=txt)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cliccato: '{txt}'")
+                return True
+        except Exception:
+            continue
+
+    print("  Pulsante Continua non trovato")
+    return False
+
+
 def login_and_navigate(page):
     """Login su Booking e naviga fino al wizard di inserimento proprietà.
 
@@ -296,23 +332,29 @@ def login_and_navigate(page):
     screenshot(wizard_page, "landing_join")
     print(f"  URL landing: {wizard_page.url}")
 
-    # Se siamo sulla landing page, clicca "Get started now" / "Iscrivi la tua struttura"
+    # Landing page join.booking.com: clicca "Get started" con ID reale
     if "become-a-host" not in wizard_page.url:
-        for label in ["Get started now", "Inizia ora", "Inizia subito",
-                       "Continue your registration", "Continua la registrazione"]:
-            try:
-                btn = wizard_page.get_by_role("link", name=label)
-                if btn.count() > 0 and btn.first.is_visible():
-                    btn.first.click()
-                    print(f"  Cliccato: '{label}'")
-                    break
-                btn = wizard_page.get_by_role("button", name=label)
-                if btn.count() > 0 and btn.first.is_visible():
-                    btn.first.click()
-                    print(f"  Cliccato: '{label}'")
-                    break
-            except Exception:
-                continue
+        try:
+            # Selettore reale dalla pagina: id="getStarted"
+            gs_btn = wizard_page.locator("#getStarted, [data-testid='getStarted']")
+            if gs_btn.count() > 0:
+                gs_btn.first.click()
+                print("  Cliccato #getStarted")
+            else:
+                # Fallback testo
+                for label in ["Get started now", "Inizia ora", "Inizia subito"]:
+                    btn = wizard_page.get_by_role("button", name=label)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        btn.first.click()
+                        print(f"  Cliccato: '{label}'")
+                        break
+                    btn = wizard_page.get_by_role("link", name=label)
+                    if btn.count() > 0 and btn.first.is_visible():
+                        btn.first.click()
+                        print(f"  Cliccato link: '{label}'")
+                        break
+        except Exception as e:
+            print(f"  Errore Get Started: {e}")
         wait(wizard_page, 5000)
 
     screenshot(wizard_page, "wizard_start")
@@ -332,10 +374,11 @@ def insert_property(page):
     photo_paths = download_placeholder_photos(5)
 
     # --- Step 1: Seleziona tipo struttura (category.html) ---
-    # Pagina: "Iscrivi la tua struttura su Booking.com"
-    # 4 card: Appartamento | Case | Hotel, B&B | Strutture alternative
-    # Ogni card ha un bottone blu "Iscrivi la tua struttura"
-    # "Appartamento" è la PRIMA card (indice 0)
+    # Selettori reali dal DOM:
+    #   Container: #automation_id_screen_container_Category
+    #   Appartamento btn: #automation_id_choose_category_apt_btn
+    #   Quick Start btn: #automation_id_choose_category_quick_start_btn
+    #   Hotel btn: #automation_id_choose_category_hotel_btn
     print("Step 1: Tipo struttura — Appartamento")
 
     def do_step1():
@@ -344,55 +387,31 @@ def insert_property(page):
         screenshot(page, "tipo_struttura_pagina")
         save_html(page, "step1_tipo")
 
-        clicked = False
-
-        # I bottoni "Iscrivi la tua struttura" sono 4, uno per card.
-        # Appartamento è il PRIMO. Proviamo vari selettori.
-
-        # Metodo 1: tutti i link/button con quel testo, prendiamo il primo
-        for role in ["link", "button"]:
-            try:
-                btns = page.get_by_role(role, name="Iscrivi la tua struttura")
-                if btns.count() > 0:
-                    btns.first.click()
-                    clicked = True
-                    print(f"  Cliccato primo '{role}' 'Iscrivi la tua struttura'")
-                    break
-            except Exception:
-                continue
-
-        # Metodo 2: CSS selector diretto — <a> con testo
-        if not clicked:
-            try:
-                btns = page.locator("a:has-text('Iscrivi la tua struttura')")
-                if btns.count() > 0:
-                    btns.first.click()
-                    clicked = True
-                    print("  Cliccato primo <a> 'Iscrivi la tua struttura'")
-            except Exception:
-                pass
-
-        # Metodo 3: qualsiasi elemento cliccabile con quel testo
-        if not clicked:
-            try:
-                btns = page.locator("text=Iscrivi la tua struttura")
-                if btns.count() > 0:
-                    btns.first.click()
-                    clicked = True
-                    print("  Cliccato primo testo 'Iscrivi la tua struttura'")
-            except Exception:
-                pass
-
-        # Metodo 4: fallback manuale
-        if not clicked:
-            print("  ATTENZIONE: bottone non trovato automaticamente!")
-            if INTERACTIVE:
-                input(">>> Clicca 'Iscrivi la tua struttura' sotto Appartamento, poi premi INVIO... ")
+        # Clicca il bottone "Iscrivi la tua struttura" nella card Appartamento
+        apt_btn = page.locator("#automation_id_choose_category_apt_btn")
+        if apt_btn.count() > 0 and apt_btn.is_visible():
+            apt_btn.click()
+            print("  Cliccato #automation_id_choose_category_apt_btn")
+        else:
+            # Fallback: data-testid
+            apt_btn = page.locator("[data-testid='category_card_container_apt'] button")
+            if apt_btn.count() > 0:
+                apt_btn.first.click()
+                print("  Cliccato via data-testid apt")
             else:
-                raise RuntimeError("Bottone 'Iscrivi la tua struttura' non trovato")
+                # Fallback: primo bottone "Iscrivi la tua struttura"
+                btn = page.locator("[data-testid='category-card-btn']")
+                if btn.count() > 0:
+                    btn.first.click()
+                    print("  Cliccato primo category-card-btn")
+                elif INTERACTIVE:
+                    input(">>> Clicca 'Iscrivi la tua struttura' sotto Appartamento, poi INVIO... ")
+                else:
+                    raise RuntimeError("Bottone categoria Appartamento non trovato")
 
-        wait(page, 5000)
-        screenshot(page, "tipo_selezionato")
+        wait(page, 8000)
+        screenshot(page, "dopo_categoria")
+        save_html(page, "dopo_categoria")
 
     try_step(page, "step1_tipo", do_step1)
 
@@ -411,14 +430,7 @@ def insert_property(page):
                 continue
         wait(page)
         # Click continua/next
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_numero")
 
@@ -447,14 +459,7 @@ def insert_property(page):
         wait(page)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_nome")
 
@@ -506,14 +511,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_indirizzo")
 
@@ -557,14 +555,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_composizione")
 
@@ -657,14 +648,7 @@ def insert_property(page):
             wait(page, 500)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_letti")
 
@@ -699,14 +683,7 @@ def insert_property(page):
         wait(page)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_servizi")
 
@@ -750,14 +727,7 @@ def insert_property(page):
             screenshot(page, "foto_skip")
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
 
     try_step(page, "step8_foto", do_step8)
@@ -780,14 +750,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_descrizione")
 
@@ -842,14 +805,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_prezzo")
 
@@ -894,14 +850,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        _click_continue(page)
         wait(page)
         screenshot(page, "dopo_codici")
 
