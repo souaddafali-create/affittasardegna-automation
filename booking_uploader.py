@@ -208,7 +208,7 @@ def login(page):
     print("Login Booking Extranet...")
     if INTERACTIVE:
         print("  (modalita interattiva - browser visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
+    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
     wait(page, 3000)
     screenshot(page, "login_page")
     save_html(page, "login_page")
@@ -291,7 +291,7 @@ def login(page):
 
 def navigate_to_add_property(page):
     print("Navigazione a 'Aggiungi nuova struttura'...")
-    page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
+    page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
     wait(page, 5000)
     screenshot(page, "join_page")
     save_html(page, "join_page")
