@@ -70,6 +70,12 @@ def try_step(page, step_name, func):
         print(f"  ERRORE in {step_name}: {e}")
         screenshot(page, f"errore_{step_name}")
         save_html(page, f"errore_{step_name}")
+        if INTERACTIVE:
+            resp = input(f">>> Step '{step_name}' fallito. Completa manualmente nel browser, poi INVIO (o 'skip'): ").strip()
+            if resp.lower() != "skip":
+                screenshot(page, f"dopo_manuale_{step_name}")
+        else:
+            raise
 
 
 def download_placeholder_photos(count=5):
@@ -422,36 +428,83 @@ def insert_property(page):
         screenshot(page, "step2_pagina")
         save_html(page, "step2_intero_spazio")
 
-        # Seleziona "L'intero spazio" (prima opzione)
+        # Seleziona "L'intero spazio" — è una card cliccabile (div/label)
+        # Bisogna cliccare il CONTAINER, non solo il testo
         clicked = False
-        for label in ["L'intero spazio", "intero spazio", "Entire place",
-                       "An entire property"]:
+
+        # Metodo 1: automation_id (come nella pagina categoria)
+        for sel in [
+            "#automation_id_entire_place",
+            "[data-testid*='entire']",
+            "[data-testid*='whole']",
+        ]:
             try:
-                opt = page.get_by_text(label, exact=False)
-                if opt.count() > 0 and opt.first.is_visible():
-                    opt.first.click()
+                el = page.locator(sel)
+                if el.count() > 0 and el.first.is_visible():
+                    el.first.click()
                     clicked = True
-                    print(f"  Selezionato: '{label}'")
+                    print(f"  Selezionato via {sel}")
                     break
             except Exception:
                 continue
 
+        # Metodo 2: trova il testo e clicca il container padre (la card)
         if not clicked:
-            # Fallback: clicca la prima card/opzione visibile
+            for label in ["L'intero spazio", "intero spazio", "Entire place"]:
+                try:
+                    text_el = page.get_by_text(label, exact=False)
+                    if text_el.count() > 0 and text_el.first.is_visible():
+                        # Clicca il container padre più vicino che è cliccabile
+                        parent = text_el.first.locator("xpath=ancestor::*[@role][1]")
+                        if parent.count() > 0:
+                            parent.click()
+                            clicked = True
+                            print(f"  Selezionato parent[role] di '{label}'")
+                            break
+                        # Fallback: clicca direttamente il testo
+                        text_el.first.click()
+                        clicked = True
+                        print(f"  Cliccato testo: '{label}'")
+                        break
+                except Exception:
+                    continue
+
+        # Metodo 3: clicca la prima card/opzione nella pagina
+        if not clicked:
             try:
+                # Le card sono tipicamente div con border cliccabili
                 cards = page.locator("[role='radio'], [role='checkbox'], "
-                                     "[data-testid*='entire'], [data-testid*='whole']")
-                if cards.count() > 0:
+                                     "[role='option'], [role='button']")
+                for i in range(cards.count()):
+                    card = cards.nth(i)
+                    text = card.inner_text()
+                    if "intero" in text.lower() or "entire" in text.lower():
+                        card.click()
+                        clicked = True
+                        print(f"  Selezionato card con 'intero': {text[:50]}")
+                        break
+                if not clicked and cards.count() > 0:
                     cards.first.click()
                     clicked = True
-                    print("  Selezionato prima opzione (radio/checkbox)")
+                    print("  Selezionato prima card (fallback)")
             except Exception:
                 pass
 
         if not clicked and INTERACTIVE:
             input(">>> Seleziona 'L'intero spazio' nel browser, poi INVIO... ")
 
+        # Aspetta che "Continua" diventi abilitato
         wait(page, 2000)
+        try:
+            page.wait_for_selector("button:not([disabled]):has-text('Continua'), "
+                                    "button:not([disabled]):has-text('Continue')",
+                                    timeout=5000)
+        except Exception:
+            print("  Continua ancora disabilitato — riprovo click...")
+            # Riprova il click sulla prima opzione visibile
+            if INTERACTIVE:
+                input(">>> Continua è grigio. Seleziona 'L'intero spazio', poi INVIO... ")
+
         _click_continue(page)
         wait(page, 5000)
         screenshot(page, "dopo_intero_spazio")
