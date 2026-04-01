@@ -18,8 +18,8 @@ DATA_FILE = os.environ.get(
 with open(DATA_FILE, encoding="utf-8") as _f:
     PROP = json.load(_f)
 
-EMAIL = os.environ["BK_EMAIL"]
-PASSWORD = os.environ["BK_PASSWORD"]
+EMAIL = os.environ.get("BK_EMAIL", "")
+PASSWORD = os.environ.get("BK_PASSWORD", "")
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -913,10 +913,12 @@ def insert_property(page):
 def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
+    print(f"Proprietà: {PROP['identificativi']['nome_struttura']} (da {DATA_FILE})")
+
     # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
     # In CI: headless
     headless = not INTERACTIVE
-    print(f"Browser: {'headless' if headless else 'visibile'} "
+    print(f"Browser: {'VISIBILE' if not headless else 'headless'} "
           f"(INTERACTIVE={INTERACTIVE})")
 
     with sync_playwright() as p:
@@ -949,6 +951,8 @@ def main():
             screenshot(wizard_page, "pagina_iniziale")
             insert_property(wizard_page)
         finally:
+            if INTERACTIVE:
+                input("\n>>> Completato! Controlla il browser, poi premi INVIO per chiudere... ")
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
