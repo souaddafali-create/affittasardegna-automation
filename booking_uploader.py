@@ -395,577 +395,292 @@ def login_and_navigate(page):
 
 # ---------------------------------------------------------------------------
 # Inserimento proprietà su Booking Extranet
+#
+# Il wizard ha 2 fasi:
+#   1) Segmentation Flow (5-6 schermate): Categoria → Listing Type →
+#      Property Type → Owner Type → OTA Question → Nome
+#   2) FifteenMin Flow (5 sezioni): Info → Setup → Photos → Pricing → Review
+#
+# Tutti i selettori derivano dall'analisi HTML reale del wizard.
 # ---------------------------------------------------------------------------
 
+def _click_wizard_continue(page):
+    """Clicca il pulsante Continua nel wizard Booking.
+    Il bottone usa data-testid='FormButtonPrimary-*'."""
+    # Aspetta che Continua sia abilitato (max 10s)
+    try:
+        page.wait_for_selector("[data-testid='FormButtonPrimary-enabled']", timeout=10_000)
+    except Exception:
+        pass  # Proviamo comunque
+
+    # Prova il bottone abilitato
+    btn = page.locator("[data-testid='FormButtonPrimary-enabled']")
+    if btn.count() > 0 and btn.first.is_visible():
+        btn.first.click()
+        print("  → Cliccato Continua (enabled)")
+        wait(page, 3000)
+        return True
+
+    # Prova anche il disabilitato (a volte funziona se la selezione c'è)
+    btn = page.locator("[data-testid='FormButtonPrimary-disabled']")
+    if btn.count() > 0 and btn.first.is_visible():
+        btn.first.click()
+        print("  → Cliccato Continua (disabled)")
+        wait(page, 3000)
+        return True
+
+    # Fallback testo
+    return _click_continue(page)
+
+
 def insert_property(page):
-    """Complete the Booking Extranet property insertion wizard."""
+    """Complete the Booking Extranet property insertion wizard.
+
+    Fase 1 — Segmentation Flow (automation_id selectors):
+      1. Category: Appartamento (#automation_id_choose_category_apt_btn)
+      2. Listing: L'intero spazio (#automation_id_choose_listing_type_entire_place)
+      3. Property Type: Appartamento (#automation_id_property_type_201)
+      4. Owner Type: Single (#automation_id_choose_owner_type_single)
+      5. OTA Question: nessun sito (checkbox name="none")
+      6. → passa al FifteenMin Flow
+
+    Fase 2 — FifteenMin Flow:
+      Nome struttura (input name="property_name")
+      + sezioni successive (indirizzo, camere, servizi, foto, prezzo)
+    """
     ident = PROP["identificativi"]
     comp = PROP["composizione"]
-    photo_paths = download_placeholder_photos(5)
+    cond = PROP.get("condizioni", {})
 
-    # --- Step 1: Seleziona tipo struttura (category.html) ---
-    # Selettori reali dal DOM:
-    #   Container: #automation_id_screen_container_Category
-    #   Appartamento btn: #automation_id_choose_category_apt_btn
-    #   Quick Start btn: #automation_id_choose_category_quick_start_btn
-    #   Hotel btn: #automation_id_choose_category_hotel_btn
-    print("Step 1: Tipo struttura — Appartamento")
+    # =====================================================================
+    # FASE 1: Segmentation Flow
+    # =====================================================================
 
-    def do_step1():
+    # --- S1: Categoria → Appartamento ---
+    print("S1: Categoria — Appartamento")
+    def do_s1():
         _dismiss_cookie_banner(page)
-        wait(page, 3000)
-        screenshot(page, "tipo_struttura_pagina")
-        save_html(page, "step1_tipo")
-
-        # Clicca il bottone "Iscrivi la tua struttura" nella card Appartamento
-        apt_btn = page.locator("#automation_id_choose_category_apt_btn")
-        if apt_btn.count() > 0 and apt_btn.is_visible():
-            apt_btn.click()
-            print("  Cliccato #automation_id_choose_category_apt_btn")
-        else:
-            # Fallback: data-testid
-            apt_btn = page.locator("[data-testid='category_card_container_apt'] button")
-            if apt_btn.count() > 0:
-                apt_btn.first.click()
-                print("  Cliccato via data-testid apt")
-            else:
-                # Fallback: primo bottone "Iscrivi la tua struttura"
-                btn = page.locator("[data-testid='category-card-btn']")
-                if btn.count() > 0:
-                    btn.first.click()
-                    print("  Cliccato primo category-card-btn")
-                elif INTERACTIVE:
-                    input(">>> Clicca 'Iscrivi la tua struttura' sotto Appartamento, poi INVIO... ")
-                else:
-                    raise RuntimeError("Bottone categoria Appartamento non trovato")
-
-        wait(page, 8000)
-        screenshot(page, "dopo_categoria")
-        save_html(page, "dopo_categoria")
-
-    try_step(page, "step1_tipo", do_step1)
-
-    # --- Step 2: "Cosa possono prenotare gli ospiti?" → "L'intero spazio" ---
-    print("Step 2: Intero spazio")
-
-    def do_step2():
-        screenshot(page, "step2_pagina")
-        save_html(page, "step2_intero_spazio")
-
-        # Seleziona "L'intero spazio" — è una card cliccabile (div/label)
-        # Bisogna cliccare il CONTAINER, non solo il testo
-        clicked = False
-
-        # Metodo 1: automation_id (come nella pagina categoria)
-        for sel in [
-            "#automation_id_entire_place",
-            "[data-testid*='entire']",
-            "[data-testid*='whole']",
-        ]:
-            try:
-                el = page.locator(sel)
-                if el.count() > 0 and el.first.is_visible():
-                    el.first.click()
-                    clicked = True
-                    print(f"  Selezionato via {sel}")
-                    break
-            except Exception:
-                continue
-
-        # Metodo 2: trova il testo e clicca il container padre (la card)
-        if not clicked:
-            for label in ["L'intero spazio", "intero spazio", "Entire place"]:
-                try:
-                    text_el = page.get_by_text(label, exact=False)
-                    if text_el.count() > 0 and text_el.first.is_visible():
-                        # Clicca il container padre più vicino che è cliccabile
-                        parent = text_el.first.locator("xpath=ancestor::*[@role][1]")
-                        if parent.count() > 0:
-                            parent.click()
-                            clicked = True
-                            print(f"  Selezionato parent[role] di '{label}'")
-                            break
-                        # Fallback: clicca direttamente il testo
-                        text_el.first.click()
-                        clicked = True
-                        print(f"  Cliccato testo: '{label}'")
-                        break
-                except Exception:
-                    continue
-
-        # Metodo 3: clicca la prima card/opzione nella pagina
-        if not clicked:
-            try:
-                # Le card sono tipicamente div con border cliccabili
-                cards = page.locator("[role='radio'], [role='checkbox'], "
-                                     "[role='option'], [role='button']")
-                for i in range(cards.count()):
-                    card = cards.nth(i)
-                    text = card.inner_text()
-                    if "intero" in text.lower() or "entire" in text.lower():
-                        card.click()
-                        clicked = True
-                        print(f"  Selezionato card con 'intero': {text[:50]}")
-                        break
-                if not clicked and cards.count() > 0:
-                    cards.first.click()
-                    clicked = True
-                    print("  Selezionato prima card (fallback)")
-            except Exception:
-                pass
-
-        if not clicked and INTERACTIVE:
-            input(">>> Seleziona 'L'intero spazio' nel browser, poi INVIO... ")
-
-        # Aspetta che "Continua" diventi abilitato
         wait(page, 2000)
-        try:
-            page.wait_for_selector("button:not([disabled]):has-text('Continua'), "
-                                    "button:not([disabled]):has-text('Continue')",
-                                    timeout=5000)
-        except Exception:
-            print("  Continua ancora disabilitato — riprovo click...")
-            # Riprova il click sulla prima opzione visibile
-            if INTERACTIVE:
-                input(">>> Continua è grigio. Seleziona 'L'intero spazio', poi INVIO... ")
-
-        _click_continue(page)
+        screenshot(page, "s1_categoria")
+        save_html(page, "s1_categoria")
+        page.locator("#automation_id_choose_category_apt_btn").click()
+        print("  Cliccato #automation_id_choose_category_apt_btn")
         wait(page, 5000)
-        screenshot(page, "dopo_intero_spazio")
-        save_html(page, "dopo_step2")
+    try_step(page, "s1_categoria", do_s1)
 
-    try_step(page, "step2_intero_spazio", do_step2)
+    # --- S2: Listing Type → L'intero spazio ---
+    print("S2: Listing Type — L'intero spazio")
+    def do_s2():
+        screenshot(page, "s2_listing")
+        save_html(page, "s2_listing")
+        page.locator("#automation_id_choose_listing_type_entire_place").click()
+        print("  Cliccato #automation_id_choose_listing_type_entire_place")
+        wait(page, 2000)
+        _click_wizard_continue(page)
+        wait(page, 5000)
+    try_step(page, "s2_listing", do_s2)
 
-    # --- Step 3: Nome struttura ---
-    print("Step 3: Nome struttura")
+    # --- S3: Property Type → Appartamento (type 201) ---
+    print("S3: Property Type — Appartamento")
+    def do_s3():
+        screenshot(page, "s3_property_type")
+        save_html(page, "s3_property_type")
+        # automation_id_property_type_201 = Appartamento
+        apt = page.locator("#automation_id_property_type_201")
+        if apt.count() > 0 and apt.is_visible():
+            apt.click()
+            print("  Cliccato #automation_id_property_type_201")
+        else:
+            # Fallback: cerca card con testo "Appartamento"
+            card = page.locator("[data-testid='PropertyTypeCard-container']").first
+            if card.is_visible():
+                card.click()
+                print("  Cliccato prima PropertyTypeCard")
+        wait(page, 2000)
+        _click_wizard_continue(page)
+        wait(page, 5000)
+    try_step(page, "s3_property_type", do_s3)
 
-    def do_step3():
-        screenshot(page, "nome_pagina")
-        save_html(page, "step3_nome")
-        # Prova diversi selettori per il campo nome
-        nome_field = page.get_by_label("Nome della struttura")
+    # --- S4: Owner Type → Single ---
+    print("S4: Owner Type — Singolo proprietario")
+    def do_s4():
+        screenshot(page, "s4_owner")
+        save_html(page, "s4_owner")
+        page.locator("#automation_id_choose_owner_type_single").click()
+        print("  Cliccato #automation_id_choose_owner_type_single")
+        wait(page, 2000)
+        _click_wizard_continue(page)
+        wait(page, 5000)
+    try_step(page, "s4_owner", do_s4)
+
+    # --- S5: OTA Question → "Non registrata su nessun sito" ---
+    print("S5: OTA Question — nessun sito")
+    def do_s5():
+        screenshot(page, "s5_ota")
+        save_html(page, "s5_ota")
+        # Checkbox "La mia struttura non è registrata su nessun sito"
+        # Le checkbox hanno name: airbnb, tripadvisor, vrbo, expedia, hotels_com
+        # L'ultima opzione è "nessun sito" — cerchiamo per testo
+        none_opt = page.get_by_text("non è registrata su nessun sito", exact=False)
+        if none_opt.count() > 0:
+            none_opt.first.click()
+            print("  Selezionato 'non registrata su nessun sito'")
+        else:
+            # Fallback: ultima checkbox nel form (tipicamente la sesta)
+            items = page.locator("[data-testid='otaq-item']")
+            if items.count() > 0:
+                items.last.click()
+                print("  Cliccato ultimo otaq-item")
+        wait(page, 2000)
+        _click_wizard_continue(page)
+        wait(page, 8000)
+    try_step(page, "s5_ota", do_s5)
+
+    # =====================================================================
+    # FASE 2: FifteenMin Flow — Nome + Sezioni
+    # =====================================================================
+
+    # --- F1: Nome struttura ---
+    print("F1: Nome struttura")
+    def do_f1():
+        screenshot(page, "f1_nome")
+        save_html(page, "f1_nome")
+        # Input: name="property_name" data-testid="PropertyName-"
+        nome_field = page.locator("input[name='property_name']")
         if nome_field.count() == 0:
-            nome_field = page.get_by_label("Property name")
-        if nome_field.count() == 0:
-            nome_field = page.locator(
-                "input[name*='name'], input[name*='nome'], "
-                "input[placeholder*='nome'], input[placeholder*='name']"
-            )
+            nome_field = page.locator("[data-testid^='PropertyName']")
         if nome_field.count() > 0:
             nome_field.first.fill(ident["nome_struttura"])
             print(f"  Nome: {ident['nome_struttura']}")
         else:
             print("  Campo nome non trovato")
-        wait(page)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
+        wait(page, 2000)
+        _click_wizard_continue(page)
+        wait(page, 5000)
         screenshot(page, "dopo_nome")
+        save_html(page, "dopo_nome")
+    try_step(page, "f1_nome", do_f1)
 
-    try_step(page, "step3_nome", do_step3)
+    # --- F2+: Sezioni successive del wizard ---
+    # Da qui il wizard ha sezioni (property_info, property_setup, photos, etc.)
+    # Ogni sezione ha sotto-pagine che ancora non conosciamo nel dettaglio.
+    # Approccio: per ogni pagina, prova a compilare i campi dal JSON,
+    # poi clicca Continua. Se fallisce, chiedi intervento manuale.
 
-    # --- Step 4: Indirizzo ---
-    print("Step 4: Indirizzo")
+    print("\n=== COMPILAZIONE SEZIONI ===")
+    print("  Da qui lo script compila automaticamente dove può.")
+    print("  Se si blocca, ti chiede di completare nel browser.\n")
 
-    def do_step4():
-        screenshot(page, "indirizzo_pagina")
-        save_html(page, "step4_indirizzo")
+    # Ciclo adattivo: prova a compilare e cliccare Continua
+    # fino a raggiungere la pagina finale o il limite di step
+    max_adaptive_steps = 20
+    for step_n in range(1, max_adaptive_steps + 1):
+        screenshot(page, f"adaptive_step_{step_n:02d}")
+        save_html(page, f"adaptive_step_{step_n:02d}")
+
+        # Rileva la pagina attuale dal titolo
+        title = ""
+        try:
+            h = page.locator("h1, h2, [role='heading']").first
+            if h.is_visible():
+                title = h.inner_text().strip()[:80]
+        except Exception:
+            pass
+        print(f"\n  --- Pagina {step_n}: {title} ---")
+
+        # Prova a compilare campi noti dal JSON
+        filled = False
 
         # Indirizzo
-        addr_field = page.get_by_label("Indirizzo")
-        if addr_field.count() == 0:
-            addr_field = page.get_by_label("Street address")
-        if addr_field.count() == 0:
-            addr_field = page.locator("input[name*='address'], input[name*='street']")
-        if addr_field.count() > 0:
-            addr_field.first.fill(ident["indirizzo"])
-            print(f"  Indirizzo: {ident['indirizzo']}")
+        for sel, val in [
+            ("input[name*='address'], input[name*='street']", ident.get("indirizzo", "")),
+            ("input[name*='city']", ident.get("comune", "")),
+            ("input[name*='zip'], input[name*='postal']", ident.get("cap", "")),
+        ]:
+            if val:
+                try:
+                    f = page.locator(sel)
+                    if f.count() > 0 and f.first.is_visible():
+                        f.first.fill(val)
+                        print(f"  Compilato {sel}: {val}")
+                        filled = True
+                except Exception:
+                    pass
 
-        wait(page, 1000)
-
-        # Città
-        city_field = page.get_by_label("Città")
-        if city_field.count() == 0:
-            city_field = page.get_by_label("City")
-        if city_field.count() == 0:
-            city_field = page.locator("input[name*='city'], input[name*='citta']")
-        if city_field.count() > 0:
-            city_field.first.fill(ident["comune"])
-            print(f"  Città: {ident['comune']}")
-
-        wait(page, 1000)
-
-        # CAP
-        cap_field = page.get_by_label("CAP")
-        if cap_field.count() == 0:
-            cap_field = page.get_by_label("Zip code")
-        if cap_field.count() == 0:
-            cap_field = page.get_by_label("Codice postale")
-        if cap_field.count() == 0:
-            cap_field = page.locator("input[name*='zip'], input[name*='postal']")
-        if cap_field.count() > 0:
-            cap_field.first.fill(ident["cap"])
-            print(f"  CAP: {ident['cap']}")
-
-        wait(page, 1000)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_indirizzo")
-
-    try_step(page, "step4_indirizzo", do_step4)
-
-    # --- Step 5: Composizione (ospiti, camere, bagni) ---
-    print("Step 5: Composizione")
-
-    def do_step5():
-        screenshot(page, "composizione_pagina")
-        save_html(page, "step5_composizione")
-
-        # Ospiti
-        for label in ["Ospiti", "Guests", "Numero massimo di ospiti"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["max_ospiti"]))
-                print(f"  Ospiti: {comp['max_ospiti']}")
-                break
-
-        wait(page, 1000)
-
-        # Camere da letto
-        for label in ["Camere da letto", "Bedrooms"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["camere"]))
-                print(f"  Camere: {comp['camere']}")
-                break
-
-        wait(page, 1000)
-
-        # Bagni
-        for label in ["Bagni", "Bathrooms"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(str(comp["bagni"]))
-                print(f"  Bagni: {comp['bagni']}")
-                break
-
-        wait(page, 1000)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_composizione")
-
-    try_step(page, "step5_composizione", do_step5)
-
-    # --- Step 6: Letti (dal JSON composizione.letti) ---
-    print("Step 6: Configurazione letti")
-
-    # Mappa tipo letto JSON → label parziale su Booking (match parziale)
-    # Le label complete sono es. "Letto matrimoniale (ca. 140 x 200 cm)"
-    LETTO_LABELS_BOOKING = {
-        "matrimoniale": ["Letto matrimoniale"],
-        "francese": ["Letto Queen-size"],
-        "singolo": ["Letto singolo"],
-        "divano_letto": ["Divano letto matrimoniale", "Divano letto singolo"],
-        "divano_letto_singolo": ["Divano letto singolo"],
-        "king": ["Letto King-size"],
-        "castello": ["Letto a castello"],
-    }
-
-    def _click_bed_plus(partial_label, clicks):
-        """Clicca il pulsante '+' N volte per un tipo letto su Booking.
-        Booking usa contatori +/- per ogni tipo letto, non campi di testo."""
-        # Trova il testo del letto nella pagina
-        label_el = page.get_by_text(partial_label, exact=False)
-        if label_el.count() == 0:
-            return False
-
-        # Risali al container riga che contiene i pulsanti +/-
-        # Il '+' è tipicamente l'ultimo button nella riga
+        # Nome struttura
         try:
-            plus = label_el.first.locator(
-                "xpath=ancestor::*[.//button][1]//button[last()]"
-            )
-            if plus.is_visible():
-                for _ in range(clicks):
-                    plus.click()
-                    page.wait_for_timeout(400)
-                return True
+            f = page.locator("input[name='property_name']")
+            if f.count() > 0 and f.first.is_visible() and not f.first.input_value():
+                f.first.fill(ident["nome_struttura"])
+                print(f"  Nome: {ident['nome_struttura']}")
+                filled = True
         except Exception:
             pass
 
-        # Fallback: cerca il primo '+' button che segue il label nel DOM
+        # Prezzo
         try:
-            plus = label_el.first.locator(
-                "xpath=following::button[normalize-space()='+'][1]"
-            )
-            if plus.count() > 0 and plus.is_visible():
-                for _ in range(clicks):
-                    plus.click()
-                    page.wait_for_timeout(400)
-                return True
+            f = page.locator("input[name*='price'], input[name*='prezzo']")
+            if f.count() > 0 and f.first.is_visible():
+                prezzo = cond.get("prezzo_notte")
+                if prezzo is None:
+                    listino = cond.get("listino_prezzi", [])
+                    if listino:
+                        prezzi = sorted(p["prezzo_notte"] for p in listino if p.get("prezzo_notte"))
+                        if prezzi:
+                            prezzo = prezzi[len(prezzi) // 2]
+                if prezzo:
+                    f.first.fill(str(prezzo))
+                    print(f"  Prezzo: {prezzo}")
+                    filled = True
         except Exception:
             pass
-
-        return False
-
-    def do_step6():
-        screenshot(page, "letti_pagina")
-        save_html(page, "step6_letti")
-
-        letti = comp.get("letti", [])
-        if not letti:
-            print("  ATTENZIONE: nessun dato letti nel JSON, skip")
-
-        for letto in letti:
-            tipo = letto["tipo"]
-            quantita = letto["quantita"]
-            labels = LETTO_LABELS_BOOKING.get(tipo, [])
-            if not labels:
-                print(f"  Tipo letto sconosciuto: {tipo}, skip")
-                continue
-            found = False
-            for label in labels:
-                if _click_bed_plus(label, quantita):
-                    print(f"  {label}: +{quantita} (dal JSON)")
-                    found = True
-                    break
-            if not found:
-                # Fallback: prova fill() su input con label
-                for label in labels:
-                    field = page.get_by_label(label)
-                    if field.count() > 0:
-                        field.first.fill(str(quantita))
-                        print(f"  {label}: {quantita} via fill (dal JSON)")
-                        found = True
-                        break
-            if not found:
-                print(f"  Label non trovata per tipo '{tipo}', skip")
-            wait(page, 500)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_letti")
-
-    try_step(page, "step6_letti", do_step6)
-
-    # --- Step 7: Servizi/Dotazioni ---
-    print("Step 7: Servizi e dotazioni")
-
-    def do_step7():
-        screenshot(page, "servizi_pagina")
-        save_html(page, "step7_servizi")
-
-        for servizio in SERVIZI:
-            try:
-                btn = page.get_by_text(servizio, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    page.wait_for_timeout(500)
-                    print(f"  Servizio selezionato: {servizio}")
-                else:
-                    # Prova con checkbox/label
-                    cb = page.locator(f"label:has-text('{servizio}')")
-                    if cb.count() > 0:
-                        cb.first.click()
-                        page.wait_for_timeout(500)
-                        print(f"  Servizio selezionato (label): {servizio}")
-                    else:
-                        print(f"  Servizio non trovato: {servizio}")
-            except Exception as e:
-                print(f"  Errore servizio {servizio}: {e}")
-
-        wait(page)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_servizi")
-
-    try_step(page, "step7_servizi", do_step7)
-
-    # --- Step 8: Foto ---
-    print("Step 8: Upload foto")
-
-    def do_step8():
-        screenshot(page, "foto_pagina")
-        save_html(page, "step8_foto")
-
-        uploaded = False
-        for selector in ["input[type='file']", "input[accept*='image']"]:
-            try:
-                fi = page.locator(selector)
-                if fi.count() > 0:
-                    fi.set_input_files(photo_paths, timeout=10_000)
-                    uploaded = True
-                    print(f"  Upload via {selector}")
-                    break
-            except Exception as e:
-                print(f"  Upload fallito ({selector}): {e}")
-
-        if not uploaded:
-            try:
-                fi = page.locator("input[type='file']")
-                if fi.count() > 0:
-                    fi.evaluate("el => el.style.display = 'block'")
-                    fi.set_input_files(photo_paths, timeout=10_000)
-                    uploaded = True
-                    print("  Upload via forced display")
-            except Exception as e:
-                print(f"  Forced upload fallito: {e}")
-
-        if uploaded:
-            wait(page, 10_000)
-            screenshot(page, "foto_caricate")
-        else:
-            print("  SKIP foto")
-            screenshot(page, "foto_skip")
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-
-    try_step(page, "step8_foto", do_step8)
-
-    # --- Step 9: Descrizione ---
-    print("Step 9: Descrizione")
-
-    def do_step9():
-        screenshot(page, "descrizione_pagina")
-        save_html(page, "step9_descrizione")
-
-        desc = PROP["marketing"]["descrizione_lunga"]
-        desc_field = page.locator("textarea").first
-        if desc_field.count() > 0:
-            desc_field.fill(desc)
-            print("  Descrizione compilata")
-        else:
-            print("  Campo descrizione non trovato")
-
-        wait(page, 1000)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_descrizione")
-
-    try_step(page, "step9_descrizione", do_step9)
-
-    # --- Step 10: Prezzo e condizioni (dal JSON, niente hardcoded) ---
-    print("Step 10: Prezzo e condizioni")
-
-    def do_step10():
-        screenshot(page, "prezzo_pagina")
-        save_html(page, "step10_prezzo")
-
-        cond = PROP.get("condizioni", {})
-
-        # Prezzo a notte — dal JSON (prezzo_notte diretto, oppure mediana del listino)
-        prezzo = cond.get("prezzo_notte")
-        if prezzo is None:
-            # Calcola mediana dal listino_prezzi se disponibile
-            listino = cond.get("listino_prezzi", [])
-            if listino:
-                prezzi_listino = sorted(p["prezzo_notte"] for p in listino if p.get("prezzo_notte"))
-                if prezzi_listino:
-                    mid = len(prezzi_listino) // 2
-                    prezzo = prezzi_listino[mid]
-                    print(f"  Prezzo calcolato (mediana listino): {prezzo}")
-        if prezzo is not None:
-            prezzo_str = str(prezzo)
-            for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    field.first.fill(prezzo_str)
-                    print(f"  Prezzo: {prezzo_str} EUR/notte (dal JSON)")
-                    break
-        else:
-            print("  Prezzo non presente nel JSON — lascio vuoto")
-
-        wait(page, 1000)
-
-        # Cauzione — solo se presente nel JSON (supporta sia cauzione_euro che cauzione)
-        cauzione_val = cond.get("cauzione_euro") or cond.get("cauzione")
-        if cauzione_val is not None:
-            cauzione = str(cauzione_val)
-            for label in ["Cauzione", "Deposit", "Damage deposit"]:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    field.first.fill(cauzione)
-                    print(f"  Cauzione: {cauzione} EUR (dal JSON)")
-                    break
-        else:
-            print("  Cauzione non presente nel JSON — lascio vuoto")
-
-        wait(page, 1000)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_prezzo")
-
-    try_step(page, "step10_prezzo", do_step10)
-
-    # --- Step 11: Codici identificativi (CIN/CIR) ---
-    print("Step 11: Codici identificativi (CIN/CIR)")
-
-    def do_step11():
-        screenshot(page, "codici_pagina")
-        save_html(page, "step11_codici")
-
-        cin = ident["cin"]
-        cir = ident.get("cir", "")
 
         # CIN
-        for label in ["CIN", "Codice Identificativo Nazionale"]:
-            field = page.get_by_label(label)
-            if field.count() > 0:
-                field.first.fill(cin)
-                print(f"  CIN: {cin}")
+        try:
+            f = page.locator("input[name*='cin'], input[name*='CIN']")
+            if f.count() > 0 and f.first.is_visible():
+                f.first.fill(ident["cin"])
+                print(f"  CIN: {ident['cin']}")
+                filled = True
+        except Exception:
+            pass
+
+        # Prova a cliccare Continua
+        wait(page, 2000)
+        advanced = _click_wizard_continue(page)
+        if not advanced:
+            advanced = _click_continue(page)
+
+        if not advanced:
+            if INTERACTIVE:
+                resp = input(f">>> Pagina '{title}': compila nel browser, poi INVIO ('stop' per finire): ").strip()
+                if resp.lower() == "stop":
+                    break
+                _click_wizard_continue(page)
+                wait(page, 3000)
+            else:
+                print("  Impossibile avanzare, stop.")
                 break
         else:
-            cin_field = page.locator(
-                "input[name*='cin'], input[name*='CIN'], input[placeholder*='CIN']"
-            )
-            if cin_field.count() > 0:
-                cin_field.first.fill(cin)
-                print(f"  CIN (fallback): {cin}")
+            wait(page, 3000)
 
-        wait(page, 1000)
-
-        # CIR
-        if cir:
-            for label in ["CIR", "Codice Identificativo Regionale"]:
-                field = page.get_by_label(label)
-                if field.count() > 0:
-                    field.first.fill(cir)
-                    print(f"  CIR: {cir}")
+        # Controlla se abbiamo raggiunto la fine
+        try:
+            sections = page.locator("#automation_id_sections_container")
+            if sections.count() > 0:
+                # Siamo nella dashboard delle sezioni
+                disabled = page.locator("[id^='automation_id_section_'][disabled]")
+                if disabled.count() == 0:
+                    print("\n  Tutte le sezioni completate!")
                     break
+        except Exception:
+            pass
 
-        wait(page, 1000)
-
-        # Continua
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_codici")
-
-    try_step(page, "step11_codici", do_step11)
-
-    # --- Step 12: Pagina finale — solo screenshot, NON inviare ---
-    print("Step 12: Pagina finale — SOLO screenshot")
-
-    def do_step12():
-        wait(page)
-        screenshot(page, "pagina_finale")
-        save_html(page, "step12_finale")
-        print("Flusso Booking completato! NON inviato per la verifica.")
-
-    try_step(page, "step12_finale", do_step12)
+    # --- Screenshot finale ---
+    print("\n=== FINE WIZARD ===")
+    screenshot(page, "pagina_finale")
+    save_html(page, "pagina_finale")
+    print("Flusso Booking completato! NON inviato — solo verifica.")
 
 
 # ---------------------------------------------------------------------------
