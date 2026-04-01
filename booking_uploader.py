@@ -543,13 +543,14 @@ def insert_property(page):
     def do_f1():
         screenshot(page, "f1_nome")
         save_html(page, "f1_nome")
-        # Input: name="property_name" data-testid="PropertyName-"
+        # Booking richiede almeno 1 lettera minuscola nel nome
+        nome = ident["nome_struttura"].title()  # "BILO LE CALETTE" → "Bilo Le Calette"
         nome_field = page.locator("input[name='property_name']")
         if nome_field.count() == 0:
             nome_field = page.locator("[data-testid^='PropertyName']")
         if nome_field.count() > 0:
-            nome_field.first.fill(ident["nome_struttura"])
-            print(f"  Nome: {ident['nome_struttura']}")
+            nome_field.first.fill(nome)
+            print(f"  Nome: {nome}")
         else:
             print("  Campo nome non trovato")
         wait(page, 2000)
@@ -610,8 +611,9 @@ def insert_property(page):
         try:
             f = page.locator("input[name='property_name']")
             if f.count() > 0 and f.first.is_visible() and not f.first.input_value():
-                f.first.fill(ident["nome_struttura"])
-                print(f"  Nome: {ident['nome_struttura']}")
+                nome_tc = ident["nome_struttura"].title()
+                f.first.fill(nome_tc)
+                print(f"  Nome: {nome_tc}")
                 filled = True
         except Exception:
             pass
@@ -668,12 +670,33 @@ def insert_property(page):
         for label_bk, key_json in AMENITIES_MAP.items():
             if dot.get(key_json) is True:
                 try:
+                    # Metodo 1: get_by_label
                     cb = page.get_by_label(label_bk, exact=False)
                     if cb.count() > 0 and cb.first.is_visible():
                         if not cb.first.is_checked():
                             cb.first.check()
                             print(f"  ✓ {label_bk}")
                             filled = True
+                        continue
+                except Exception:
+                    pass
+                try:
+                    # Metodo 2: clicca il testo della label (toggle checkbox)
+                    txt = page.get_by_text(label_bk, exact=True)
+                    if txt.count() > 0 and txt.first.is_visible():
+                        txt.first.click()
+                        print(f"  ✓ {label_bk} (via testo)")
+                        filled = True
+                        continue
+                except Exception:
+                    pass
+                try:
+                    # Metodo 3: label con testo parziale
+                    lbl = page.locator(f"label:has-text('{label_bk}')")
+                    if lbl.count() > 0 and lbl.first.is_visible():
+                        lbl.first.click()
+                        print(f"  ✓ {label_bk} (via label)")
+                        filled = True
                 except Exception:
                     pass
 
