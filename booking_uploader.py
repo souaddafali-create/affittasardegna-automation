@@ -415,26 +415,49 @@ def insert_property(page):
 
     try_step(page, "step1_tipo", do_step1)
 
-    # --- Step 2: Quante strutture stai inserendo? → 1 ---
-    print("Step 2: Numero strutture")
+    # --- Step 2: "Cosa possono prenotare gli ospiti?" → "L'intero spazio" ---
+    print("Step 2: Intero spazio")
 
     def do_step2():
-        for label in ["Una", "One", "1"]:
+        screenshot(page, "step2_pagina")
+        save_html(page, "step2_intero_spazio")
+
+        # Seleziona "L'intero spazio" (prima opzione)
+        clicked = False
+        for label in ["L'intero spazio", "intero spazio", "Entire place",
+                       "An entire property"]:
             try:
-                btn = page.get_by_text(label, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    print(f"  Selezionato: {label}")
+                opt = page.get_by_text(label, exact=False)
+                if opt.count() > 0 and opt.first.is_visible():
+                    opt.first.click()
+                    clicked = True
+                    print(f"  Selezionato: '{label}'")
                     break
             except Exception:
                 continue
-        wait(page)
-        # Click continua/next
-        _click_continue(page)
-        wait(page)
-        screenshot(page, "dopo_numero")
 
-    try_step(page, "step2_numero", do_step2)
+        if not clicked:
+            # Fallback: clicca la prima card/opzione visibile
+            try:
+                cards = page.locator("[role='radio'], [role='checkbox'], "
+                                     "[data-testid*='entire'], [data-testid*='whole']")
+                if cards.count() > 0:
+                    cards.first.click()
+                    clicked = True
+                    print("  Selezionato prima opzione (radio/checkbox)")
+            except Exception:
+                pass
+
+        if not clicked and INTERACTIVE:
+            input(">>> Seleziona 'L'intero spazio' nel browser, poi INVIO... ")
+
+        wait(page, 2000)
+        _click_continue(page)
+        wait(page, 5000)
+        screenshot(page, "dopo_intero_spazio")
+        save_html(page, "dopo_step2")
+
+    try_step(page, "step2_intero_spazio", do_step2)
 
     # --- Step 3: Nome struttura ---
     print("Step 3: Nome struttura")
