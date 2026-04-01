@@ -333,50 +333,63 @@ def insert_property(page):
 
     # --- Step 1: Seleziona tipo struttura (category.html) ---
     # Pagina: "Iscrivi la tua struttura su Booking.com"
-    # Mostra card: Appartamento | Case | Hotel, B&B | Strutture alternative
-    # Ogni card ha un bottone "Iscrivi la tua struttura"
+    # 4 card: Appartamento | Case | Hotel, B&B | Strutture alternative
+    # Ogni card ha un bottone blu "Iscrivi la tua struttura"
+    # "Appartamento" è la PRIMA card (indice 0)
     print("Step 1: Tipo struttura — Appartamento")
 
     def do_step1():
         _dismiss_cookie_banner(page)
+        wait(page, 3000)
         screenshot(page, "tipo_struttura_pagina")
         save_html(page, "step1_tipo")
 
-        # Trova la card "Appartamento" e clicca il suo "Iscrivi la tua struttura"
         clicked = False
 
-        # Metodo 1: Trova il heading "Appartamento" e clicca il link nella stessa card
-        for tipo in ["Appartamento", "Apartment"]:
+        # I bottoni "Iscrivi la tua struttura" sono 4, uno per card.
+        # Appartamento è il PRIMO. Proviamo vari selettori.
+
+        # Metodo 1: tutti i link/button con quel testo, prendiamo il primo
+        for role in ["link", "button"]:
             try:
-                card = page.locator(f"*:has(> *:text-is('{tipo}'))").first
-                iscrivi_btn = card.get_by_role("link", name="Iscrivi la tua struttura")
-                if iscrivi_btn.count() == 0:
-                    iscrivi_btn = card.get_by_role("link", name="List your property")
-                if iscrivi_btn.count() > 0:
-                    iscrivi_btn.first.click()
+                btns = page.get_by_role(role, name="Iscrivi la tua struttura")
+                if btns.count() > 0:
+                    btns.first.click()
                     clicked = True
-                    print(f"  Cliccato 'Iscrivi la tua struttura' sotto '{tipo}'")
+                    print(f"  Cliccato primo '{role}' 'Iscrivi la tua struttura'")
                     break
             except Exception:
                 continue
 
-        # Metodo 2: Clicca il PRIMO "Iscrivi la tua struttura" (la prima card è Appartamento)
+        # Metodo 2: CSS selector diretto — <a> con testo
         if not clicked:
             try:
-                btns = page.get_by_role("link", name="Iscrivi la tua struttura")
-                if btns.count() == 0:
-                    btns = page.get_by_text("Iscrivi la tua struttura")
+                btns = page.locator("a:has-text('Iscrivi la tua struttura')")
                 if btns.count() > 0:
                     btns.first.click()
                     clicked = True
-                    print("  Cliccato primo 'Iscrivi la tua struttura' (Appartamento)")
+                    print("  Cliccato primo <a> 'Iscrivi la tua struttura'")
             except Exception:
                 pass
 
+        # Metodo 3: qualsiasi elemento cliccabile con quel testo
         if not clicked:
-            print("  ATTENZIONE: bottone non trovato!")
+            try:
+                btns = page.locator("text=Iscrivi la tua struttura")
+                if btns.count() > 0:
+                    btns.first.click()
+                    clicked = True
+                    print("  Cliccato primo testo 'Iscrivi la tua struttura'")
+            except Exception:
+                pass
+
+        # Metodo 4: fallback manuale
+        if not clicked:
+            print("  ATTENZIONE: bottone non trovato automaticamente!")
             if INTERACTIVE:
                 input(">>> Clicca 'Iscrivi la tua struttura' sotto Appartamento, poi premi INVIO... ")
+            else:
+                raise RuntimeError("Bottone 'Iscrivi la tua struttura' non trovato")
 
         wait(page, 5000)
         screenshot(page, "tipo_selezionato")
