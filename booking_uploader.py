@@ -197,14 +197,38 @@ def _page_has_otp(page):
 
 
 def _dismiss_cookie_banner(page):
-    """Chiude il banner cookie se presente."""
-    for label in ["Accetto", "Accetta", "Accept", "Accept all"]:
+    """Chiude il banner cookie se presente — prova vari metodi."""
+    # Metodo 1: bottone per ruolo
+    for label in ["Accetto", "Accetta", "Accept", "Accept all", "Accetta tutto"]:
         try:
             btn = page.get_by_role("button", name=label)
             if btn.count() > 0 and btn.first.is_visible():
                 btn.first.click()
                 print(f"  Cookie banner chiuso ('{label}')")
-                wait(page, 1000)
+                wait(page, 1500)
+                return
+        except Exception:
+            continue
+    # Metodo 2: qualsiasi elemento con quel testo
+    for label in ["Accetto", "Accept"]:
+        try:
+            btn = page.locator(f"button:has-text('{label}'), a:has-text('{label}')")
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cookie banner chiuso via locator ('{label}')")
+                wait(page, 1500)
+                return
+        except Exception:
+            continue
+    # Metodo 3: data-testid tipici di Booking
+    for sel in ["[data-testid='accept-btn']", "#onetrust-accept-btn-handler",
+                 "[id*='cookie'] button", "[class*='cookie'] button"]:
+        try:
+            btn = page.locator(sel)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cookie banner chiuso ({sel})")
+                wait(page, 1500)
                 return
         except Exception:
             continue
@@ -959,6 +983,9 @@ def main():
     print(f"Browser: {'VISIBILE' if not headless else 'headless'} "
           f"(INTERACTIVE={INTERACTIVE})")
 
+    SESSION_FILE = os.path.join(os.path.dirname(__file__), "booking_session.json")
+    has_session = os.path.exists(SESSION_FILE)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=headless,
@@ -968,12 +995,19 @@ def main():
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        context = browser.new_context(
+
+        # Se esiste una sessione salvata, caricala (skip login)
+        ctx_kwargs = dict(
             locale="it-IT",
             viewport={"width": 1366, "height": 768},
             user_agent=USER_AGENT,
             java_script_enabled=True,
         )
+        if has_session:
+            print(f"  Sessione salvata trovata: {SESSION_FILE}")
+            ctx_kwargs["storage_state"] = SESSION_FILE
+
+        context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
 
         # Stealth opzionale (se playwright-stealth è installato)
@@ -985,9 +1019,41 @@ def main():
             print("playwright-stealth non trovato, procedo senza stealth.")
 
         try:
-            wizard_page = login_and_navigate(page)
+            if has_session:
+                # Sessione salvata: vai direttamente al wizard (skip login)
+                print("\n=== SKIP LOGIN (sessione salvata) ===")
+                page.goto("https://join.booking.com/",
+                          wait_until="domcontentloaded", timeout=60_000)
+                wait(page, 5000)
+                _dismiss_cookie_banner(page)
+                screenshot(page, "sessione_ripresa")
+                print(f"  URL: {page.url}")
+
+                # Se la sessione è scaduta (redirect a login), rifai login
+                if "account.booking.com" in page.url or "sign-in" in page.url:
+                    print("  Sessione scaduta, rifaccio login...")
+                    os.remove(SESSION_FILE)
+                    wizard_page = login_and_navigate(page)
+                else:
+                    # Clicca "Get started" se siamo sulla landing page
+                    if "become-a-host" not in page.url:
+                        gs = page.locator("#getStarted, [data-testid='getStarted']")
+                        if gs.count() > 0:
+                            gs.first.click()
+                            wait(page, 5000)
+                    wizard_page = page
+            else:
+                wizard_page = login_and_navigate(page)
+
+            # Salva sessione per le prossime volte
+            context.storage_state(path=SESSION_FILE)
+            print(f"  Sessione salvata in: {SESSION_FILE}")
+
             screenshot(wizard_page, "pagina_iniziale")
             insert_property(wizard_page)
+
+            # Aggiorna sessione anche alla fine
+            context.storage_state(path=SESSION_FILE)
         finally:
             if INTERACTIVE:
                 input("\n>>> Completato! Controlla il browser, poi premi INVIO per chiudere... ")
