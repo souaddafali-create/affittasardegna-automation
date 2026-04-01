@@ -239,8 +239,8 @@ def login(page):
     print("  Modalità INTERATTIVA — browser visibile")
 
     print("  Navigo alla pagina di login...")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
-    wait(page, 3000)
+    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
+    wait(page, 5000)
     screenshot(page, "login_pagina")
     print(f"  URL: {page.url}")
 
@@ -313,7 +313,7 @@ def navigate_to_wizard(page):
 
     if new_page is None and "join.booking.com" not in page.url:
         print("  Link non trovato, navigo direttamente a join.booking.com...")
-        page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
+        page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
 
     wizard_page = new_page if new_page else page
     wizard_page.wait_for_load_state("networkidle", timeout=15_000)

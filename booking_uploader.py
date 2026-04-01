@@ -190,144 +190,6 @@ def _page_has_otp(page):
     return has_keyword and has_otp_input
 
 
-def login(page):
-    """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi."""
-    print("Login Booking Extranet...")
-    if INTERACTIVE:
-        print("  (modalità interattiva — il browser si aprirà visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
-    wait(page, 3000)
-    screenshot(page, "login_page")
-
-    # ── Email ──
-    email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=15_000)
-    human_type(page, email_sel, EMAIL)
-    wait(page, 1000)
-    screenshot(page, "email_inserita")
-
-    # Click continua
-    page.click('button[type="submit"]', timeout=10_000)
-    wait(page, 5000)
-    screenshot(page, "dopo_email")
-
-    # ── CAPTCHA ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO ***")
-        screenshot(page, "captcha")
-        save_html(page, "captcha")
-        _wait_for_interactive(
-            page,
-            "CAPTCHA rilevato! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        print("  CAPTCHA superato.")
-        screenshot(page, "captcha_superato")
-        wait(page, 3000)
-
-    # ── Codice di verifica email (OTP) ──
-    if _page_has_otp(page):
-        print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
-        screenshot(page, "otp_richiesto")
-        save_html(page, "otp_pagina")
-
-        if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            # Trova il campo OTP e compila
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
-            wait(page, 1000)
-            screenshot(page, "otp_inserito")
-
-            # Submit OTP
-            page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp")
-            print("  Codice di verifica inviato.")
-        else:
-            # In CI non possiamo chiedere input — fallisce
-            raise RuntimeError(
-                "Booking richiede un codice di verifica email. "
-                "Eseguire lo script in locale con INTERACTIVE=1."
-            )
-    else:
-        print("  Nessun OTP richiesto, procedo.")
-
-    # ── Secondo CAPTCHA (possibile dopo OTP) ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO (post-OTP) ***")
-        screenshot(page, "captcha_post_otp")
-        _wait_for_interactive(
-            page,
-            "Secondo CAPTCHA! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        wait(page, 3000)
-
-    # ── Password ──
-    pw_sel = 'input[type="password"], input[name="password"], #password'
-    try:
-        page.wait_for_selector(pw_sel, timeout=15_000)
-        human_type(page, pw_sel, PASSWORD)
-        wait(page, 1000)
-        screenshot(page, "password_inserita")
-
-        page.click('button[type="submit"]', timeout=10_000)
-        wait(page, 8000)
-        screenshot(page, "dopo_login")
-    except Exception:
-        # Alcuni flussi (es. magic link) saltano la password
-        print("  Campo password non trovato.")
-        screenshot(page, "no_password")
-        if INTERACTIVE:
-            _wait_for_interactive(
-                page,
-                "Completa il login manualmente nel browser (password, OTP, ecc.), "
-                "poi premi INVIO quando sei sulla homepage loggato.",
-                lambda p: "booking.com/index" in p.url.lower()
-                or "admin.booking.com" in p.url.lower(),
-            )
-            screenshot(page, "dopo_login_manuale")
-            print(f"  Login manuale completato. URL: {page.url}")
-
-    # ── OTP post-password (2FA dopo login) ──
-    if _page_has_otp(page):
-        print("  *** CODICE 2FA POST-PASSWORD RICHIESTO ***")
-        screenshot(page, "otp_post_password")
-        save_html(page, "otp_post_password")
-
-        if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice 2FA ricevuto via email: ").strip()
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
-            wait(page, 1000)
-            page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp_post_password")
-            print("  Codice 2FA inviato.")
-        else:
-            raise RuntimeError(
-                "Booking richiede un codice 2FA post-password. "
-                "Eseguire in locale con INTERACTIVE=1."
-            )
-
-    print(f"  URL dopo login: {page.url}")
-
-
-# ---------------------------------------------------------------------------
-# Navigazione a "Aggiungi nuova struttura"
-# ---------------------------------------------------------------------------
-
 def _dismiss_cookie_banner(page):
     """Chiude il banner cookie se presente."""
     for label in ["Accetto", "Accetta", "Accept", "Accept all"]:
@@ -342,97 +204,119 @@ def _dismiss_cookie_banner(page):
             continue
 
 
-def navigate_to_add_property(page):
-    """Navigate to 'List your property' — gestisce nuova scheda e landing page.
+def login_and_navigate(page):
+    """Login su Booking e naviga fino al wizard di inserimento proprietà.
 
-    Returns the page (possibly a new popup tab) where the wizard starts.
+    Il login di Booking cambia spesso (CAPTCHA, OTP, password, magic link).
+    In modalità interattiva: inserisce l'email, poi chiede all'utente di
+    completare il login manualmente nel browser. Più robusto e affidabile.
+
+    Returns the page where the wizard starts (potrebbe essere una nuova scheda).
     """
-    print("Navigazione a 'Inserisci il tuo immobile'...")
+    print("=== LOGIN BOOKING ===")
 
-    wait(page, 3000)
+    # -- Fase 1: Apri pagina login e inserisci email --
+    page.goto("https://account.booking.com/sign-in",
+              wait_until="domcontentloaded", timeout=60_000)
+    wait(page, 5000)
     _dismiss_cookie_banner(page)
-    screenshot(page, "prima_click_inserisci")
+    screenshot(page, "login_page")
 
-    # "Inserisci il tuo immobile" apre tipicamente una NUOVA SCHEDA (target=_blank).
-    # Usiamo expect_popup() per intercettarla.
+    email_sel = 'input[type="email"], input[name="loginname"], #loginname'
+    try:
+        page.wait_for_selector(email_sel, timeout=15_000)
+        human_type(page, email_sel, EMAIL)
+        wait(page, 1000)
+        page.click('button[type="submit"]', timeout=10_000)
+        wait(page, 3000)
+        screenshot(page, "dopo_email")
+        print(f"  Email inserita: {EMAIL}")
+    except Exception as e:
+        print(f"  Errore inserimento email: {e}")
+
+    # -- Fase 2: L'utente completa il login manualmente --
+    if INTERACTIVE:
+        print("\n" + "=" * 60)
+        print("  COMPLETA IL LOGIN NEL BROWSER:")
+        print("  - CAPTCHA → risolvilo")
+        print("  - Codice email → inseriscilo")
+        print("  - Password → inseriscila")
+        print("  Continua fino a essere LOGGATO.")
+        print("=" * 60)
+        input("\n>>> Premi INVIO quando sei loggato... ")
+    else:
+        # In CI: prova il flusso automatico password
+        pw_sel = 'input[type="password"]'
+        try:
+            page.wait_for_selector(pw_sel, timeout=15_000)
+            human_type(page, pw_sel, PASSWORD)
+            page.click('button[type="submit"]', timeout=10_000)
+            wait(page, 8000)
+        except Exception:
+            raise RuntimeError("Login automatico fallito. Eseguire in locale con INTERACTIVE=1.")
+
+    screenshot(page, "dopo_login")
+    print(f"  URL dopo login: {page.url}")
+
+    # -- Fase 3: Naviga al wizard "Inserisci il tuo immobile" --
+    print("\nNavigazione al wizard...")
+    _dismiss_cookie_banner(page)
+
+    # "Inserisci il tuo immobile" apre una NUOVA SCHEDA (target=_blank)
     new_page = None
-
-    for label in [
-        "Inserisci il tuo immobile",
-        "List your property",
-        "Registra la tua struttura",
-    ]:
+    for label in ["Inserisci il tuo immobile", "List your property"]:
         try:
             link = page.get_by_role("link", name=label)
             if link.count() > 0:
-                # Intercetta la nuova scheda
-                with page.context.expect_page(timeout=10_000) as new_page_info:
+                with page.context.expect_page(timeout=15_000) as new_page_info:
                     link.first.click()
                 new_page = new_page_info.value
-                print(f"  Cliccato link: '{label}' → nuova scheda aperta")
+                print(f"  Cliccato: '{label}' → nuova scheda")
                 break
         except Exception:
-            # Se non apre nuova scheda, prova click normale
             try:
                 link = page.get_by_role("link", name=label)
                 if link.count() > 0:
                     link.first.click()
-                    print(f"  Cliccato link: '{label}' (stessa scheda)")
+                    print(f"  Cliccato: '{label}' (stessa scheda)")
                     break
             except Exception:
                 continue
 
-    # Se non abbiamo trovato il link, naviga direttamente
-    if new_page is None and "join.booking.com" not in page.url:
-        print("  Link non trovato o stessa scheda, navigo direttamente...")
-        page.goto(
-            "https://join.booking.com/",
-            wait_until="networkidle",
-            timeout=30_000,
-        )
-
-    # Usa la nuova scheda se aperta, altrimenti resta sulla stessa
     wizard_page = new_page if new_page else page
-    wizard_page.wait_for_load_state("networkidle", timeout=15_000)
-    wait(wizard_page, 3000)
+
+    # Se non siamo ancora sul wizard, naviga direttamente
+    if "join.booking.com" not in wizard_page.url:
+        print("  Navigo direttamente a join.booking.com...")
+        wizard_page.goto("https://join.booking.com/",
+                         wait_until="domcontentloaded", timeout=60_000)
+
+    wait(wizard_page, 5000)
     _dismiss_cookie_banner(wizard_page)
     screenshot(wizard_page, "landing_join")
-    save_html(wizard_page, "landing_join")
     print(f"  URL landing: {wizard_page.url}")
 
-    # Se siamo su join.booking.com, clicca "Get started now"
-    if "join.booking.com" in wizard_page.url:
-        for label in [
-            "Get started now",
-            "Inizia ora",
-            "Inizia subito",
-            "Comincia ora",
-            "Continue your registration",
-            "Continua la registrazione",
-        ]:
+    # Se siamo sulla landing page, clicca "Get started now" / "Iscrivi la tua struttura"
+    if "become-a-host" not in wizard_page.url:
+        for label in ["Get started now", "Inizia ora", "Inizia subito",
+                       "Continue your registration", "Continua la registrazione"]:
             try:
                 btn = wizard_page.get_by_role("link", name=label)
-                if btn.count() > 0:
+                if btn.count() > 0 and btn.first.is_visible():
                     btn.first.click()
                     print(f"  Cliccato: '{label}'")
                     break
                 btn = wizard_page.get_by_role("button", name=label)
-                if btn.count() > 0:
+                if btn.count() > 0 and btn.first.is_visible():
                     btn.first.click()
-                    print(f"  Cliccato button: '{label}'")
-                    break
-                btn = wizard_page.get_by_text(label, exact=False)
-                if btn.count() > 0:
-                    btn.first.click()
-                    print(f"  Cliccato testo: '{label}'")
+                    print(f"  Cliccato: '{label}'")
                     break
             except Exception:
                 continue
+        wait(wizard_page, 5000)
 
-        wait(wizard_page, 8000)
-
-    screenshot(wizard_page, "dopo_get_started")
-    save_html(wizard_page, "dopo_get_started")
+    screenshot(wizard_page, "wizard_start")
+    save_html(wizard_page, "wizard_start")
     print(f"  URL wizard: {wizard_page.url}")
     return wizard_page
 
@@ -447,23 +331,54 @@ def insert_property(page):
     comp = PROP["composizione"]
     photo_paths = download_placeholder_photos(5)
 
-    # --- Step 1: Seleziona tipo struttura ---
+    # --- Step 1: Seleziona tipo struttura (category.html) ---
+    # Pagina: "Iscrivi la tua struttura su Booking.com"
+    # Mostra card: Appartamento | Case | Hotel, B&B | Strutture alternative
+    # Ogni card ha un bottone "Iscrivi la tua struttura"
     print("Step 1: Tipo struttura — Appartamento")
 
     def do_step1():
+        _dismiss_cookie_banner(page)
         screenshot(page, "tipo_struttura_pagina")
         save_html(page, "step1_tipo")
-        # Booking usa "Apartment" o "Appartamento" a seconda della lingua
-        for label in ["Appartamento", "Apartment", "Appartamenti"]:
+
+        # Trova la card "Appartamento" e clicca il suo "Iscrivi la tua struttura"
+        clicked = False
+
+        # Metodo 1: Trova il heading "Appartamento" e clicca il link nella stessa card
+        for tipo in ["Appartamento", "Apartment"]:
             try:
-                btn = page.get_by_text(label, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    print(f"  Tipo selezionato: {label}")
+                card = page.locator(f"*:has(> *:text-is('{tipo}'))").first
+                iscrivi_btn = card.get_by_role("link", name="Iscrivi la tua struttura")
+                if iscrivi_btn.count() == 0:
+                    iscrivi_btn = card.get_by_role("link", name="List your property")
+                if iscrivi_btn.count() > 0:
+                    iscrivi_btn.first.click()
+                    clicked = True
+                    print(f"  Cliccato 'Iscrivi la tua struttura' sotto '{tipo}'")
                     break
             except Exception:
                 continue
-        wait(page)
+
+        # Metodo 2: Clicca il PRIMO "Iscrivi la tua struttura" (la prima card è Appartamento)
+        if not clicked:
+            try:
+                btns = page.get_by_role("link", name="Iscrivi la tua struttura")
+                if btns.count() == 0:
+                    btns = page.get_by_text("Iscrivi la tua struttura")
+                if btns.count() > 0:
+                    btns.first.click()
+                    clicked = True
+                    print("  Cliccato primo 'Iscrivi la tua struttura' (Appartamento)")
+            except Exception:
+                pass
+
+        if not clicked:
+            print("  ATTENZIONE: bottone non trovato!")
+            if INTERACTIVE:
+                input(">>> Clicca 'Iscrivi la tua struttura' sotto Appartamento, poi premi INVIO... ")
+
+        wait(page, 5000)
         screenshot(page, "tipo_selezionato")
 
     try_step(page, "step1_tipo", do_step1)
@@ -1030,8 +945,7 @@ def main():
             print("playwright-stealth non trovato, procedo senza stealth.")
 
         try:
-            login(page)
-            wizard_page = navigate_to_add_property(page)
+            wizard_page = login_and_navigate(page)
             screenshot(wizard_page, "pagina_iniziale")
             insert_property(wizard_page)
         finally:
