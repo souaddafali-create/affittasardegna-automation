@@ -787,7 +787,262 @@ def insert_property(page):
     print("\n=== FINE WIZARD ===")
     screenshot(page, "pagina_finale")
     save_html(page, "pagina_finale")
-    print("Flusso Booking completato! NON inviato — solo verifica.")
+    print("Wizard completato!")
+
+    # =====================================================================
+    # FASE 3: Extranet — compila le sezioni dettagliate
+    # Stessa sessione browser, non serve nuovo login
+    # =====================================================================
+
+    # Rileva hotel_id dall'URL o dalla pagina
+    import re
+    hotel_id = os.environ.get("HOTEL_ID", "")
+    if not hotel_id:
+        match = re.search(r'hotel_id=(\d+)', page.url)
+        if match:
+            hotel_id = match.group(1)
+    if not hotel_id:
+        try:
+            match = re.search(r'hotel_id[=:][\s"]*(\d+)', page.content())
+            if match:
+                hotel_id = match.group(1)
+        except Exception:
+            pass
+    if not hotel_id and INTERACTIVE:
+        hotel_id = input(">>> Hotel ID non trovato. Inseriscilo (lo trovi nell'URL di Booking): ").strip()
+
+    if hotel_id:
+        print(f"\n=== FASE EXTRANET (hotel_id={hotel_id}) ===")
+        _fill_extranet_sections(page, hotel_id)
+    else:
+        print("  Hotel ID non disponibile, skip Extranet.")
+
+
+def _fill_extranet_sections(page, hotel_id):
+    """Compila le sezioni dell'Extranet Booking nella stessa sessione."""
+    ident = PROP["identificativi"]
+    dot = PROP.get("dotazioni", {})
+    cond = PROP.get("condizioni", {})
+    base_url = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage"
+
+    sections = [
+        ("Servizi e dotazioni", f"{base_url}/facilities.html?hotel_id={hotel_id}&lang=it"),
+        ("Metratura e dotazioni", f"{base_url}/amenities.html?hotel_id={hotel_id}&lang=it"),
+        ("Condizioni", f"{base_url}/policies.html?hotel_id={hotel_id}&lang=it"),
+        ("Profilo", f"{base_url}/profile.html?hotel_id={hotel_id}&lang=it"),
+        ("Gestione camere", f"{base_url}/rooms.html?hotel_id={hotel_id}&lang=it"),
+    ]
+
+    for section_name, url in sections:
+      try:
+        print(f"\n--- {section_name} ---")
+        page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+        wait(page, 5000)
+
+        # Verifica di non essere su pagina di login
+        if "Accedi" in (page.title() or "") or "sign-in" in page.url:
+            print(f"  Sessione scaduta su {section_name}!")
+            if INTERACTIVE:
+                input(">>> Fai login nel browser, poi INVIO: ")
+                page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+                wait(page, 5000)
+            else:
+                break
+
+        screenshot(page, f"extranet_{section_name.replace(' ','_')}")
+        save_html(page, f"extranet_{section_name.replace(' ','_')}")
+        print(f"  URL: {page.url}")
+
+        # --- SERVIZI E DOTAZIONI: clicca Sì/No ---
+        if "facilities" in url:
+            _extranet_servizi(page, dot)
+
+        # --- METRATURA E DOTAZIONI: dimensioni + Sì/No ---
+        elif "amenities" in url:
+            _extranet_metratura(page, dot)
+
+        # --- CONDIZIONI: check-in/out, cauzione ---
+        elif "policies" in url:
+            _extranet_condizioni(page, cond)
+
+        # --- PROFILO: descrizione ---
+        elif "profile" in url:
+            _extranet_profilo(page)
+
+        # --- GESTIONE CAMERE: CIN, CIR, letti, bagno ---
+        elif "rooms" in url:
+            _extranet_gestione_camere(page, ident)
+
+        # Salva
+        try:
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            wait(page, 1000)
+            for btn_text in ["Salva", "Save", "Continua", "Continue"]:
+                btn = page.get_by_role("button", name=btn_text)
+                if btn.count() > 0 and btn.first.is_visible():
+                    btn.first.click()
+                    print(f"  Salvato ('{btn_text}')")
+                    wait(page, 3000)
+                    break
+        except Exception:
+            pass
+
+        screenshot(page, f"extranet_{section_name.replace(' ','_')}_dopo")
+
+      except Exception as e:
+        print(f"  ERRORE {section_name}: {e}")
+        screenshot(page, f"errore_extranet_{section_name.replace(' ','_')}")
+        save_html(page, f"errore_extranet_{section_name.replace(' ','_')}")
+        if INTERACTIVE:
+            input(f">>> '{section_name}' fallito. Completa nel browser, poi INVIO: ")
+
+    print("\n=== EXTRANET COMPLETATO ===")
+
+
+def _click_si_no(page, label, click_si):
+    """Clicca Sì o No per una voce con il testo dato."""
+    btn_text = "Sì" if click_si else "No"
+    try:
+        el = page.get_by_text(label, exact=True)
+        if el.count() > 0 and el.first.is_visible():
+            parent = el.first.locator("xpath=ancestor::*[.//button or .//a[contains(@class,'btn')]][1]")
+            if parent.count() > 0:
+                btn = parent.get_by_text(btn_text, exact=True)
+                if btn.count() > 0:
+                    btn.first.click()
+                    page.wait_for_timeout(300)
+                    print(f"  {label}: {btn_text}")
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _extranet_servizi(page, dot):
+    """Compila Servizi e dotazioni — Sì/No."""
+    servizi = {
+        "Piscina": dot.get("piscina", False),
+        "Bar": False,
+        "Sauna": False,
+        "Giardino": False,
+        "Terrazza": dot.get("terrazza", False),
+        "Camere non fumatori": True,
+        "Disponibilità di camere familiari": True,
+        "Vasca idromassaggio/Jacuzzi": False,
+        "Aria condizionata": dot.get("aria_condizionata", False),
+    }
+    for label, val in servizi.items():
+        _click_si_no(page, label, val)
+
+    # Numero piani
+    try:
+        n = page.locator("input[type='number']").first
+        if n.is_visible() and (not n.input_value() or n.input_value() == "0"):
+            n.fill("2")
+            print("  Piani: 2")
+    except Exception:
+        pass
+
+
+def _extranet_metratura(page, dot):
+    """Compila Metratura e dotazioni camere — dimensioni + Sì/No."""
+    # Dimensioni
+    try:
+        dim = page.locator("input[type='number']").first
+        if dim.is_visible() and (not dim.input_value() or dim.input_value() == "0"):
+            dim.fill("40")
+            print("  Dimensioni: 40 mq")
+    except Exception:
+        pass
+
+    dotazioni = {
+        "Aria condizionata": dot.get("aria_condizionata", False),
+        "Angolo cottura": dot.get("piano_cottura", False),
+        "Doccia": True,
+        "Balcone": dot.get("terrazza", False),
+        "Terrazza": dot.get("terrazza", False),
+        "TV a schermo piatto": dot.get("tv", False),
+        "TV": dot.get("tv", False),
+        "Lavatrice": dot.get("lavatrice", False),
+        "Lavastoviglie": dot.get("lavastoviglie", False),
+        "Frigorifero": dot.get("frigo_congelatore", False),
+        "Piano cottura": dot.get("piano_cottura", False),
+        "WC": True,
+        "Carta igienica": True,
+        "Asciugamani": True,
+        "Piscina privata a uso esclusivo": False,
+        "Vista": False,
+    }
+    for label, val in dotazioni.items():
+        _click_si_no(page, label, val)
+
+
+def _extranet_condizioni(page, cond):
+    """Compila Condizioni — check-in/out, cauzione."""
+    # Clicca "Modifica" sulla sezione check-in
+    try:
+        modifica_btns = page.get_by_text("Modifica", exact=True)
+        if modifica_btns.count() > 0:
+            modifica_btns.first.click()
+            wait(page, 3000)
+    except Exception:
+        pass
+
+    # Check-in
+    try:
+        sel = page.locator("select[name*='checkin']")
+        if sel.count() > 0 and sel.first.is_visible():
+            sel.first.select_option(label="17:00")
+            print("  Check-in: 17:00")
+    except Exception:
+        pass
+
+    # Check-out
+    try:
+        sel = page.locator("select[name*='checkout']")
+        if sel.count() > 0 and sel.first.is_visible():
+            sel.first.select_option(label="10:00")
+            print("  Check-out: 10:00")
+    except Exception:
+        pass
+
+
+def _extranet_profilo(page):
+    """Compila Profilo — descrizione."""
+    desc = PROP["marketing"]["descrizione_lunga"]
+    try:
+        textareas = page.locator("textarea:visible")
+        for i in range(textareas.count()):
+            ta = textareas.nth(i)
+            if not ta.input_value():
+                ta.fill(desc)
+                print(f"  Descrizione inserita ({len(desc)} chars)")
+                break
+    except Exception:
+        pass
+
+
+def _extranet_gestione_camere(page, ident):
+    """Compila Gestione camere — CIN, CIR, bagno."""
+    # CIN
+    try:
+        f = page.locator("input[name*='cin'], input[id*='cin']")
+        if f.count() > 0 and f.first.is_visible() and not f.first.input_value():
+            f.first.fill(ident["cin"])
+            print(f"  CIN: {ident['cin']}")
+    except Exception:
+        pass
+
+    # CIR
+    try:
+        cir = ident.get("cir", "")
+        if cir:
+            f = page.locator("input[name*='cir'], input[id*='cir']")
+            if f.count() > 0 and f.first.is_visible() and not f.first.input_value():
+                f.first.fill(cir)
+                print(f"  CIR: {cir}")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
