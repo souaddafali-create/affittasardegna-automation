@@ -421,15 +421,13 @@ def _click_wizard_continue(page):
         wait(page, 3000)
         return True
 
-    # Prova anche il disabilitato (a volte funziona se la selezione c'è)
-    btn = page.locator("[data-testid='FormButtonPrimary-disabled']")
-    if btn.count() > 0 and btn.first.is_visible():
-        btn.first.click()
-        print("  → Cliccato Continua (disabled)")
-        wait(page, 3000)
-        return True
+    # Se il bottone è DISABILITATO, NON provare a cliccarlo (timeout Playwright)
+    btn_disabled = page.locator("[data-testid='FormButtonPrimary-disabled']")
+    if btn_disabled.count() > 0 and btn_disabled.first.is_visible():
+        print("  → Continua è DISABILITATO (servono selezioni)")
+        return False
 
-    # Fallback testo
+    # Fallback testo — solo bottoni non-disabled
     return _click_continue(page)
 
 
@@ -644,6 +642,39 @@ def insert_property(page):
                 filled = True
         except Exception:
             pass
+
+        # Servizi/amenities — checkbox con label testo
+        # Mappa: label Booking IT → chiave JSON dotazioni
+        AMENITIES_MAP = {
+            "Aria condizionata": "aria_condizionata",
+            "Riscaldamento": "riscaldamento",
+            "Connessione WiFi gratuita": "internet_wifi",
+            "Cucina": "piano_cottura",
+            "Angolo cottura": "piano_cottura",
+            "Lavatrice": "lavatrice",
+            "TV": "tv",
+            "TV a schermo piatto": "tv",
+            "Terrazza": "terrazza",
+            "Balcone": "terrazza",
+            "Giardino": "giardino",
+            "Piscina": "piscina",
+            "Lavastoviglie": "lavastoviglie",
+            "Microonde": "microonde",
+            "Ferro da stiro": "ferro_stiro",
+            "Asciugacapelli": "phon",
+        }
+        dot = PROP.get("dotazioni", {})
+        for label_bk, key_json in AMENITIES_MAP.items():
+            if dot.get(key_json) is True:
+                try:
+                    cb = page.get_by_label(label_bk, exact=False)
+                    if cb.count() > 0 and cb.first.is_visible():
+                        if not cb.first.is_checked():
+                            cb.first.check()
+                            print(f"  ✓ {label_bk}")
+                            filled = True
+                except Exception:
+                    pass
 
         # Prova a cliccare Continua
         wait(page, 2000)
