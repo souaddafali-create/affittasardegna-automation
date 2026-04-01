@@ -573,6 +573,7 @@ def insert_property(page):
     # fino a raggiungere la pagina finale o il limite di step
     max_adaptive_steps = 20
     for step_n in range(1, max_adaptive_steps + 1):
+      try:
         screenshot(page, f"adaptive_step_{step_n:02d}")
         save_html(page, f"adaptive_step_{step_n:02d}")
 
@@ -699,13 +700,25 @@ def insert_property(page):
         try:
             sections = page.locator("#automation_id_sections_container")
             if sections.count() > 0:
-                # Siamo nella dashboard delle sezioni
                 disabled = page.locator("[id^='automation_id_section_'][disabled]")
                 if disabled.count() == 0:
                     print("\n  Tutte le sezioni completate!")
                     break
         except Exception:
             pass
+
+      except Exception as e:
+        # CATTURA QUALSIASI ERRORE — non crashare MAI
+        print(f"\n  ⚠ ERRORE alla pagina {step_n}: {e}")
+        screenshot(page, f"errore_pagina_{step_n}")
+        save_html(page, f"errore_pagina_{step_n}")
+        if INTERACTIVE:
+            resp = input(">>> Errore! Completa nel browser, poi INVIO ('stop' per finire): ").strip()
+            if resp.lower() == "stop":
+                break
+        else:
+            print("  Errore in CI, stop.")
+            break
 
     # --- Screenshot finale ---
     print("\n=== FINE WIZARD ===")
@@ -796,13 +809,25 @@ def main():
             print(f"  Sessione salvata in: {SESSION_FILE}")
 
             screenshot(wizard_page, "pagina_iniziale")
-            insert_property(wizard_page)
+
+            try:
+                insert_property(wizard_page)
+            except Exception as e:
+                print(f"\n  ⚠ ERRORE DURANTE IL WIZARD: {e}")
+                screenshot(wizard_page, "errore_wizard")
+                save_html(wizard_page, "errore_wizard")
+                if INTERACTIVE:
+                    print("  Il browser resta APERTO. Puoi completare manualmente.")
+                    input(">>> Premi INVIO quando vuoi chiudere... ")
 
             # Aggiorna sessione anche alla fine
-            context.storage_state(path=SESSION_FILE)
+            try:
+                context.storage_state(path=SESSION_FILE)
+            except Exception:
+                pass
         finally:
             if INTERACTIVE:
-                input("\n>>> Completato! Controlla il browser, poi premi INVIO per chiudere... ")
+                input("\n>>> Premi INVIO per chiudere il browser... ")
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
