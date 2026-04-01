@@ -700,6 +700,25 @@ def insert_property(page):
                 except Exception:
                     pass
 
+        # Foto — se la pagina chiede foto, caricale
+        try:
+            file_input = page.locator("input[type='file']")
+            if file_input.count() > 0 and ("foto" in title.lower() or "photo" in title.lower()
+                                             or "carica" in (page.content()[:2000]).lower()):
+                print("  Pagina foto rilevata — scarico e carico placeholder...")
+                photo_paths = download_placeholder_photos(5)
+                # Rendi visibile l'input file se nascosto
+                try:
+                    file_input.first.evaluate("el => el.style.display = 'block'")
+                except Exception:
+                    pass
+                file_input.first.set_input_files(photo_paths, timeout=30_000)
+                print(f"  Caricate {len(photo_paths)} foto")
+                wait(page, 10_000)  # Aspetta upload
+                filled = True
+        except Exception as e:
+            print(f"  Upload foto fallito: {e}")
+
         # Prova a cliccare Continua
         wait(page, 2000)
         advanced = _click_wizard_continue(page)
