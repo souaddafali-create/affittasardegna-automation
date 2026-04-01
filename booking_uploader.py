@@ -299,6 +299,43 @@ def navigate_to_add_property(page):
 
 
 # ---------------------------------------------------------------------------
+# Step 0: Selezione categoria (Appartamento)
+# ---------------------------------------------------------------------------
+
+def select_category(page):
+    """Clicca 'Appartamento' nella pagina di selezione categoria."""
+    print("Selezione categoria: Appartamento")
+    screenshot(page, "categoria_page")
+    save_html(page, "categoria")
+
+    # La pagina mostra 4 card: Appartamento, Case, Hotel, Strutture alternative
+    # Ogni card ha un bottone "Iscrivi la tua struttura"
+    # Clicca il primo (Appartamento)
+    try:
+        card = page.locator("text=Appartamento").first
+        # Clicca il bottone "Iscrivi la tua struttura" dentro la card Appartamento
+        btn = card.locator("xpath=ancestor::div[.//button or .//a]//a[contains(text(),'Iscrivi')]")
+        if btn.count() > 0:
+            btn.first.click()
+        else:
+            # Fallback: clicca il primo "Iscrivi la tua struttura"
+            page.locator("text=Iscrivi la tua struttura").first.click()
+        print("  Appartamento selezionato")
+    except Exception:
+        # Fallback: clicca direttamente il primo bottone Iscrivi
+        try:
+            page.locator("text=Iscrivi la tua struttura").first.click()
+            print("  Appartamento selezionato (fallback)")
+        except Exception as e:
+            print(f"  ERRORE selezione categoria: {e}")
+            if INTERACTIVE:
+                input(">>> Seleziona 'Appartamento' manualmente, poi premi INVIO: ")
+
+    wait(page)
+    screenshot(page, "dopo_categoria")
+
+
+# ---------------------------------------------------------------------------
 # Wizard 13 step: Name -> Address -> ChannelManager -> Bedroom ->
 #   Facilities -> Services -> Languages -> HouseRules -> HostProfile ->
 #   Photos -> RequestToBook -> PaymentMode -> Price
@@ -877,22 +914,25 @@ def main():
     print(f"Browser: {'headless' if headless else 'visibile'} "
           f"(INTERACTIVE={INTERACTIVE})")
 
+    # Cartella per salvare la sessione del browser (cookie, localStorage)
+    # Cosi al prossimo avvio il login e gia fatto
+    session_dir = os.path.join(os.path.dirname(__file__), "browser_session")
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(
+        context = p.chromium.launch_persistent_context(
+            session_dir,
             headless=headless,
+            locale="it-IT",
+            viewport={"width": 1366, "height": 768},
+            user_agent=USER_AGENT,
+            java_script_enabled=True,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        context = browser.new_context(
-            locale="it-IT",
-            viewport={"width": 1366, "height": 768},
-            user_agent=USER_AGENT,
-            java_script_enabled=True,
-        )
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
 
         try:
             from playwright_stealth import stealth_sync
@@ -905,6 +945,7 @@ def main():
             login(page)
             navigate_to_add_property(page)
             screenshot(page, "pagina_iniziale")
+            select_category(page)
             insert_property(page)
         finally:
             try:
@@ -912,7 +953,7 @@ def main():
                 save_html(page, "final_state")
             except Exception:
                 pass
-            browser.close()
+            context.close()
 
 
 if __name__ == "__main__":
