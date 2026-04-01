@@ -205,84 +205,84 @@ def _page_has_otp(page):
 
 
 def login(page):
+    """Login su Booking Extranet.
+
+    Con sessione persistente: se sei gia loggato, salta il login.
+    Prima volta: apre la pagina di login e ti chiede di farlo manualmente.
+    """
     print("Login Booking Extranet...")
+
+    # Vai alla pagina join per verificare se siamo gia loggati
+    try:
+        page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
+        wait(page, 5000)
+    except Exception:
+        print("  Pagina lenta, attendo...")
+        wait(page, 10_000)
+
+    # Se la URL contiene "join.booking.com" e non ci reindirizza al login,
+    # siamo gia loggati grazie alla sessione salvata
+    if "join.booking.com" in page.url and "sign-in" not in page.url:
+        print("  Sessione salvata trovata - login non necessario!")
+        screenshot(page, "sessione_ripresa")
+        return
+
+    print("  Sessione non trovata - serve login.")
+
     if INTERACTIVE:
-        print("  (modalita interattiva - browser visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
-    wait(page, 3000)
-    screenshot(page, "login_page")
-    save_html(page, "login_page")
-
-    # Email
-    email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=15_000)
-    human_type(page, email_sel, EMAIL)
-    wait(page, 1000)
-    screenshot(page, "email_inserita")
-
-    page.click('button[type="submit"]', timeout=10_000)
-    wait(page, 5000)
-    screenshot(page, "dopo_email")
-
-    # CAPTCHA
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO ***")
-        screenshot(page, "captcha")
-        save_html(page, "captcha")
-        _wait_for_interactive(
-            page, "CAPTCHA rilevato! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        print("  CAPTCHA superato.")
+        # In modalita interattiva: apri la pagina di login e lascia fare all'utente
+        print("\n  Il browser si e aperto.")
+        print("  Fai il login manualmente su Booking.com.")
+        print("  Quando sei loggato e vedi la pagina principale, torna qui.\n")
+        try:
+            page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
+        except Exception:
+            print("  Pagina di login lenta, ma il browser e aperto.")
+        input(">>> Fai il login nel browser, poi premi INVIO qui: ")
+        # Dopo il login manuale, vai alla pagina join
+        try:
+            page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
+            wait(page, 5000)
+        except Exception:
+            wait(page, 10_000)
+        screenshot(page, "dopo_login_manuale")
+        print(f"  URL dopo login: {page.url}")
+    else:
+        # In CI: login automatico
+        try:
+            page.goto("https://account.booking.com/sign-in", wait_until="domcontentloaded", timeout=60_000)
+        except Exception:
+            raise RuntimeError("Impossibile caricare la pagina di login di Booking.com")
         wait(page, 3000)
 
-    # OTP
-    if _page_has_otp(page):
-        print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
-        screenshot(page, "otp_richiesto")
-        save_html(page, "otp_pagina")
-        if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            page.locator(otp_sel).first.fill(code)
+        # Email
+        email_sel = 'input[type="email"], input[name="loginname"], #loginname'
+        page.wait_for_selector(email_sel, timeout=15_000)
+        human_type(page, email_sel, EMAIL)
+        wait(page, 1000)
+        page.click('button[type="submit"]', timeout=10_000)
+        wait(page, 5000)
+
+        # CAPTCHA
+        if _page_has_captcha(page):
+            raise RuntimeError("CAPTCHA rilevato in CI - serve login manuale con INTERACTIVE=1")
+
+        # OTP
+        if _page_has_otp(page):
+            raise RuntimeError("OTP richiesto in CI - serve login manuale con INTERACTIVE=1")
+
+        # Password
+        pw_sel = 'input[type="password"], input[name="password"], #password'
+        try:
+            page.wait_for_selector(pw_sel, timeout=15_000)
+            human_type(page, pw_sel, PASSWORD)
             wait(page, 1000)
             page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp")
-        else:
-            raise RuntimeError(
-                "Booking richiede un codice di verifica email. "
-                "Eseguire lo script in locale con INTERACTIVE=1."
-            )
+            wait(page, 8000)
+        except Exception:
+            print("  Campo password non trovato.")
 
-    # Secondo CAPTCHA (post-OTP)
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA post-OTP ***")
-        _wait_for_interactive(
-            page, "Secondo CAPTCHA! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        wait(page, 3000)
-
-    # Password
-    pw_sel = 'input[type="password"], input[name="password"], #password'
-    try:
-        page.wait_for_selector(pw_sel, timeout=15_000)
-        human_type(page, pw_sel, PASSWORD)
-        wait(page, 1000)
-        screenshot(page, "password_inserita")
-        page.click('button[type="submit"]', timeout=10_000)
-        wait(page, 8000)
-        screenshot(page, "dopo_login")
-    except Exception:
-        print("  Campo password non trovato - login senza password.")
-        screenshot(page, "no_password")
-
-    print(f"  URL dopo login: {page.url}")
+        print(f"  URL dopo login: {page.url}")
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +290,14 @@ def login(page):
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
+    """Assicura che siamo sulla pagina join.booking.com."""
     print("Navigazione a 'Aggiungi nuova struttura'...")
-    page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
-    wait(page, 5000)
+    if "join.booking.com" not in page.url:
+        try:
+            page.goto("https://join.booking.com/", wait_until="domcontentloaded", timeout=60_000)
+            wait(page, 5000)
+        except Exception:
+            wait(page, 10_000)
     screenshot(page, "join_page")
     save_html(page, "join_page")
     print(f"  URL: {page.url}")
