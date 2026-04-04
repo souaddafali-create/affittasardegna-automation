@@ -53,7 +53,7 @@ Il token di test dura 24h. Per produzione serve un token permanente:
 1. https://developers.facebook.com/apps/126921442533925/
 2. WhatsApp → Configurazione → Webhook
 3. **Callback URL**: `https://affittasardegna.app.n8n.cloud/webhook/33d39489-b64a-42d4-b571-9a0384059a14`
-4. **Verify Token**: scegli un valore (es. `affittasardegna_wh_2024`)
+4. **Verify Token**: scegli un valore (es. `affittasardegna_wh_2026`)
 5. Clicca "Verifica e salva"
 
 ### 2.3 Sottoscrivi eventi

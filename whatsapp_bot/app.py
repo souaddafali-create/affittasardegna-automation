@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 SCRIPT_DIR = Path(__file__).parent
 SYSTEM_PROMPT_FILE = SCRIPT_DIR / "system_prompt.txt"
 
-WEBHOOK_VERIFY_TOKEN = os.environ.get("WEBHOOK_VERIFY_TOKEN", "affittasardegna_wh_2024")
+WEBHOOK_VERIFY_TOKEN = os.environ.get("WEBHOOK_VERIFY_TOKEN", "affittasardegna_wh_2026")
 WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
