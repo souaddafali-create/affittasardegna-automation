@@ -40,7 +40,11 @@ def api_get(endpoint):
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read()), resp.status
     except urllib.error.HTTPError as e:
-        body = json.loads(e.read()) if e.readable() else {}
+        raw = e.read()
+        try:
+            body = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            body = {"error": {"message": raw.decode("utf-8", errors="replace")}}
         return body, e.code
     except Exception as e:
         return {"error": {"message": str(e)}}, 0
