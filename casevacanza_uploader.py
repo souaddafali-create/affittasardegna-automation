@@ -1,33 +1,62 @@
 import json
 import os
 import re
+import sys
 import tempfile
 import urllib.request
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    print("\n❌ ERRORE: Playwright non è installato.")
+    print("   Apri il Prompt dei comandi e lancia:")
+    print("     pip install playwright")
+    print("     python -m playwright install chromium")
+    sys.exit(1)
 
 # --- Carica dati proprietà dal file JSON ---
 DATA_FILE = os.environ.get(
     "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
 )
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+try:
+    with open(DATA_FILE, encoding="utf-8") as _f:
+        PROP = json.load(_f)
+except FileNotFoundError:
+    print(f"\n❌ ERRORE: file JSON non trovato → {DATA_FILE}")
+    print("   Verifica che il file esista nella cartella del progetto.")
+    sys.exit(1)
+except json.JSONDecodeError as _e:
+    print(f"\n❌ ERRORE: il file JSON contiene un errore di sintassi → {DATA_FILE}")
+    print(f"   Dettaglio: {_e}")
+    print("   Apri il file con un editor e correggi l'errore.")
+    sys.exit(1)
 
 # --- Verifica dati letti dal JSON ---
-print(f"=== DATI LETTI DAL JSON ({DATA_FILE}) ===")
-print(f"Nome: {PROP['identificativi']['nome_struttura']}")
-print(f"Tipo: {PROP['identificativi']['tipo_struttura']}")
-print(f"Indirizzo: {PROP['identificativi']['indirizzo']}")
-print(f"Comune: {PROP['identificativi']['comune']}")
-print(f"Max ospiti: {PROP['composizione']['max_ospiti']}")
-print(f"Camere: {PROP['composizione']['camere']}")
-print(f"Bagni: {PROP['composizione']['bagni']}")
-print(f"Posti letto: {PROP['composizione']['posti_letto']}")
-print(f"Letti: {PROP['composizione'].get('letti', [])}")
-print(f"===================================")
+try:
+    print(f"\n📄 Dati letti dal file: {DATA_FILE}")
+    print(f"   Nome struttura: {PROP['identificativi']['nome_struttura']}")
+    print(f"   Tipo: {PROP['identificativi']['tipo_struttura']}")
+    print(f"   Indirizzo: {PROP['identificativi']['indirizzo']}")
+    print(f"   Comune: {PROP['identificativi']['comune']}")
+    print(f"   Max ospiti: {PROP['composizione']['max_ospiti']}")
+    print(f"   Camere: {PROP['composizione']['camere']}")
+    print(f"   Bagni: {PROP['composizione']['bagni']}")
+    print(f"   Posti letto: {PROP['composizione']['posti_letto']}")
+    print(f"   Letti: {PROP['composizione'].get('letti', [])}")
+    print("")
+except KeyError as _e:
+    print(f"\n❌ ERRORE: manca un campo obbligatorio nel JSON → {_e}")
+    print("   Controlla la struttura del file (identificativi, composizione, ...).")
+    sys.exit(1)
 
-EMAIL = os.environ["CASEVACANZA_EMAIL"]
-PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
+try:
+    EMAIL = os.environ["CASEVACANZA_EMAIL"]
+    PASSWORD = os.environ["CASEVACANZA_PASSWORD"]
+except KeyError as _e:
+    print(f"\n❌ ERRORE: variabile d'ambiente mancante → {_e}")
+    print("   Imposta CASEVACANZA_EMAIL e CASEVACANZA_PASSWORD prima di eseguire lo script.")
+    print("   Su Windows:  set CASEVACANZA_EMAIL=...  /  set CASEVACANZA_PASSWORD=...")
+    sys.exit(1)
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -1176,9 +1205,17 @@ def add_seasonal_prices(page):
 
 
 def main():
+    print("\n🚀 Avvio caricamento su CaseVacanza.it...")
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    exit_code = 0
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        try:
+            browser = p.chromium.launch(headless=False)
+        except Exception as e:
+            print(f"\n❌ ERRORE: impossibile avviare il browser → {e}")
+            print("   Verifica che Playwright e Chromium siano installati.")
+            print("   Esegui:  python -m playwright install chromium")
+            sys.exit(2)
         context = browser.new_context(user_agent=USER_AGENT)
         page = context.new_page()
         page.set_default_timeout(30_000)
@@ -1190,23 +1227,43 @@ def main():
                 try:
                     add_seasonal_prices(page)
                 except Exception as e:
-                    print(f"\n[ERRORE] Tariffe stagionali: {e}")
+                    print(f"\n⚠️  Errore durante l'inserimento delle tariffe stagionali: {e}")
                     step_errors.append(("tariffe_stagionali", str(e)))
+        except Exception as e:
+            print(f"\n❌ ERRORE CRITICO durante il caricamento: {e}")
+            print("   Controlla la cartella 'screenshots/' per capire dove si è fermato.")
+            step_errors.append(("errore_critico", str(e)))
+            exit_code = 3
         finally:
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
             except Exception:
                 pass
+            print("")
             if step_errors:
-                print(f"\nERRORI: {len(step_errors)} step falliti:")
+                print(f"⚠️  Caricamento terminato con {len(step_errors)} errore/i:")
                 for name, err in step_errors:
-                    print(f"  - {name}: {err}")
+                    print(f"   - {name}: {err}")
+                print("   Screenshot di debug disponibili nella cartella 'screenshots/'.")
+                if exit_code == 0:
+                    exit_code = 4
             else:
-                print("\nTutti gli step completati con successo!")
-            context.close()
-            browser.close()
+                print("✅ Proprietà caricata su CaseVacanza (verifica finale manuale prima dell'invio).")
+            try:
+                context.close()
+                browser.close()
+            except Exception:
+                pass
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"\n❌ ERRORE imprevisto: {e}")
+        print("   Verifica il file JSON e le credenziali, poi riprova.")
+        sys.exit(5)

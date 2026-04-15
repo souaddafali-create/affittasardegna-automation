@@ -6,20 +6,51 @@ import tempfile
 import time
 import urllib.request
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    print("\n❌ ERRORE: Playwright non è installato.")
+    print("   Apri il Prompt dei comandi e lancia:")
+    print("     pip install playwright")
+    print("     python -m playwright install chromium")
+    sys.exit(1)
 
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
+
+# SKIP_WIZARD=1 → la proprietà è GIÀ stata registrata su Booking (hai già
+# HOTEL_ID nell'Extranet). Lo script NON esegue il wizard di creazione e si
+# limita a fare login + navigare alla pagina della struttura esistente.
+SKIP_WIZARD = os.environ.get("SKIP_WIZARD", "") == "1"
+
+# HOTEL_ID dell'Extranet (necessario quando SKIP_WIZARD=1).
+HOTEL_ID = os.environ.get("HOTEL_ID", "").strip()
 
 # --- Carica dati proprietà dal file JSON ---
 DATA_FILE = os.environ.get(
     "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
 )
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+try:
+    with open(DATA_FILE, encoding="utf-8") as _f:
+        PROP = json.load(_f)
+except FileNotFoundError:
+    print(f"\n❌ ERRORE: file JSON non trovato → {DATA_FILE}")
+    print("   Verifica che il file esista nella cartella del progetto.")
+    sys.exit(1)
+except json.JSONDecodeError as _e:
+    print(f"\n❌ ERRORE: il file JSON contiene un errore di sintassi → {DATA_FILE}")
+    print(f"   Dettaglio: {_e}")
+    print("   Apri il file con un editor e correggi l'errore.")
+    sys.exit(1)
 
-EMAIL = os.environ["BK_EMAIL"]
-PASSWORD = os.environ["BK_PASSWORD"]
+try:
+    EMAIL = os.environ["BK_EMAIL"]
+    PASSWORD = os.environ["BK_PASSWORD"]
+except KeyError as _e:
+    print(f"\n❌ ERRORE: variabile d'ambiente mancante → {_e}")
+    print("   Imposta BK_EMAIL e BK_PASSWORD prima di eseguire lo script.")
+    print("   Su Windows:  set BK_EMAIL=...  /  set BK_PASSWORD=...")
+    sys.exit(1)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -130,6 +161,21 @@ def _build_servizi_booking():
 
 
 SERVIZI = _build_servizi_booking()
+
+# --- Riepilogo dati letti dal JSON ---
+try:
+    print(f"\n📄 Dati letti dal file: {DATA_FILE}")
+    print(f"   Nome struttura: {PROP['identificativi']['nome_struttura']}")
+    print(f"   Indirizzo: {PROP['identificativi']['indirizzo']}, {PROP['identificativi']['comune']}")
+    print(f"   Ospiti: {PROP['composizione']['max_ospiti']} | "
+          f"Camere: {PROP['composizione']['camere']} | "
+          f"Bagni: {PROP['composizione']['bagni']}")
+    print(f"   Servizi da spuntare: {len(SERVIZI)}")
+    print("")
+except KeyError as _e:
+    print(f"\n❌ ERRORE: manca un campo obbligatorio nel JSON → {_e}")
+    print("   Controlla la struttura del file (identificativi, composizione, ...).")
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -842,23 +888,42 @@ def insert_property(page):
 # ---------------------------------------------------------------------------
 
 def main():
+    print("\n🚀 Avvio caricamento su Booking.com...")
+    if SKIP_WIZARD:
+        print("   Modalità: SKIP_WIZARD — proprietà già registrata su Booking")
+        if HOTEL_ID:
+            print(f"   HOTEL_ID: {HOTEL_ID}")
+        else:
+            print("   ⚠️  Nessun HOTEL_ID fornito: dopo il login dovrai aprire manualmente la struttura.")
+    else:
+        print("   Modalità: nuovo inserimento (wizard completo)")
+
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
     # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
     # In CI: headless
     headless = not INTERACTIVE
-    print(f"Browser: {'headless' if headless else 'visibile'} "
-          f"(INTERACTIVE={INTERACTIVE})")
+    print(f"   Browser: {'headless' if headless else 'visibile'} (INTERACTIVE={INTERACTIVE})")
+    print("")
+
+    exit_code = 0
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
+        try:
+            browser = p.chromium.launch(
+                headless=headless,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+        except Exception as e:
+            print(f"\n❌ ERRORE: impossibile avviare il browser → {e}")
+            print("   Verifica che Playwright e Chromium siano installati.")
+            print("   Esegui:  python -m playwright install chromium")
+            sys.exit(2)
+
         context = browser.new_context(
             locale="it-IT",
             viewport={"width": 1366, "height": 768},
@@ -871,23 +936,77 @@ def main():
         try:
             from playwright_stealth import stealth_sync
             stealth_sync(page)
-            print("Stealth mode attivato.")
+            print("🛡️  Stealth mode attivato.")
         except ImportError:
-            print("playwright-stealth non trovato, procedo senza stealth.")
+            print("ℹ️  playwright-stealth non installato, procedo senza stealth.")
 
         try:
             login(page)
-            navigate_to_add_property(page)
-            screenshot(page, "pagina_iniziale")
-            insert_property(page)
+
+            # Login manuale prima dell'avvio automatico:
+            # in modalità interattiva, dopo il login Booking può mostrare
+            # banner, richieste 2FA, popup — dai all'utente il tempo di
+            # completare eventuali passaggi manuali prima di procedere.
+            if INTERACTIVE:
+                input(
+                    "\n>>> Controlla che il login Booking sia completo.\n"
+                    ">>> Premi INVIO quando sei pronto/a ad avviare l'automazione... "
+                )
+
+            if SKIP_WIZARD:
+                # Proprietà già registrata: vai direttamente alla dashboard
+                # della struttura (se HOTEL_ID disponibile) e salta il wizard.
+                if HOTEL_ID:
+                    url = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id={HOTEL_ID}"
+                    print(f"\n🏠 Apro la pagina della struttura (HOTEL_ID={HOTEL_ID})...")
+                    try:
+                        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                        wait(page, 3000)
+                        screenshot(page, "extranet_home")
+                        save_html(page, "extranet_home")
+                    except Exception as e:
+                        print(f"   ⚠️  Impossibile aprire la pagina: {e}")
+                else:
+                    print("\nℹ️  SKIP_WIZARD attivo senza HOTEL_ID:")
+                    print("   apri manualmente la struttura dal menu Extranet.")
+                    if INTERACTIVE:
+                        input(">>> Premi INVIO quando sei sulla pagina della struttura... ")
+                    screenshot(page, "extranet_manuale")
+            else:
+                navigate_to_add_property(page)
+                screenshot(page, "pagina_iniziale")
+                insert_property(page)
+        except Exception as e:
+            print(f"\n❌ ERRORE CRITICO durante il caricamento: {e}")
+            print("   Controlla la cartella 'screenshots_booking/' per capire dove si è fermato.")
+            exit_code = 3
         finally:
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
             except Exception:
                 pass
-            browser.close()
+            print("")
+            if exit_code == 0:
+                if SKIP_WIZARD:
+                    print("✅ Login su Booking completato — proprietà pronta per modifiche manuali.")
+                else:
+                    print("✅ Proprietà caricata su Booking (verifica finale manuale prima dell'invio).")
+            else:
+                print("⚠️  Caricamento Booking interrotto — vedi messaggi di errore sopra.")
+            try:
+                browser.close()
+            except Exception:
+                pass
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"\n❌ ERRORE imprevisto: {e}")
+        print("   Verifica il file JSON e le credenziali, poi riprova.")
+        sys.exit(5)
