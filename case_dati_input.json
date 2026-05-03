@@ -1,0 +1,688 @@
+{
+  "_meta": {
+    "data_estrazione": "2026-05-03",
+    "fonte": "Pagine pubbliche Krossbooking + URL iCal Hidden forniti da Souad",
+    "totale_case": 6,
+    "anomalie_aperte": [
+      "Casa Bianca 2: indirizzo 'Macchiavelli' (doppia c) sulla pagina Kross — refuso, le altre 2 case bianche hanno 'Machiavelli' corretto",
+      "Adelasia A e B condividono lo stesso CIN (IT090058C2000R9041) — verificare con Souad prima di inserire",
+      "Mono Ibisco: CIN e licenza non pubblicati sulla pagina Kross — BLOCCANTE per inserimento, Souad deve fornire prima"
+    ],
+    "regole_operative": {
+      "ical": "URL Esportazione Hidden Kross — privacy GDPR, no dati ospite condivisi con OTA",
+      "booking_prezzi": "Booking è sincronizzato con Kross via channel manager. Il campo prezzo_placeholder_booking serve SOLO per superare il wizard iniziale di Booking. Una volta inserita la casa, prezzi e disponibilità arrivano da Kross.",
+      "casevacanza_prezzi": "CaseVacanza NON è sincronizzato con Kross. Bot completa ~91% del wizard, prezzi stagionali da inserire MANUALMENTE post-run (~5 min/casa).",
+      "foto": "Scaricare direttamente dagli URL CDN Krossbooking — non più placeholder picsum"
+    }
+  },
+  "case": [
+    {
+      "id_interno": "casa_bianca_1",
+      "nome": "CASA BIANCA 1",
+      "url_kross_pubblica": "https://book.affittasardegna.it/casa-bianca-1",
+      "indirizzo": {
+        "via": "Via Machiavelli 3/5",
+        "citta": "Porto Torres",
+        "cap": "07046",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "tipo_struttura": "Appartamento",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 4,
+        "camere": 2,
+        "bagni": 1,
+        "mq": 55,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Camera 1",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Camera 2",
+            "tipo": "singolo",
+            "quantita": 2
+          }
+        ]
+      },
+      "cin": "IT090058C2000Q8328",
+      "licenza": "Q8328",
+      "distanza_mare": "0-100m",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/8791656ad4890577b2a965407faa8836.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+50€)",
+      "prezzo_placeholder_booking": 100,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582708816.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582704932.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582719190.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582714014.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582727798.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582725893.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582723470.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582735087.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582736246.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582733645.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582749748.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582742661.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582749153.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582759180.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/1777458275900.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582762952.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582769169.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582766124.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582779401.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582779833.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582774610.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582786553.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582787073.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582795282.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/1777458279946.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1171/17774582804343.jpg"
+      ],
+      "dotazioni": [
+        "Aria condizionata",
+        "Aria condizionata in camere",
+        "Wi-Fi",
+        "TV",
+        "Lavastoviglie",
+        "Lavatrice",
+        "Animali ammessi su richiesta",
+        "Balcone/Terrazza",
+        "Veranda esterna",
+        "Bidet",
+        "Doccia",
+        "Asciugacapelli",
+        "Cucina completa",
+        "Bicchieri/tazze",
+        "Forno",
+        "Piano cottura",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Frigorifero",
+        "Letto matrimoniale",
+        "Letto singolo",
+        "Ferro da stiro",
+        "Asse da stiro",
+        "Rilevatore monossido carbonio",
+        "Estintore",
+        "Vista mare",
+        "Parcheggio in strada",
+        "Auto non necessaria"
+      ],
+      "descrizione_breve": "Delizioso trilocale fronte porto a 100m dalla spiaggia di Porto Torres, ideale per famiglie fino a 4 ospiti.",
+      "descrizione_lunga": "CASA BIANCA 1, delizioso trilocale in piccolo complesso a soli 100m dalla spiaggia.\n\nQuesto alloggio a Porto Torres è una vera gemma a pochi passi dalla bellissima spiaggia di Scoglio Lungo, ideale per chi cerca una vacanza all'insegna del mare e della tranquillità. L'appartamento al piano terra rialzato, compatto e funzionale, offre un'atmosfera luminosa, ariosa e accogliente, perfetta per coppie, famiglie o piccoli gruppi fino a quattro persone.\n\nLa disposizione spaziosa e la luce naturale rendono il soggiorno e la cucina caldi e confortevoli, mentre l'uso intelligente dello spazio garantisce praticità senza compromessi. È il luogo perfetto per rilassarsi, staccare dalla quotidianità e godersi momenti tranquilli in riva al mare.\n\nL'appartamento, di circa 55 m², può ospitare fino a 4 persone ed è organizzato come segue:\n- Soggiorno con cucina completamente attrezzata\n- Camera matrimoniale spaziosa e luminosa\n- Seconda camera con due letti singoli, ideale per bambini o amici\n- Bagno con doccia comoda\n- Veranda privata perfetta per relax all'aperto\n\nDotazioni principali:\n- Aria condizionata (camera matrimoniale e soggiorno)\n- TV - Wi-Fi - Microonde - Frigorifero - Lavastoviglie - Lavatrice\n- Parcheggio gratuito in strada",
+      "poi_distanze": [
+        {
+          "nome": "Spiaggia Scoglio Lungo",
+          "distanza": "100m a piedi"
+        },
+        {
+          "nome": "Porto di Porto Torres",
+          "distanza": "2.5km"
+        },
+        {
+          "nome": "Lidl",
+          "distanza": "750m, 3 min a piedi"
+        },
+        {
+          "nome": "Conad",
+          "distanza": "2.9km, 8 min auto"
+        },
+        {
+          "nome": "Farmacia San Gavino",
+          "distanza": "2.3km"
+        },
+        {
+          "nome": "ATM Banco di Sardegna",
+          "distanza": "1km"
+        },
+        {
+          "nome": "Aeroporto Alghero",
+          "distanza": "34km, 40 min"
+        },
+        {
+          "nome": "Sassari",
+          "distanza": "24km, 25 min"
+        }
+      ]
+    },
+    {
+      "id_interno": "casa_bianca_2",
+      "nome": "CASA BIANCA 2",
+      "url_kross_pubblica": "https://book.affittasardegna.it/casa-bianca-2",
+      "indirizzo": {
+        "via": "Via Machiavelli 3/5",
+        "citta": "Porto Torres",
+        "cap": "07046",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "_anomalia_indirizzo": "Sulla pagina Kross compare 'Macchiavelli' (doppia c) — refuso da fixare su Kross",
+      "tipo_struttura": "Appartamento",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 4,
+        "camere": 1,
+        "bagni": 1,
+        "mq": 40,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Camera 1",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Soggiorno",
+            "tipo": "divano_letto",
+            "quantita": 1
+          }
+        ]
+      },
+      "cin": "IT090058C2000Q8350",
+      "licenza": "Q8350",
+      "distanza_mare": "0-100m",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/ba8d3bc09baffcdef9a775849f4da048.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+50€)",
+      "prezzo_placeholder_booking": 100,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584518092.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584513725.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/1777458452784.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584523847.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584536287.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584531933.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584538194.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584544183.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584544696.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584546483.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584559914.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584559158.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584552415.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584569483.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584564395.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584567509.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584578960.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584573927.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/1777458458688.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1170/17774584596636.jpg"
+      ],
+      "dotazioni": [
+        "Aria condizionata in camera",
+        "Wi-Fi",
+        "TV",
+        "Lavatrice",
+        "Animali ammessi su richiesta",
+        "Balcone/Terrazza",
+        "Bidet",
+        "Doccia",
+        "Asciugacapelli",
+        "Cucina completa",
+        "Bicchieri/tazze",
+        "Bollitore",
+        "Forno",
+        "Piano cottura",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Posate",
+        "Ferro da stiro",
+        "Asse da stiro",
+        "Appendini",
+        "Biancheria letto",
+        "Asciugamani",
+        "Ingresso privato",
+        "Parcheggio in strada",
+        "Auto non necessaria",
+        "Rilevatore monossido carbonio",
+        "Estintore"
+      ],
+      "descrizione_breve": "Bilocale luminoso e funzionale a 100m dalla spiaggia di Porto Torres, fino a 4 ospiti.",
+      "descrizione_lunga": "CASA BIANCA 2 – Accogliente bilocale nel cuore di Porto Torres, a pochi passi dalla spiaggia.\n\nA Porto Torres, Casa Bianca 2 è il rifugio ideale per chi sogna giornate piene di mare, sole e relax. Situato al piano terra rialzato di un piccolo complesso, questo delizioso appartamento offre una distribuzione monolocale funzionale e luminosa, perfetta per coppie o piccoli gruppi fino a 4 persone.\n\nL'appartamento ti accoglie con un comodo soggiorno con divano letto e una pratica cucina dove preparare colazione o cena da gustare in libertà. Gli interni curati e arieggiati creano un'atmosfera rilassante che invita a staccare davvero dalla routine.\n\nL'appartamento, di circa 40 m², ospita fino a 4 ospiti ed è composto da:\n- Soggiorno con cucinino e divano letto\n- Camera matrimoniale ampia e luminosa\n- Bagno con vasca confortevole\n- Patio arredato con tavolo e sedie su cortile condiviso\n\nDotazioni principali:\n- Aria condizionata (camera matrimoniale)\n- TV - Wi-Fi - Microonde - Frigorifero - Lavatrice - Parcheggio gratuito in strada",
+      "poi_distanze": [
+        {
+          "nome": "Spiaggia Scoglio Lungo",
+          "distanza": "100m a piedi"
+        },
+        {
+          "nome": "Porto di Porto Torres",
+          "distanza": "2.5km"
+        },
+        {
+          "nome": "Lidl",
+          "distanza": "750m, 3 min a piedi"
+        },
+        {
+          "nome": "Aeroporto Alghero",
+          "distanza": "34km, 40 min"
+        }
+      ]
+    },
+    {
+      "id_interno": "casa_bianca_3",
+      "nome": "CASA BIANCA 3",
+      "url_kross_pubblica": "https://book.affittasardegna.it/casa-bianca-3",
+      "indirizzo": {
+        "via": "Via Machiavelli 3/5",
+        "citta": "Porto Torres",
+        "cap": "07046",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "tipo_struttura": "Appartamento",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 6,
+        "camere": 2,
+        "bagni": 1,
+        "mq": 55,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Camera 1",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Camera 2",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Soggiorno",
+            "tipo": "divano_letto",
+            "quantita": 1
+          }
+        ]
+      },
+      "cin": "IT090058C2000Q8351",
+      "licenza": "Q8351",
+      "distanza_mare": "0-100m",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/538c3d877c1c851fe73749ceba7509cc.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+49,99€)",
+      "prezzo_placeholder_booking": 130,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585088127.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585081916.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458509164.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458509459.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585107222.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585109762.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585101635.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585115211.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585114216.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585119621.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585123489.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585129223.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585136666.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585134757.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585132576.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585149997.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585143369.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585141184.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458515899.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585156118.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458515114.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458516640.jpg"
+      ],
+      "dotazioni": [
+        "Aria condizionata in camera",
+        "Wi-Fi",
+        "TV",
+        "Lavatrice",
+        "Microonde",
+        "Animali ammessi su richiesta",
+        "Balcone/Terrazza",
+        "Veranda esterna",
+        "Bidet",
+        "Doccia",
+        "Asciugacapelli",
+        "Cucina completa",
+        "Bicchieri/tazze",
+        "Forno",
+        "Piano cottura",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Posate",
+        "Letti matrimoniali",
+        "Ferro da stiro",
+        "Asse da stiro",
+        "Biancheria letto",
+        "Asciugamani",
+        "Ingresso privato",
+        "Parcheggio in strada",
+        "Auto non necessaria",
+        "Rilevatore monossido carbonio",
+        "Estintore"
+      ],
+      "descrizione_breve": "Trilocale per 6 ospiti a 150m dalla spiaggia Scoglio Lungo a Porto Torres.",
+      "descrizione_lunga": "CASA BIANCA 3, delizioso trilocale per 6 ospiti a soli 150 m dalla spiaggia di Scoglio Lungo.\n\nSituato a Porto Torres, Casa Bianca 3 è la soluzione ideale per chi cerca una vacanza all'insegna del mare e del relax. Posizionato al piano terra rialzato di un piccolo complesso, questo luminoso e funzionale trilocale è perfetto per coppie, famiglie o piccoli gruppi fino a 6 persone.\n\nL'appartamento, di circa 55 m², può ospitare fino a 6 persone ed è organizzato come segue:\n- Soggiorno con cucina e divano letto\n- 2 spaziose e luminose camere matrimoniali\n- Bagno con doccia confortevole\n- Veranda privata ideale per relax all'aperto\n\nDotazioni principali:\n- Aria condizionata (camera matrimoniale)\n- TV - Wi-Fi - Microonde - Frigorifero - Lavatrice - Parcheggio gratuito in strada",
+      "poi_distanze": [
+        {
+          "nome": "Spiaggia Scoglio Lungo",
+          "distanza": "150m a piedi"
+        },
+        {
+          "nome": "Porto di Porto Torres",
+          "distanza": "2.5km"
+        },
+        {
+          "nome": "Lidl",
+          "distanza": "750m"
+        },
+        {
+          "nome": "Aeroporto Alghero",
+          "distanza": "34km, 40 min"
+        }
+      ]
+    },
+    {
+      "id_interno": "casa_adelasia_a",
+      "nome": "CASA ADELASIA A",
+      "url_kross_pubblica": "https://book.affittasardegna.it/casa-adelasia-a",
+      "indirizzo": {
+        "via": "Via Adelasia 63",
+        "citta": "Porto Torres",
+        "cap": "07046",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "tipo_struttura": "Appartamento",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 4,
+        "camere": 1,
+        "bagni": 1,
+        "mq": 45,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Camera 1",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Soggiorno",
+            "tipo": "divano_letto",
+            "quantita": 1
+          }
+        ]
+      },
+      "cin": "IT090058C2000R9041",
+      "licenza": "R9041",
+      "_anomalia_cin": "ATTENZIONE: stesso CIN su ADELASIA A e ADELASIA B — verificare prima di inserire (uno dei due deve avere CIN diverso)",
+      "distanza_mare": "1-2km",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/9a9241c859cde01c79e3d989ecdc1756.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+50€)",
+      "prezzo_placeholder_booking": 90,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762378984705.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379134014.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379145649.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379198675.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379194025.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379225294.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379256687.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379281898.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379311563.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379333841.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379372820.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379381844.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379425158.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379446692.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/1776237946114.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/1776237949541.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379514150.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379634809.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379644342.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379651074.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1208/17762379655792.jpg"
+      ],
+      "dotazioni": [
+        "TV",
+        "Lavatrice",
+        "Animali ammessi su richiesta",
+        "Bagno privato",
+        "Bidet",
+        "Doccia",
+        "Asciugacapelli",
+        "Cucina completa",
+        "Bicchieri/tazze",
+        "Forno",
+        "Piano cottura",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Posate",
+        "Letti matrimoniali",
+        "Divano",
+        "Divano letto",
+        "Biancheria letto",
+        "Asciugamani",
+        "Auto consigliata",
+        "Rilevatore monossido carbonio",
+        "Estintore"
+      ],
+      "descrizione_breve": "Bilocale al piano terra nel cuore di Porto Torres, fino a 4 ospiti, vicino a Spiaggia di Balai.",
+      "descrizione_lunga": "Casa Adelasia A è un funzionale appartamento al piano terra nel cuore di Porto Torres, ospita fino a 4 ospiti. Dispone di camera matrimoniale, zona giorno con divano letto e cucina completamente attrezzata. La sua posizione centrale rende negozi, porto e spiagge come Balai raggiungibili a piedi.",
+      "poi_distanze": [
+        {
+          "nome": "Spiaggia di Balai",
+          "distanza": "1-2km"
+        },
+        {
+          "nome": "Porto Torres centro",
+          "distanza": "centrale"
+        }
+      ]
+    },
+    {
+      "id_interno": "casa_adelasia_b",
+      "nome": "CASA ADELASIA B",
+      "url_kross_pubblica": "https://book.affittasardegna.it/casa-adelasia-b",
+      "indirizzo": {
+        "via": "Via Adelasia 63",
+        "citta": "Porto Torres",
+        "cap": "07046",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "tipo_struttura": "Appartamento",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 4,
+        "camere": 1,
+        "bagni": 1,
+        "mq": 45,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Camera 1",
+            "tipo": "matrimoniale",
+            "quantita": 1
+          },
+          {
+            "camera": "Soggiorno",
+            "tipo": "divano_letto",
+            "quantita": 1
+          }
+        ]
+      },
+      "cin": "IT090058C2000R9041",
+      "licenza": "R9041",
+      "_anomalia_cin": "ATTENZIONE: stesso CIN di ADELASIA A — verificare prima di inserire",
+      "distanza_mare": "1-2km",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/1ef872db672232047838b78ada537f1e.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+50€)",
+      "prezzo_placeholder_booking": 90,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761567873244.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569443446.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569447622.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569611014.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569478742.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569474480.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569493912.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569507335.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569515244.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569526435.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569532813.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569545929.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/1776156956720.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/177615695778.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569583752.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/1776156959950.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569603307.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569597540.jpg"
+      ],
+      "dotazioni": [
+        "TV",
+        "Lavatrice",
+        "Animali ammessi su richiesta",
+        "Bidet",
+        "Doccia",
+        "Asciugacapelli",
+        "Bicchieri/tazze",
+        "Forno",
+        "Piano cottura",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Posate",
+        "Letti matrimoniali",
+        "Divano letto",
+        "Biancheria letto",
+        "Asciugamani",
+        "Auto consigliata",
+        "Rilevatore monossido carbonio",
+        "Estintore"
+      ],
+      "descrizione_breve": "Bilocale funzionale al piano terra a Porto Torres, fino a 4 ospiti, vicino al porto e alla Basilica di San Gavino.",
+      "descrizione_lunga": "Casa Adelasia B è un funzionale appartamento al piano terra nel cuore di Porto Torres. Ospita fino a 4 persone con camera matrimoniale, soggiorno con divano letto, cucina completamente attrezzata e bagno. Dotato di Wi-Fi, lavatrice e TV. La posizione centrale è perfetta per raggiungere il porto (1 km), le spiagge (1-2 km) e la Basilica di San Gavino. Ideale per famiglie e coppie alla ricerca di comodità.",
+      "poi_distanze": [
+        {
+          "nome": "Porto Torres porto",
+          "distanza": "1km"
+        },
+        {
+          "nome": "Spiagge",
+          "distanza": "1-2km"
+        },
+        {
+          "nome": "Basilica San Gavino",
+          "distanza": "vicina"
+        }
+      ]
+    },
+    {
+      "id_interno": "mono_ibisco",
+      "nome": "MONO IBISCO",
+      "url_kross_pubblica": "https://book.affittasardegna.it/mono-ibisco",
+      "indirizzo": {
+        "via": "Via Carru e Frau",
+        "citta": "Stintino",
+        "localita": "Cala Lupo",
+        "cap": "07040",
+        "provincia": "SS",
+        "regione": "Sardegna",
+        "paese": "Italia"
+      },
+      "tipo_struttura": "Monolocale",
+      "tipo_affitto": "intero_alloggio",
+      "caratteristiche": {
+        "max_ospiti": 2,
+        "camere": 0,
+        "bagni": 1,
+        "mq": 25,
+        "piano": "terra",
+        "ascensore": false,
+        "letti": [
+          {
+            "camera": "Soggiorno",
+            "tipo": "divano_letto",
+            "quantita": 1
+          }
+        ]
+      },
+      "cin": null,
+      "licenza": null,
+      "_anomalia_cin": "BLOCCANTE: CIN e licenza NON pubblicati sulla pagina Kross. Souad deve recuperarli prima del run. Senza CIN né CaseVacanza né Booking accettano l'inserimento.",
+      "distanza_mare": "1-2km",
+      "ical_kross_hidden": "https://ical.krossbooking.com/ical/g/affittasardegna/f00bf4de8342f9af999dfd0bd006c76e.ics",
+      "check_in": "17:00-21:00",
+      "check_out": "10:00",
+      "late_checkin": "21:00-00:00 (+50€)",
+      "prezzo_placeholder_booking": 70,
+      "foto_urls": [
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456959496.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456954777.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456972875.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456979350.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456997901.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457003539.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/1776845700134.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457016276.jpg",
+        "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457035527.jpg"
+      ],
+      "dotazioni": [
+        "Parcheggio",
+        "Lavatrice",
+        "Lavastoviglie",
+        "TV",
+        "Divano letto",
+        "Microonde",
+        "Veranda esterna",
+        "Spazio esterno",
+        "Bidet",
+        "Vasca",
+        "Doccia",
+        "Cucina completa",
+        "Bicchieri/tazze",
+        "Piano cottura",
+        "Posate",
+        "Piatti e ciotole",
+        "Pentole e padelle",
+        "Ferro da stiro",
+        "Asse da stiro",
+        "Ventilatore a soffitto",
+        "Estintore",
+        "Rilevatore monossido carbonio",
+        "Auto consigliata",
+        "Biancheria letto",
+        "Asciugamani"
+      ],
+      "descrizione_breve": "Monolocale 25 m² a Stintino (Cala Lupo) per 2 ospiti, in residence tranquillo e immerso nel verde, vicino alle spiagge più belle.",
+      "descrizione_lunga": "Mono Ibisco è un accogliente monolocale di 25 m² a Stintino (Cala Lupo), ideale per coppie. Si trova in un residence tranquillo e immerso nel verde e dispone di zona giorno con divano letto, cucinino, bagno e veranda coperta. Dotato di lavatrice e lavastoviglie, è vicino alle spiagge più belle e ai servizi.",
+      "poi_distanze": [
+        {
+          "nome": "Spiagge Stintino",
+          "distanza": "1-2km"
+        },
+        {
+          "nome": "La Pelosa",
+          "distanza": "vicina"
+        }
+      ]
+    }
+  ]
+}
