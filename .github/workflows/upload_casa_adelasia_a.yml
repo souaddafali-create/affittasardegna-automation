@@ -1,6 +1,3 @@
-# VERIFICARE CIN PRIMA DEL RUN
-# Casa Adelasia A e Casa Adelasia B condividono lo stesso CIN (IT090058C2000R9041).
-# Souad deve confermare quale dei due ha il CIN corretto prima di lanciare il workflow.
 name: CaseVacanza - Casa Adelasia A
 
 on:

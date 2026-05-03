@@ -1,15 +1,16 @@
-name: CaseVacanza - Casa Adelasia B
+# CIN da aggiungere quando disponibile
+name: CaseVacanza - Mono Ibisco
 
 on:
   push:
     branches: [main]
     paths:
-      - 'Casa_Adelasia_B_DATI.json'
+      - 'Mono_Ibisco_DATI.json'
       - 'casevacanza_uploader.py'
   workflow_dispatch:
 
 concurrency:
-  group: casevacanza-casa-adelasia-b
+  group: casevacanza-mono-ibisco
   cancel-in-progress: true
 
 jobs:
@@ -37,16 +38,16 @@ jobs:
           pip install playwright Pillow
           playwright install chromium --with-deps
 
-      - name: Run uploader (Casa Adelasia B)
+      - name: Run uploader (Mono Ibisco)
         env:
           CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
           CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
-          PROPERTY_DATA: Casa_Adelasia_B_DATI.json
+          PROPERTY_DATA: Mono_Ibisco_DATI.json
         run: xvfb-run python casevacanza_uploader.py
 
       - name: Upload debug artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: casa-adelasia-b-debug-screenshots
+          name: mono-ibisco-debug-screenshots
           path: screenshots/

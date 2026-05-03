@@ -31,7 +31,7 @@
     "lavastoviglie": false,
     "aria_condizionata": false,
     "riscaldamento": false,
-    "internet_wifi": false,
+    "internet_wifi": true,
     "phon": true,
     "ferro_stiro": false,
     "terrazza": false,

@@ -24,9 +24,9 @@
   "dotazioni": {
     "tv": true,
     "piano_cottura": true,
-    "frigo_congelatore": false,
+    "frigo_congelatore": true,
     "forno": true,
-    "microonde": false,
+    "microonde": true,
     "lavatrice": true,
     "lavastoviglie": false,
     "aria_condizionata": true,

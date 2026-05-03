@@ -26,7 +26,7 @@
     "piano_cottura": true,
     "frigo_congelatore": true,
     "forno": true,
-    "microonde": false,
+    "microonde": true,
     "lavatrice": true,
     "lavastoviglie": true,
     "aria_condizionata": true,
