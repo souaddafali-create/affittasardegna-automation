@@ -1,0 +1,53 @@
+# CIN da aggiungere quando disponibile
+name: CaseVacanza - Mono Ibisco
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Mono_Ibisco_DATI.json'
+      - 'casevacanza_uploader.py'
+  workflow_dispatch:
+
+concurrency:
+  group: casevacanza-mono-ibisco
+  cancel-in-progress: true
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+
+      - name: Install Playwright
+        run: |
+          pip install playwright Pillow
+          playwright install chromium --with-deps
+
+      - name: Run uploader (Mono Ibisco)
+        env:
+          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
+          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
+          PROPERTY_DATA: Mono_Ibisco_DATI.json
+        run: xvfb-run python casevacanza_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mono-ibisco-debug-screenshots
+          path: screenshots/
