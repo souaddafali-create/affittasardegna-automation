@@ -270,7 +270,30 @@ def click_save_and_verify(page, step_name):
     return advanced
 
 
+def download_photos_from_urls(urls):
+    """Scarica foto dagli URL CDN (es. Krossbooking) in cartella temporanea.
+
+    Ritorna la lista dei path locali scaricati con successo, oppure [] se
+    nessun URL è disponibile / tutti i download falliscono.
+    """
+    if not urls:
+        return []
+    tmp_dir = tempfile.mkdtemp()
+    paths = []
+    for i, url in enumerate(urls):
+        ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
+        path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
+        try:
+            urllib.request.urlretrieve(url, path)
+            paths.append(path)
+            print(f"  Foto scaricata: {path} <- {url}")
+        except Exception as e:
+            print(f"  ATTENZIONE: download fallito per {url}: {e}")
+    return paths
+
+
 def load_photo_paths():
+    # 1) Foto locali già presenti nel JSON
     foto_json = PROP.get("marketing", {}).get("foto", [])
     if foto_json:
         json_dir = os.path.dirname(os.path.abspath(DATA_FILE))
@@ -281,6 +304,16 @@ def load_photo_paths():
                 paths.append(p)
         if paths:
             return paths
+
+    # 2) URL CDN Krossbooking (foto_urls)
+    foto_urls = PROP.get("marketing", {}).get("foto_urls", []) or PROP.get("foto_urls", [])
+    if foto_urls:
+        print(f"  Scarico {len(foto_urls)} foto dagli URL CDN forniti nel JSON...")
+        cdn_paths = download_photos_from_urls(foto_urls)
+        if cdn_paths:
+            return cdn_paths
+
+    # 3) Fallback: placeholder locali
     print("  Genero 5 foto placeholder locali (1024x768)...")
     paths = []
     tmp_dir = tempfile.mkdtemp()

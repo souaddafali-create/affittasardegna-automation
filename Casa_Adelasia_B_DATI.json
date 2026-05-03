@@ -1,0 +1,87 @@
+{
+  "identificativi": {
+    "nome_struttura": "CASA ADELASIA B",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via Adelasia 63",
+    "comune": "Porto Torres",
+    "cap": "07046",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "paese": "Italy",
+    "cin": "IT090058C2000R9041",
+    "cir": "R9041"
+  },
+  "composizione": {
+    "max_ospiti": 4,
+    "camere": 1,
+    "bagni": 1,
+    "posti_letto": 4,
+    "letti": [
+      { "tipo": "matrimoniale", "quantita": 1 },
+      { "tipo": "divano_letto_matrimoniale", "quantita": 1 }
+    ]
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": false,
+    "forno": true,
+    "microonde": false,
+    "lavatrice": true,
+    "lavastoviglie": false,
+    "aria_condizionata": false,
+    "riscaldamento": false,
+    "internet_wifi": false,
+    "phon": true,
+    "ferro_stiro": false,
+    "terrazza": false,
+    "giardino": false,
+    "piscina": false,
+    "piscina_tipo": "",
+    "barbecue": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": true,
+    "parcheggio_privato": false,
+    "altro_dotazioni": ""
+  },
+  "marketing": {
+    "titolo": "CASA ADELASIA B - Bilocale funzionale al piano terra a Porto Torres",
+    "descrizione_lunga": "Casa Adelasia B è un funzionale appartamento al piano terra nel cuore di Porto Torres. Ospita fino a 4 persone con camera matrimoniale, soggiorno con divano letto, cucina completamente attrezzata e bagno. Dotato di Wi-Fi, lavatrice e TV. La posizione centrale è perfetta per raggiungere il porto (1 km), le spiagge (1-2 km) e la Basilica di San Gavino. Ideale per famiglie e coppie alla ricerca di comodità.",
+    "foto": [],
+    "foto_urls": [
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761567873244.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569443446.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569447622.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569611014.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569478742.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569474480.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569493912.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569507335.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569515244.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569526435.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569532813.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569545929.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/1776156956720.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/177615695778.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569583752.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/1776156959950.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569603307.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1209/17761569597540.jpg"
+    ]
+  },
+  "condizioni": {
+    "prezzo_base": 90,
+    "prezzo_placeholder_booking": 90,
+    "check_in": "17:00 - 21:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": {},
+    "soggiorno_minimo_alta": {},
+    "cauzione": null,
+    "pulizia_finale": "",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "https://ical.krossbooking.com/ical/g/affittasardegna/1ef872db672232047838b78ada537f1e.ics",
+    "listino_prezzi": []
+  }
+}

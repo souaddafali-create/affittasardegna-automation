@@ -1,0 +1,55 @@
+# VERIFICARE CIN PRIMA DEL RUN
+# Casa Adelasia A e Casa Adelasia B condividono lo stesso CIN (IT090058C2000R9041).
+# Souad deve confermare quale dei due ha il CIN corretto prima di lanciare il workflow.
+name: CaseVacanza - Casa Adelasia A
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Casa_Adelasia_A_DATI.json'
+      - 'casevacanza_uploader.py'
+  workflow_dispatch:
+
+concurrency:
+  group: casevacanza-casa-adelasia-a
+  cancel-in-progress: true
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: Default
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+
+      - name: Install Playwright
+        run: |
+          pip install playwright Pillow
+          playwright install chromium --with-deps
+
+      - name: Run uploader (Casa Adelasia A)
+        env:
+          CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
+          CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
+          PROPERTY_DATA: Casa_Adelasia_A_DATI.json
+        run: xvfb-run python casevacanza_uploader.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casa-adelasia-a-debug-screenshots
+          path: screenshots/

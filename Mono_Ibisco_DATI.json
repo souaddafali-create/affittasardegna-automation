@@ -1,0 +1,78 @@
+{
+  "identificativi": {
+    "nome_struttura": "MONO IBISCO",
+    "tipo_struttura": "Monolocale",
+    "indirizzo": "Via Carru e Frau",
+    "comune": "Stintino",
+    "localita": "Cala Lupo",
+    "cap": "07040",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "paese": "Italy",
+    "cin": null,
+    "cir": null
+  },
+  "composizione": {
+    "max_ospiti": 2,
+    "camere": 0,
+    "bagni": 1,
+    "posti_letto": 2,
+    "letti": [
+      { "tipo": "divano_letto_matrimoniale", "quantita": 1 }
+    ]
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": false,
+    "forno": false,
+    "microonde": true,
+    "lavatrice": true,
+    "lavastoviglie": true,
+    "aria_condizionata": false,
+    "riscaldamento": false,
+    "internet_wifi": false,
+    "phon": false,
+    "ferro_stiro": true,
+    "terrazza": true,
+    "giardino": false,
+    "piscina": false,
+    "piscina_tipo": "",
+    "barbecue": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": false,
+    "parcheggio_privato": false,
+    "altro_dotazioni": "Parcheggio, ventilatore a soffitto"
+  },
+  "marketing": {
+    "titolo": "MONO IBISCO - Monolocale 25 m² a Stintino (Cala Lupo) per 2 ospiti",
+    "descrizione_lunga": "Mono Ibisco è un accogliente monolocale di 25 m² a Stintino (Cala Lupo), ideale per coppie. Si trova in un residence tranquillo e immerso nel verde e dispone di zona giorno con divano letto, cucinino, bagno e veranda coperta. Dotato di lavatrice e lavastoviglie, è vicino alle spiagge più belle e ai servizi.",
+    "foto": [],
+    "foto_urls": [
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456959496.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456954777.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456972875.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456979350.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768456997901.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457003539.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/1776845700134.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457016276.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1213/17768457035527.jpg"
+    ]
+  },
+  "condizioni": {
+    "prezzo_base": 70,
+    "prezzo_placeholder_booking": 70,
+    "check_in": "17:00 - 21:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": {},
+    "soggiorno_minimo_alta": {},
+    "cauzione": null,
+    "pulizia_finale": "",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "https://ical.krossbooking.com/ical/g/affittasardegna/f00bf4de8342f9af999dfd0bd006c76e.ics",
+    "listino_prezzi": []
+  }
+}

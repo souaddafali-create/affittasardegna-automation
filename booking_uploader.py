@@ -72,16 +72,41 @@ def try_step(page, step_name, func):
         save_html(page, f"errore_{step_name}")
 
 
-def download_placeholder_photos(count=5):
-    paths = []
+def download_photos_from_urls(urls, fallback_count=5):
+    """Scarica foto dagli URL CDN (es. Krossbooking) in cartella temporanea.
+
+    Se ``urls`` è vuoto/None, ritorna placeholder picsum come fallback.
+    Ritorna la lista dei path locali scaricati con successo.
+    """
     tmp_dir = tempfile.mkdtemp()
-    for i in range(count):
-        path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
-        urllib.request.urlretrieve(
-            f"https://picsum.photos/800/600?random={i+1}", path
-        )
-        paths.append(path)
-        print(f"  Foto scaricata: {path}")
+    paths = []
+
+    if urls:
+        for i, url in enumerate(urls):
+            ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
+            path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
+            try:
+                urllib.request.urlretrieve(url, path)
+                paths.append(path)
+                print(f"  Foto scaricata: {path} <- {url}")
+            except Exception as e:
+                print(f"  ATTENZIONE: download fallito per {url}: {e}")
+        if paths:
+            return paths
+        print("  ATTENZIONE: nessuna foto scaricata dagli URL forniti, uso placeholder.")
+
+    # Fallback: placeholder picsum
+    print(f"  Genero {fallback_count} foto placeholder picsum...")
+    for i in range(fallback_count):
+        path = os.path.join(tmp_dir, f"placeholder_{i+1}.jpg")
+        try:
+            urllib.request.urlretrieve(
+                f"https://picsum.photos/800/600?random={i+1}", path
+            )
+            paths.append(path)
+            print(f"  Placeholder: {path}")
+        except Exception as e:
+            print(f"  ATTENZIONE: download placeholder fallito: {e}")
     return paths
 
 
@@ -300,7 +325,8 @@ def insert_property(page):
     """Complete the Booking Extranet property insertion wizard."""
     ident = PROP["identificativi"]
     comp = PROP["composizione"]
-    photo_paths = download_placeholder_photos(5)
+    foto_urls = PROP.get("marketing", {}).get("foto_urls", []) or PROP.get("foto_urls", [])
+    photo_paths = download_photos_from_urls(foto_urls, fallback_count=5)
 
     # --- Step 1: Seleziona tipo struttura ---
     print("Step 1: Tipo struttura — Appartamento")

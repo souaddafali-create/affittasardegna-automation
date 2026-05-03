@@ -1,0 +1,91 @@
+{
+  "identificativi": {
+    "nome_struttura": "CASA BIANCA 3",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via Machiavelli 3/5",
+    "comune": "Porto Torres",
+    "cap": "07046",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "paese": "Italy",
+    "cin": "IT090058C2000Q8351",
+    "cir": "Q8351"
+  },
+  "composizione": {
+    "max_ospiti": 6,
+    "camere": 2,
+    "bagni": 1,
+    "posti_letto": 6,
+    "letti": [
+      { "tipo": "matrimoniale", "quantita": 2 },
+      { "tipo": "divano_letto_matrimoniale", "quantita": 1 }
+    ]
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": false,
+    "forno": true,
+    "microonde": true,
+    "lavatrice": true,
+    "lavastoviglie": false,
+    "aria_condizionata": true,
+    "riscaldamento": false,
+    "internet_wifi": true,
+    "phon": true,
+    "ferro_stiro": true,
+    "terrazza": true,
+    "giardino": false,
+    "piscina": false,
+    "piscina_tipo": "",
+    "barbecue": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": true,
+    "parcheggio_privato": false,
+    "altro_dotazioni": "Parcheggio gratuito in strada"
+  },
+  "marketing": {
+    "titolo": "CASA BIANCA 3 - Trilocale per 6 ospiti a 150m dalla spiaggia - Porto Torres",
+    "descrizione_lunga": "CASA BIANCA 3, delizioso trilocale per 6 ospiti a soli 150 m dalla spiaggia di Scoglio Lungo.\n\nSituato a Porto Torres, Casa Bianca 3 è la soluzione ideale per chi cerca una vacanza all'insegna del mare e del relax. Posizionato al piano terra rialzato di un piccolo complesso, questo luminoso e funzionale trilocale è perfetto per coppie, famiglie o piccoli gruppi fino a 6 persone.\n\nL'appartamento, di circa 55 m², può ospitare fino a 6 persone ed è organizzato come segue:\n- Soggiorno con cucina e divano letto\n- 2 spaziose e luminose camere matrimoniali\n- Bagno con doccia confortevole\n- Veranda privata ideale per relax all'aperto\n\nDotazioni principali:\n- Aria condizionata (camera matrimoniale)\n- TV - Wi-Fi - Microonde - Frigorifero - Lavatrice - Parcheggio gratuito in strada",
+    "foto": [],
+    "foto_urls": [
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585088127.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585081916.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458509164.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458509459.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585107222.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585109762.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585101635.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585115211.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585114216.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585119621.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585123489.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585129223.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585136666.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585134757.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585132576.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585149997.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585143369.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585141184.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458515899.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/17774585156118.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458515114.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1172/1777458516640.jpg"
+    ]
+  },
+  "condizioni": {
+    "prezzo_base": 130,
+    "prezzo_placeholder_booking": 130,
+    "check_in": "17:00 - 21:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": {},
+    "soggiorno_minimo_alta": {},
+    "cauzione": null,
+    "pulizia_finale": "",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "https://ical.krossbooking.com/ical/g/affittasardegna/538c3d877c1c851fe73749ceba7509cc.ics",
+    "listino_prezzi": []
+  }
+}
