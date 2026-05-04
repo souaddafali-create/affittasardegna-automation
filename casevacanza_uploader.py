@@ -54,7 +54,7 @@ DOTAZIONI_MAP = {
     "frigo_congelatore": "Frigorifero",
     "forno": "Forno",
     "microonde": "Microonde",
-    "lavatrice": "Lavatrice (privata)",
+    # `lavatrice` viene gestita a parte (privata vs in comune) in _build_servizi
     "lavastoviglie": "Lavastoviglie",
     "aria_condizionata": "Aria condizionata",
     "riscaldamento": "Riscaldamento",
@@ -62,6 +62,9 @@ DOTAZIONI_MAP = {
     "phon": "Asciugacapelli",
     "ferro_stiro": "Ferro da stiro",
     "terrazza": "Terrazza",
+    "balcone": "Balcone",
+    "patio": "Patio",
+    "veranda": "Patio",  # alias: una veranda viene mappata su Patio
     "giardino": "Giardino",
     "piscina": _get_piscina_label(),
     "arredi_esterno": "Arredi da esterno",
@@ -73,17 +76,45 @@ DOTAZIONI_MAP = {
 
 
 def _build_servizi():
+    """Costruisce la lista dei label da spuntare nel wizard partendo dal JSON.
+
+    Regole:
+    - Per ogni chiave booleana in DOTAZIONI_MAP, se True aggiunge il label.
+    - Lavatrice: 'Lavatrice (in comune)' se altro_dotazioni dice 'in comune',
+      altrimenti 'Lavatrice (privata)'.
+    - Parcheggio: True se parcheggio_privato True o se altro_dotazioni
+      contiene la parola 'parcheggio'.
+    """
     dot = PROP.get("dotazioni", {})
     if not isinstance(dot, dict):
         return []
+    altro = (dot.get("altro_dotazioni") or "").lower()
     servizi = []
     for key, label in DOTAZIONI_MAP.items():
         if label and dot.get(key) is True:
             servizi.append(label)
-    if dot.get("parcheggio_privato") is True or \
-       "parcheggio" in (dot.get("altro_dotazioni") or "").lower():
-        servizi.append("Parcheggio")
-    return servizi
+
+    # Lavatrice: distinzione privata vs in comune
+    if dot.get("lavatrice") is True:
+        if "lavatrice" in altro and "comune" in altro:
+            servizi.append("Lavatrice (in comune)")
+        else:
+            servizi.append("Lavatrice (privata)")
+
+    # Parcheggio: privato esplicito o menzionato in altro_dotazioni
+    if dot.get("parcheggio_privato") is True or "parcheggio" in altro:
+        if "Parcheggio" not in servizi:
+            servizi.append("Parcheggio")
+
+    # De-duplica preservando l'ordine (es. 'Patio' può essere aggiunto da
+    # `patio` e da `veranda` simultaneamente)
+    seen = set()
+    deduped = []
+    for s in servizi:
+        if s and s not in seen:
+            seen.add(s)
+            deduped.append(s)
+    return deduped
 
 
 SERVIZI = _build_servizi()
@@ -282,30 +313,67 @@ def click_save_and_verify(page, step_name):
     return advanced
 
 
-def download_photos_from_urls(urls):
-    """Scarica foto dagli URL CDN (es. Krossbooking) in cartella temporanea.
+def download_photos_from_urls(urls, throttle_sec=0.5, timeout_sec=30, max_retries=3):
+    """Scarica le foto sequenzialmente con retry esponenziale, throttling e validazione.
 
-    Ritorna la lista dei path locali scaricati con successo, oppure [] se
-    nessun URL è disponibile / tutti i download falliscono.
+    Comportamento:
+    - 1 foto alla volta, ``throttle_sec`` di pausa tra una e l'altra.
+    - Per ogni URL, fino a ``max_retries`` tentativi con backoff 1s, 3s, 9s.
+    - User-Agent realistico nei header HTTP per evitare 403 dal CDN.
+    - Validazione: Content-Type deve essere image/jpeg|jpg|png|webp e payload > 10 KB.
+    - Se anche una sola foto fallisce dopo tutti i tentativi, solleva RuntimeError.
+      Niente fallback placeholder silenzioso.
     """
+    import time as _time
     if not urls:
         return []
     tmp_dir = tempfile.mkdtemp()
     paths = []
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5",
+        "Accept-Language": "it-IT,it;q=0.9,en;q=0.5",
+    }
+    valid_mimes = ("image/jpeg", "image/jpg", "image/png", "image/webp")
     for i, url in enumerate(urls):
         ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
         path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
-        try:
-            urllib.request.urlretrieve(url, path)
-            paths.append(path)
-            print(f"  Foto scaricata: {path} <- {url}")
-        except Exception as e:
-            print(f"  ATTENZIONE: download fallito per {url}: {e}")
+        backoff = 1
+        last_err = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                    content_type = (resp.headers.get("Content-Type") or "").lower()
+                    if not any(m in content_type for m in valid_mimes):
+                        raise RuntimeError(f"Content-Type non valido '{content_type}'")
+                    data = resp.read()
+                if len(data) < 10 * 1024:
+                    raise RuntimeError(f"file troppo piccolo: {len(data)} byte (atteso > 10KB)")
+                with open(path, "wb") as fh:
+                    fh.write(data)
+                paths.append(path)
+                print(f"  [{i+1}/{len(urls)}] foto OK ({len(data)//1024} KB) <- {url}")
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries:
+                    print(f"  [{i+1}/{len(urls)}] tentativo {attempt}/{max_retries} fallito ({e}); retry tra {backoff}s")
+                    _time.sleep(backoff)
+                    backoff *= 3
+        if last_err is not None:
+            raise RuntimeError(
+                f"❌ Download foto {i+1}/{len(urls)} fallito definitivamente dopo {max_retries} tentativi: "
+                f"{url} → {last_err}"
+            )
+        _time.sleep(throttle_sec)
+    print(f"  ✅ Tutte le {len(paths)} foto scaricate dal CDN")
     return paths
 
 
 def load_photo_paths():
-    # 1) Foto locali già presenti nel JSON
+    # 1) Foto locali già presenti nel JSON (campo marketing.foto)
     foto_json = PROP.get("marketing", {}).get("foto", [])
     if foto_json:
         json_dir = os.path.dirname(os.path.abspath(DATA_FILE))
@@ -317,34 +385,17 @@ def load_photo_paths():
         if paths:
             return paths
 
-    # 2) URL CDN Krossbooking (foto_urls)
+    # 2) URL CDN Krossbooking (marketing.foto_urls)
     foto_urls = PROP.get("marketing", {}).get("foto_urls", []) or PROP.get("foto_urls", [])
     if foto_urls:
         print(f"  Scarico {len(foto_urls)} foto dagli URL CDN forniti nel JSON...")
-        cdn_paths = download_photos_from_urls(foto_urls)
-        if cdn_paths:
-            return cdn_paths
+        # download_photos_from_urls solleva RuntimeError se anche una foto fallisce
+        return download_photos_from_urls(foto_urls)
 
-    # 3) Fallback: placeholder locali
-    print("  Genero 5 foto placeholder locali (1024x768)...")
-    paths = []
-    tmp_dir = tempfile.mkdtemp()
-    for i in range(5):
-        path = os.path.join(tmp_dir, f"photo_{i+1}.jpg")
-        _generate_placeholder_jpeg(path, 1024, 768, color_index=i)
-        paths.append(path)
-    return paths
-
-
-def _generate_placeholder_jpeg(path, width, height, color_index=0):
-    try:
-        from PIL import Image
-        colors = [(70, 130, 180), (60, 179, 113), (255, 165, 0), (147, 112, 219), (220, 20, 60)]
-        color = colors[color_index % len(colors)]
-        img = Image.new("RGB", (width, height), color)
-        img.save(path, "JPEG", quality=85)
-    except ImportError:
-        urllib.request.urlretrieve(f"https://picsum.photos/{width}/{height}?random={color_index + 1}", path)
+    # Nessuna foto disponibile: NON generiamo più placeholder colorati.
+    # Lo step foto del wizard verrà saltato; sarà visibile come [WARN] nei log.
+    print("  [WARN] Nessuna foto disponibile nel JSON (foto[] e foto_urls[] vuoti)")
+    return []
 
 
 def calculate_base_price():
@@ -643,23 +694,89 @@ def insert_property(page):
     click_save_and_verify(page, "tipo_proprietà")
 
     def do_step5():
-        page.get_by_text("Inseriscilo manualmente").click()
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(400)
         ident = PROP["identificativi"]
-        addr_parts = ident["indirizzo"].rsplit(" ", 1)
-        via = addr_parts[0] if len(addr_parts) > 1 else ident["indirizzo"]
-        civico = addr_parts[1] if len(addr_parts) > 1 else ""
-        page.locator('[data-test="stateOrProvince"]').fill(ident["regione"])
+        indirizzo_raw = (ident.get("indirizzo") or "").strip()
+        cap = ident.get("cap", "")
+        comune = ident.get("comune", "")
+        provincia = ident.get("provincia", "")
+        regione = ident.get("regione", "")
+        indirizzo_full = f"{indirizzo_raw}, {cap} {comune}, {provincia}, Italia"
+
+        # 1) Tentativo autocomplete Google Places sul campo di ricerca iniziale
+        autocomplete_used = False
+        try:
+            addr_input = None
+            for sel in [
+                '[data-test="address-search"]',
+                '[data-test="addressSearch"]',
+                'input[placeholder*="indirizzo" i]',
+                'input[placeholder*="Cerca" i]',
+                'input[placeholder*="address" i]',
+            ]:
+                loc = page.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible():
+                    addr_input = loc.first
+                    break
+            if addr_input is not None:
+                addr_input.click()
+                page.wait_for_timeout(300)
+                addr_input.fill(indirizzo_full)
+                page.wait_for_timeout(2500)  # attesa per i suggerimenti Places
+                for sugg_sel in [
+                    '.pac-item',
+                    '[role="option"]',
+                    '[data-test*="suggestion"]',
+                    'li[role="option"]',
+                ]:
+                    sugg = page.locator(sugg_sel)
+                    if sugg.count() > 0 and sugg.first.is_visible():
+                        sugg.first.click()
+                        page.wait_for_timeout(1500)
+                        autocomplete_used = True
+                        print(f"  Indirizzo (autocomplete): {indirizzo_full}")
+                        break
+                if not autocomplete_used:
+                    print("  Autocomplete: nessun suggerimento, passo a inserimento manuale")
+        except Exception as e:
+            print(f"  [INFO] Autocomplete non disponibile ({e}), passo a inserimento manuale")
+
+        if autocomplete_used:
+            step_done(page, "indirizzo_compilato")
+            return
+
+        # 2) Fallback: inserimento manuale
+        try:
+            page.get_by_text("Inseriscilo manualmente").click()
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(500)
+        except Exception:
+            # Se il bottone non c'è (perché siamo già in modalità manuale), prosegui
+            pass
+
+        # Estrai civico solo se l'ultima parola è un numero/civico tipo 12, 3/5, 7A.
+        # Se assente (es. 'Via Carru e Frau') non aggiungere placeholder: lascia vuoto.
+        m = re.search(r'^(.+?)\s+(\d+(?:[\s\-/]\d+)?[a-zA-Z]?)\s*$', indirizzo_raw)
+        if m:
+            via = m.group(1).strip()
+            civico = m.group(2).strip()
+        else:
+            via = indirizzo_raw
+            civico = ""
+
+        page.locator('[data-test="stateOrProvince"]').fill(regione)
         page.wait_for_timeout(200)
-        page.locator('[data-test="city"]').fill(ident["comune"])
+        page.locator('[data-test="city"]').fill(comune)
         page.wait_for_timeout(200)
         page.locator('[data-test="street"]').fill(via)
         page.wait_for_timeout(200)
-        page.locator('[data-test="houseNumberOrName"]').fill(civico)
+        if civico:
+            page.locator('[data-test="houseNumberOrName"]').fill(civico)
+            page.wait_for_timeout(200)
+        else:
+            print(f"  [INFO] Indirizzo senza civico numerico: campo houseNumberOrName lasciato vuoto")
+        page.locator('[data-test="postalCode"]').fill(cap)
         page.wait_for_timeout(200)
-        page.locator('[data-test="postalCode"]').fill(ident["cap"])
-        page.wait_for_timeout(200)
+        print(f"  Indirizzo (manuale): via='{via}' civico='{civico or '—'}' {cap} {comune} ({provincia})")
         step_done(page, "indirizzo_compilato")
 
     try_step(page, "step5_indirizzo", do_step5)
@@ -894,13 +1011,12 @@ def insert_property(page):
     click_save_and_verify(page, "foto")
 
     def do_step14():
-        try:
-            tab = page.get_by_text("Tutti", exact=True)
-            if tab.count() > 0:
-                tab.first.click()
-                page.wait_for_timeout(800)
-        except Exception:
-            pass
+        # Restiamo sul tab "Servizi popolari" di default — non clicchiamo "Tutti"
+        # (che aprirebbe una lista più lunga e introdurrebbe match ambigui).
+        # Una dotazione mancante in 'popolari' è OK: log [MISS] e continua,
+        # senza far fallire il run (dotazioni accessorie).
+        missed = []
+        ok = []
         for servizio in SERVIZI:
             selected = False
             for strategy in [
@@ -913,18 +1029,33 @@ def insert_property(page):
                     if cb.count() > 0:
                         cb.first.check()
                         page.wait_for_timeout(200)
-                        print(f"  [OK] {servizio}")
-                        selected = True
-                        break
+                        # Verifica post-click: la checkbox deve risultare checked
+                        try:
+                            if cb.first.is_checked():
+                                ok.append(servizio)
+                                print(f"  [OK] {servizio}")
+                                selected = True
+                                break
+                        except Exception:
+                            # is_checked può non funzionare per role=checkbox custom;
+                            # in tal caso fidiamoci dell'aver cliccato.
+                            ok.append(servizio)
+                            print(f"  [OK] {servizio}")
+                            selected = True
+                            break
                 except Exception:
                     continue
             if not selected:
+                # Fallback JS: trova label con il testo del servizio e clicca la
+                # checkbox associata. NON fa fallire se manca: alcune voci della
+                # nostra mappa potrebbero non essere fra i 'popolari'.
                 try:
                     result = page.evaluate("""(label) => {
-                        const checkboxes = document.querySelectorAll('input[type="checkbox"], [role="checkbox"]');
-                        for (const cb of checkboxes) {
+                        const cbs = document.querySelectorAll('input[type="checkbox"], [role="checkbox"]');
+                        for (const cb of cbs) {
                             const container = cb.closest('label') || cb.parentElement?.parentElement;
-                            if ((container?.textContent || '').includes(label)) {
+                            const txt = (container?.textContent || '').trim();
+                            if (txt === label || txt.includes(label)) {
                                 cb.click();
                                 return true;
                             }
@@ -932,12 +1063,15 @@ def insert_property(page):
                         return false;
                     }""", servizio)
                     if result:
-                        selected = True
+                        ok.append(servizio)
                         print(f"  [OK] {servizio} (JS)")
+                        selected = True
                 except Exception:
                     pass
             if not selected:
-                print(f"  [MISS] {servizio}")
+                missed.append(servizio)
+                print(f"  [MISS] {servizio} (non presente fra i Servizi popolari, skip)")
+        print(f"  Riassunto servizi: {len(ok)}/{len(SERVIZI)} selezionati ({len(missed)} non trovati)")
         step_done(page, "servizi_selezionati")
 
     try_step(page, "step14_servizi", do_step14)
@@ -1179,32 +1313,90 @@ def insert_property(page):
 
     def do_step26():
         ical_url = PROP.get("condizioni", {}).get("ical_url")
-        if ical_url:
-            for radio_text in ["Si, utilizzo altre piattaforme", "Sì, utilizzo altre piattaforme", "utilizzo altre piattaforme"]:
-                try:
-                    radio = page.get_by_text(radio_text, exact=False)
-                    if radio.count() > 0:
-                        radio.first.click()
-                        page.wait_for_timeout(800)
-                        break
-                except Exception:
-                    continue
-            for sel in ["input[type='url']", "input[name*='ical']", "input[type='text']"]:
-                try:
-                    f = page.locator(sel)
-                    if f.count() > 0:
-                        f.last.fill(ical_url)
-                        break
-                except Exception:
-                    continue
-        else:
+        if not ical_url:
+            # Nessun link iCal: seleziona "No, gestisco solo qui"
             try:
                 radio = page.get_by_text("No, gestisco solo le prenotazioni qui", exact=False)
                 if radio.count() > 0:
                     radio.first.click()
                     page.wait_for_timeout(400)
+                    print("  Calendario: nessuna sincronizzazione iCal (campo ical_url vuoto nel JSON)")
             except Exception:
                 pass
+            step_done(page, "dopo_calendario_no_ical")
+            return
+
+        # 1) Selezione radio "Sì, utilizzo altre piattaforme"
+        radio_clicked = False
+        for radio_text in [
+            "Sì, utilizzo altre piattaforme",
+            "Si, utilizzo altre piattaforme",
+            "utilizzo altre piattaforme",
+        ]:
+            try:
+                radio = page.get_by_text(radio_text, exact=False)
+                if radio.count() > 0:
+                    radio.first.click()
+                    page.wait_for_timeout(1000)
+                    radio_clicked = True
+                    print(f"  Calendario: radio '{radio_text}' selezionato")
+                    break
+            except Exception:
+                continue
+        if not radio_clicked:
+            raise RuntimeError(
+                "Step calendario: radio 'Sì, utilizzo altre piattaforme' non trovato"
+            )
+
+        # 2) Inserimento URL iCal nel campo che è apparso
+        url_filled = False
+        for sel in [
+            'input[type="url"]',
+            'input[name*="ical" i]',
+            'input[placeholder*="ical" i]',
+            'input[placeholder*="url" i]',
+            'input[placeholder*="link" i]',
+        ]:
+            try:
+                f = page.locator(sel)
+                if f.count() > 0 and f.last.is_visible():
+                    f.last.fill(ical_url)
+                    url_filled = True
+                    print(f"  iCal URL inserito (selettore '{sel}'): {ical_url}")
+                    break
+            except Exception:
+                continue
+        if not url_filled:
+            raise RuntimeError(
+                f"Step calendario: campo URL iCal non trovato per inserire {ical_url}"
+            )
+
+        page.wait_for_timeout(500)
+
+        # 3) Click su "Aggiungi" / "Sincronizza" / "Importa"
+        for btn_text in ["Aggiungi", "Sincronizza", "Importa", "Conferma", "Salva"]:
+            try:
+                btn = page.get_by_role("button", name=btn_text, exact=False)
+                if btn.count() > 0 and btn.first.is_visible():
+                    btn.first.click()
+                    page.wait_for_timeout(1500)
+                    print(f"  iCal: cliccato bottone '{btn_text}'")
+                    break
+            except Exception:
+                continue
+
+        # 4) Verifica: l'URL (o la sua coda hash) deve comparire nella pagina
+        page.wait_for_timeout(800)
+        ical_tail = ical_url.rstrip("/").split("/")[-1]
+        confirmed = page.evaluate("""({fullUrl, tail}) => {
+            const txt = document.body ? document.body.textContent || '' : '';
+            return txt.includes(fullUrl) || (tail && txt.includes(tail));
+        }""", {"fullUrl": ical_url, "tail": ical_tail})
+        if confirmed:
+            print(f"  ✅ iCal: URL confermato nella lista calendari sincronizzati")
+        else:
+            print(f"  [WARN] iCal: URL non rilevato nel testo della pagina (potrebbe essere sotto il fold)")
+
         step_done(page, "dopo_calendario")
 
     try_step(page, "step26_calendario", do_step26)
