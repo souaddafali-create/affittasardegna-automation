@@ -306,7 +306,11 @@ def click_save_and_verify(page, step_name):
     }""")
     advanced = (url_after != url_before) or (heading_after != heading_before)
     if not advanced:
-        print(f"  [WARN] Wizard potrebbe non essere avanzato")
+        # Spesso è un falso positivo: nelle SPA il salvataggio è asincrono e
+        # heading/URL possono non cambiare prima che il timeout scada. La verità
+        # del successo emerge negli step successivi (che falliranno con errori
+        # rumorosi grazie a try_step). Lasciamo solo un DEBUG.
+        print(f"  [DEBUG] URL/heading invariati dopo click '{step_name}' — verifico negli step successivi")
     else:
         print(f"  Wizard avanzato: {step_name}")
     step_done(page, f"dopo_{step_name}")
@@ -329,10 +333,21 @@ def download_photos_from_urls(urls, throttle_sec=0.5, timeout_sec=30, max_retrie
         return []
     tmp_dir = tempfile.mkdtemp()
     paths = []
+    # Header che imitano un browser reale Windows. Il CDN Krossbooking
+    # restituisce 403 con User-Agent generico urllib (run di Adelasia A 04/05).
+    # Aggiunto Referer del nostro dominio booking, che il CDN si aspetta perché
+    # serve immagini hot-link-protetto.
     headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "image/jpeg,image/png,image/webp,image/*;q=0.8,*/*;q=0.5",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://book.affittasardegna.it/",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language": "it-IT,it;q=0.9,en;q=0.5",
+        "Sec-Fetch-Dest": "image",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
     }
     valid_mimes = ("image/jpeg", "image/jpg", "image/png", "image/webp")
     for i, url in enumerate(urls):
@@ -851,6 +866,8 @@ def insert_property(page):
         # oppure {found: false}. Cerca il container più piccolo (per evitare di
         # matchare l'intera pagina) che contenga il testo del label e ≥2 button.
         def locate_letto_counter(label_text):
+            """Cerca container + button + valore. Cerca anche dentro <input> per
+            counter implementati come number-spinner."""
             return page.evaluate("""(label) => {
                 const lower = label.toLowerCase();
                 const candidates = Array.from(document.querySelectorAll('div, li, label, section, article'))
@@ -860,24 +877,29 @@ def insert_property(page):
                         const btns = el.querySelectorAll('button');
                         return btns.length >= 2;
                     })
-                    // Container più piccolo = più specifico per quel letto
                     .sort((a, b) => a.textContent.length - b.textContent.length);
                 for (const c of candidates) {
-                    // Limita a container ragionevolmente piccoli (≤ 8x la lunghezza
-                    // del label) per evitare di prendere l'intera lista letti
                     if (c.textContent.length > label.length * 12) continue;
                     const btns = c.querySelectorAll('button');
-                    // Il + è tipicamente l'ultimo button della riga
                     const addBtn = btns[btns.length - 1];
                     const r = addBtn.getBoundingClientRect();
                     if (r.width === 0 || r.height === 0) continue;
-                    // Cerca il numero del counter (span/div con solo cifre)
+                    // Valore: prima cerca <input> (number spinner), poi span/div/p
                     let value = null;
-                    for (const el of c.querySelectorAll('span, div, p')) {
-                        const t = (el.textContent || '').trim();
-                        if (/^\\d+$/.test(t) && t.length < 3) {
-                            value = parseInt(t, 10);
+                    for (const el of c.querySelectorAll('input')) {
+                        const v = (el.value || '').trim();
+                        if (/^\\d+$/.test(v) && v.length < 3) {
+                            value = parseInt(v, 10);
                             break;
+                        }
+                    }
+                    if (value === null) {
+                        for (const el of c.querySelectorAll('span, div, p')) {
+                            const t = (el.textContent || '').trim();
+                            if (/^\\d+$/.test(t) && t.length < 3) {
+                                value = parseInt(t, 10);
+                                break;
+                            }
                         }
                     }
                     return {
@@ -889,6 +911,49 @@ def insert_property(page):
                     };
                 }
                 return {found: false};
+            }""", label_text)
+
+        def click_letto_button_via_js(label_text):
+            """Trova il + button del counter `label_text` e dispatcha pointerdown/up
+            + mousedown/up + click direttamente sul nodo. Più robusto del
+            page.mouse.click(x,y) contro componenti React/shadcn che ascoltano
+            pointer events invece del solo click sintetizzato a coordinate."""
+            return page.evaluate("""(label) => {
+                const lower = label.toLowerCase();
+                const candidates = Array.from(document.querySelectorAll('div, li, label, section, article'))
+                    .filter(el => {
+                        const txt = (el.textContent || '').toLowerCase();
+                        if (!txt.includes(lower)) return false;
+                        const btns = el.querySelectorAll('button');
+                        return btns.length >= 2;
+                    })
+                    .sort((a, b) => a.textContent.length - b.textContent.length);
+                for (const c of candidates) {
+                    if (c.textContent.length > label.length * 12) continue;
+                    const btns = c.querySelectorAll('button');
+                    const addBtn = btns[btns.length - 1];
+                    if (!addBtn || addBtn.disabled) continue;
+                    const r = addBtn.getBoundingClientRect();
+                    if (r.width === 0 || r.height === 0) continue;
+                    addBtn.scrollIntoView({block: 'center'});
+                    const opts = {
+                        bubbles: true, cancelable: true, view: window,
+                        button: 0, buttons: 1,
+                        clientX: r.left + r.width / 2,
+                        clientY: r.top + r.height / 2,
+                    };
+                    try { addBtn.dispatchEvent(new PointerEvent('pointerover', opts)); } catch(e) {}
+                    try { addBtn.dispatchEvent(new PointerEvent('pointerenter', opts)); } catch(e) {}
+                    try { addBtn.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch(e) {}
+                    addBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+                    try { addBtn.dispatchEvent(new PointerEvent('pointerup', opts)); } catch(e) {}
+                    addBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+                    addBtn.click();
+                    return {clicked: true, tag: addBtn.tagName,
+                            aria: addBtn.getAttribute('aria-label') || '',
+                            cls: (addBtn.className || '').toString().substring(0, 60)};
+                }
+                return {clicked: false};
             }""", label_text)
 
         def expand_room_if_needed(room_idx):
@@ -926,8 +991,17 @@ def insert_property(page):
             print(f"    Trovato '{label}' (valore iniziale: {start_value})")
 
             for i in range(quantita):
-                page.mouse.click(initial["x"], initial["y"])
-                page.wait_for_timeout(350)
+                # Click via dispatchEvent dal contesto della pagina: aggira il
+                # problema del run del 04/05 dove page.mouse.click(x,y) non
+                # incrementava il counter (probabile React handler su pointerdown).
+                result = click_letto_button_via_js(label)
+                if not result.get("clicked"):
+                    raise RuntimeError(
+                        f"Click + non eseguito su '{label}' (tentativo {i+1}/{quantita})"
+                    )
+                # 600ms perché il setState di React + render abbiano completato
+                # prima del prossimo click o della verifica.
+                page.wait_for_timeout(600)
 
             # Verifica post-click: il counter deve essere salito di `quantita`
             final = locate_letto_counter(label)
