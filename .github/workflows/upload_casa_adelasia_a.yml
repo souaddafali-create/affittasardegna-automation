@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: casevacanza-casa-adelasia-a
-  cancel-in-progress: true
+  group: casevacanza-global
+  cancel-in-progress: false
 
 jobs:
   upload:
