@@ -186,7 +186,17 @@ def dismiss_cookie(page):
         pass
 
 
-def try_step(page, step_name, func, critical=False):
+def try_step(page, step_name, func, critical=False, optional=False):
+    """Esegue uno step del wizard.
+
+    Comportamento di default (`optional=False`): se `func()` solleva un'eccezione,
+    viene loggata, salvata come screenshot/HTML e RILANCIATA — il run su Actions
+    diventa rosso. Questo è ciò che vogliamo per quasi tutti gli step.
+
+    Solo se `optional=True` l'errore viene assorbito e il flusso prosegue.
+    `critical` è mantenuto per retrocompatibilità ma non cambia più il
+    comportamento (tutti gli step non opzionali sono ora 'critici').
+    """
     print(f"\n--- {step_name} ---")
     dismiss_overlay(page)
     try:
@@ -194,11 +204,13 @@ def try_step(page, step_name, func, critical=False):
         print(f"  OK: {step_name}")
     except Exception as e:
         step_errors.append((step_name, str(e)))
-        print(f"  ERRORE in {step_name}: {e}")
+        print(f"  ❌ STEP FALLITO ({step_name}): {e}")
         screenshot(page, f"errore_{step_name}")
         save_html(page, f"errore_{step_name}")
-        if critical:
-            raise
+        if optional:
+            print(f"  (step marcato optional, il run prosegue)")
+            return
+        raise
 
 
 def click_save_and_verify(page, step_name):
@@ -702,56 +714,149 @@ def insert_property(page):
             step_done(page, "letti_skip")
             return
         screenshot(page, "step10_BEFORE_letti")
+
+        # Mappa tipo JSON → label visualizzato dal wizard CaseVacanza.
+        # Se in futuro il wizard cambia un'etichetta basta aggiornare qui.
         LETTO_TESTO = {
             "matrimoniale": "Letto matrimoniale",
             "king": "Letto King-size",
             "queen": "Letto Queen-size",
+            "francese": "Letto Queen-size",
             "singolo": "Letto singolo",
+            "singoli_separati": "Letto singolo",
             "divano_letto": "Divano letto singolo",
             "divano_letto_matrimoniale": "Divano letto matrimoniale",
             "letto_a_castello": "Letto a castello",
+            "castello": "Letto a castello",
         }
 
-        def click_letto(label_parziale, quantita, camera_idx):
-            if camera_idx > 0:
-                try:
-                    expand_btns = page.locator('[data-test="expand-room"]')
-                    if expand_btns.count() > 0:
-                        expand_btns.first.click()
-                        page.wait_for_timeout(800)
-                except Exception:
-                    pass
-            for _ in range(quantita):
-                coords = page.evaluate("""(label) => {
-                    const btns = document.querySelectorAll('[data-test="counter-add-btn"]');
-                    for (const btn of btns) {
-                        const gp = btn.parentElement && btn.parentElement.parentElement;
-                        if (gp && gp.textContent.includes(label)) {
-                            const r = btn.getBoundingClientRect();
-                            if (r.width > 0 && r.height > 0) return {x: r.left + r.width/2, y: r.top + r.height/2};
+        # Trova il counter associato a `label` e ritorna {x, y, value} del + button,
+        # oppure {found: false}. Cerca il container più piccolo (per evitare di
+        # matchare l'intera pagina) che contenga il testo del label e ≥2 button.
+        def locate_letto_counter(label_text):
+            return page.evaluate("""(label) => {
+                const lower = label.toLowerCase();
+                const candidates = Array.from(document.querySelectorAll('div, li, label, section, article'))
+                    .filter(el => {
+                        const txt = (el.textContent || '').toLowerCase();
+                        if (!txt.includes(lower)) return false;
+                        const btns = el.querySelectorAll('button');
+                        return btns.length >= 2;
+                    })
+                    // Container più piccolo = più specifico per quel letto
+                    .sort((a, b) => a.textContent.length - b.textContent.length);
+                for (const c of candidates) {
+                    // Limita a container ragionevolmente piccoli (≤ 8x la lunghezza
+                    // del label) per evitare di prendere l'intera lista letti
+                    if (c.textContent.length > label.length * 12) continue;
+                    const btns = c.querySelectorAll('button');
+                    // Il + è tipicamente l'ultimo button della riga
+                    const addBtn = btns[btns.length - 1];
+                    const r = addBtn.getBoundingClientRect();
+                    if (r.width === 0 || r.height === 0) continue;
+                    // Cerca il numero del counter (span/div con solo cifre)
+                    let value = null;
+                    for (const el of c.querySelectorAll('span, div, p')) {
+                        const t = (el.textContent || '').trim();
+                        if (/^\\d+$/.test(t) && t.length < 3) {
+                            value = parseInt(t, 10);
+                            break;
                         }
                     }
-                    return null;
-                }""", label_parziale)
-                if coords:
-                    page.mouse.click(coords['x'], coords['y'])
-                    page.wait_for_timeout(400)
-                else:
-                    print(f"    [WARN] '{label_parziale}' non trovato")
-                    return
-            print(f"    + {quantita}x {label_parziale}")
+                    return {
+                        found: true,
+                        x: r.left + r.width / 2,
+                        y: r.top + r.height / 2,
+                        value: value,
+                        container_text: c.textContent.trim().substring(0, 80)
+                    };
+                }
+                return {found: false};
+            }""", label_text)
 
+        def expand_room_if_needed(room_idx):
+            """Espande la camera N (0-based) se collassata. Se room_idx=0 non fa nulla."""
+            if room_idx <= 0:
+                return
+            try:
+                expand_btns = page.locator('[data-test="expand-room"]')
+                cnt = expand_btns.count()
+                if cnt > room_idx:
+                    expand_btns.nth(room_idx).click()
+                    page.wait_for_timeout(800)
+                    print(f"    Camera {room_idx + 1}: espansa")
+                elif cnt > 0:
+                    # Fallback: clicca l'ultima espansione disponibile
+                    expand_btns.last.click()
+                    page.wait_for_timeout(800)
+                    print(f"    Camera {room_idx + 1}: espansa (fallback)")
+            except Exception as e:
+                print(f"    [WARN] Espansione camera {room_idx + 1} fallita: {e}")
+
+        def click_letto_counter(label, quantita, room_idx=0):
+            """Clicca + N volte sul counter del letto e verifica il valore finale.
+            Solleva RuntimeError se il counter non esiste o non raggiunge il target."""
+            if quantita <= 0:
+                return
+            expand_room_if_needed(room_idx)
+
+            initial = locate_letto_counter(label)
+            if not initial.get("found"):
+                raise RuntimeError(
+                    f"Counter letto '{label}' non trovato sulla pagina (camera {room_idx + 1})"
+                )
+            start_value = initial.get("value") or 0
+            print(f"    Trovato '{label}' (valore iniziale: {start_value})")
+
+            for i in range(quantita):
+                page.mouse.click(initial["x"], initial["y"])
+                page.wait_for_timeout(350)
+
+            # Verifica post-click: il counter deve essere salito di `quantita`
+            final = locate_letto_counter(label)
+            if not final.get("found"):
+                raise RuntimeError(
+                    f"Counter letto '{label}' scomparso dopo {quantita} click"
+                )
+            actual = final.get("value")
+            expected = start_value + quantita
+            if actual is None:
+                print(f"    [WARN] '{label}': counter non leggibile, click effettuati ma non verificati")
+                return
+            if actual < expected:
+                raise RuntimeError(
+                    f"Counter '{label}' = {actual} dopo {quantita} click "
+                    f"(atteso ≥ {expected}, iniziale {start_value})"
+                )
+            print(f"    + {quantita}x {label} → counter = {actual} ✅")
+
+        # Distribuzione letti:
+        #   letti[:camere] → uno per camera (camera 0, 1, 2, …)
+        #   letti[camere:] → letti extra, aggiunti tutti alla camera 0
         for cam_idx, letto_entry in enumerate(letti[:camere]):
             tipo = letto_entry.get("tipo", "matrimoniale")
             qty = int(letto_entry.get("quantita", 1))
-            label = LETTO_TESTO.get(tipo, tipo)
-            click_letto(label, qty, cam_idx)
+            label = LETTO_TESTO.get(tipo)
+            if not label:
+                raise RuntimeError(
+                    f"Tipo letto sconosciuto nel JSON: '{tipo}' (camera {cam_idx + 1}). "
+                    f"Aggiungi la mappatura in LETTO_TESTO."
+                )
+            click_letto_counter(label, qty, room_idx=cam_idx)
+
         for letto_entry in letti[camere:]:
             tipo = letto_entry.get("tipo", "")
             qty = int(letto_entry.get("quantita", 1))
-            label = LETTO_TESTO.get(tipo, tipo)
-            if tipo:
-                click_letto(label, qty, 0)
+            if not tipo:
+                continue
+            label = LETTO_TESTO.get(tipo)
+            if not label:
+                raise RuntimeError(
+                    f"Tipo letto sconosciuto nel JSON (extra): '{tipo}'. "
+                    f"Aggiungi la mappatura in LETTO_TESTO."
+                )
+            click_letto_counter(label, qty, room_idx=0)
+
         screenshot(page, "step10_AFTER_letti")
         step_done(page, "letti_configurati")
 
@@ -1239,6 +1344,13 @@ def main():
                 print("\nTutti gli step completati con successo!")
             context.close()
             browser.close()
+
+    # Se siamo arrivati qui senza eccezioni propagate ma step_errors non è vuoto
+    # (caso tipico: add_seasonal_prices ha fallito ed è stato catturato), il run
+    # deve comunque diventare rosso su Actions.
+    if step_errors:
+        print(f"\n❌ RUN FALLITO: {len(step_errors)} step in errore — uscita con codice 1")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
