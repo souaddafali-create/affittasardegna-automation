@@ -6,15 +6,117 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-# --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
-)
-with open(DATA_FILE, encoding="utf-8") as _f:
-    PROP = json.load(_f)
+# --- Carica dati proprietà: Google Sheet (gspread) oppure fallback JSON locale ---
+SHEET_ID = "1pL0H0kJDvovg7w1nfF0PrFJYcR9UwLgszAoacYx6CEA"
+SHEET_NAME = "MASTER_PROPRIETÀ"
+PROPERTY_NAME = os.environ.get("PROPERTY_NAME", "")
 
-# --- Verifica dati letti dal JSON ---
-print(f"=== DATI LETTI DAL JSON ({DATA_FILE}) ===")
+
+def _parse_cell(value):
+    """Converte il valore di una cella nel tipo Python appropriato."""
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return value
+    v = value.strip()
+    if v == "":
+        return None
+    low = v.lower()
+    if low in ("true", "vero", "sì", "si"):
+        return True
+    if low in ("false", "falso", "no"):
+        return False
+    try:
+        if "." in v:
+            return float(v)
+        return int(v)
+    except ValueError:
+        pass
+    if v.startswith("[") or v.startswith("{"):
+        try:
+            return json.loads(v)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return v
+
+
+def _unflatten(flat_dict):
+    """Converte un dict con chiavi dot-notation in un dict annidato."""
+    result = {}
+    for key, value in flat_dict.items():
+        parts = key.split(".")
+        d = result
+        for part in parts[:-1]:
+            d = d.setdefault(part, {})
+        d[parts[-1]] = value
+    return result
+
+
+def _load_from_gsheet():
+    """Legge i dati proprietà dal Google Sheet MASTER_PROPRIETÀ."""
+    import gspread
+
+    creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        gc = gspread.service_account_from_dict(creds_dict)
+    elif creds_path:
+        gc = gspread.service_account(filename=creds_path)
+    else:
+        gc = gspread.service_account()
+
+    sh = gc.open_by_key(SHEET_ID)
+    ws = sh.worksheet(SHEET_NAME)
+    records = ws.get_all_records()
+
+    if not records:
+        raise RuntimeError(f"Nessun dato trovato nel foglio '{SHEET_NAME}'")
+
+    if PROPERTY_NAME:
+        row = None
+        for r in records:
+            nome = r.get("identificativi.nome_struttura", r.get("nome_struttura", ""))
+            if str(nome).strip().lower() == PROPERTY_NAME.strip().lower():
+                row = r
+                break
+        if row is None:
+            raise RuntimeError(
+                f"Proprietà '{PROPERTY_NAME}' non trovata nel foglio '{SHEET_NAME}'"
+            )
+    else:
+        row = records[0]
+
+    parsed = {k: _parse_cell(v) for k, v in row.items()}
+    prop = _unflatten(parsed)
+    print(f"  Dati caricati da Google Sheet: {SHEET_ID} / {SHEET_NAME}")
+    return prop
+
+
+def _load_from_json():
+    """Fallback: legge i dati proprietà da file JSON locale."""
+    data_file = os.environ.get(
+        "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+    )
+    with open(data_file, encoding="utf-8") as f:
+        prop = json.load(f)
+    print(f"  Dati caricati da JSON locale: {data_file}")
+    return prop
+
+
+def _load_property():
+    """Se ci sono credenziali Google usa lo Sheet, altrimenti JSON locale."""
+    creds_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    creds_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    if creds_json or creds_path:
+        return _load_from_gsheet()
+    return _load_from_json()
+
+
+PROP = _load_property()
+
+# --- Verifica dati caricati ---
+print(f"=== DATI PROPRIETÀ CARICATI ===")
 print(f"Nome: {PROP['identificativi']['nome_struttura']}")
 print(f"Tipo: {PROP['identificativi']['tipo_struttura']}")
 print(f"Indirizzo: {PROP['identificativi']['indirizzo']}")
