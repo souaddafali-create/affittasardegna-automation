@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: casevacanza-mono-ibisco
-  cancel-in-progress: true
+  group: casevacanza-global
+  cancel-in-progress: false
 
 jobs:
   upload:
