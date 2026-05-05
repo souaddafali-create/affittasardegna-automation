@@ -164,6 +164,20 @@ redirect.
 direttamente al subdomain finale. I runner CI hanno DNS più rigorosi dei
 browser desktop e non sempre seguono catene di redirect su domini "marketing".
 
+### 2026-05-05 (run #5) — ERR_NAME_NOT_RESOLVED anche su user.casevacanza.it dal runner
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #5 GitHub Actions, branch `claude/casevacanza-computer-use`, commit `d74ff06`).
+
+**Problema**: dopo il fix di run #4 (LOGIN_URL → `https://user.casevacanza.it/login`), il run #5 fallisce comunque con
+`playwright._impl._errors.Error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://user.casevacanza.it/login`.
+Da PC residenziale lo stesso URL risolve e carica il login senza problemi.
+
+**Causa accertata**: non è un problema di subdomain (come ipotizzato in run #4) ma di **IP del runner**. GitHub Actions usa range IP Azure; Cloudflare davanti a CaseVacanza/Krossbooking blocca/sinkhola le query DNS provenienti da quei range come misura anti-bot/anti-scraping. Risultato: il resolver del runner restituisce NXDOMAIN (o equivalente) per `user.casevacanza.it`, a prescindere dal subdomain scelto.
+
+**Soluzione**: **abbandonata l'esecuzione da GitHub Actions** per Computer Use CaseVacanza. Il bot va lanciato dal **PC residenziale di Souad** (Windows, IP consumer non bloccato). Istruzioni in `LOCAL_RUN.md`. I 3 fix di oggi (filtro text block vuoti, screenshot post-navigation, LOGIN_URL diretto) restano comunque validi e mergiati su main: utili per qualsiasi futura esecuzione, sia locale sia eventualmente da self-hosted runner residenziale.
+
+**Lezione**: i runner cloud condivisi (GitHub Actions, Azure, AWS Lambda, ecc.) sono spesso in blacklist sui CDN anti-bot di portali "consumer". Per scrape/automation di SaaS B2C-ish: o IP residenziale (PC locale, self-hosted runner casalingo) oppure proxy residenziale a pagamento. Non perdere tempo a ottimizzare DNS/User-Agent quando il problema è l'ASN.
+
 ---
 
 ## Quirk noti dei portali
