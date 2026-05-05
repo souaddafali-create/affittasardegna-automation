@@ -117,6 +117,27 @@ Più wait 600ms post-click. Commit `4aa5224` su PR #67.
 
 PR #68. `casevacanza_uploader.py` resta come fallback finché Computer Use non ha 1-2 settimane di stabilità in produzione.
 
+### 2026-05-05 — DNS ERR_NAME_NOT_RESOLVED su www.casevacanza.it dal runner
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #4 GitHub Actions).
+
+**Problema**: l'agente Computer Use fallisce al primo `Page.goto` con
+`playwright._impl._errors.Error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.casevacanza.it/login`.
+Da browser normale lo stesso URL fa 301 redirect a `user.casevacanza.it/login`
+e funziona; dal runner GitHub Actions invece il resolver non risolve `www`.
+
+**Causa accertata**: il DNS resolver del runner GitHub Actions non gestisce il
+subdomain `www.casevacanza.it`. Solo `user.casevacanza.it` (dominio reale del
+portale gestori, target del 301) è risolvibile in quell'ambiente.
+
+**Soluzione**: introdotta costante `LOGIN_URL = "https://user.casevacanza.it/login"`
+in `casevacanza_computer_use.py` e referenziata nel prompt iniziale, così
+l'agente digita direttamente il dominio risolvibile e salta il redirect.
+
+**Lezione**: per qualsiasi portale con redirect `www → subdomain`, puntare
+direttamente al subdomain finale. I runner CI hanno DNS più rigorosi dei
+browser desktop e non sempre seguono catene di redirect su domini "marketing".
+
 ---
 
 ## Quirk noti dei portali

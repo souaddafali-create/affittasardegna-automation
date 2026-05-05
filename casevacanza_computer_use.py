@@ -33,6 +33,8 @@ SCREENSHOT_DIR = Path("screenshots")
 MODEL = "claude-sonnet-4-6"  # 'claude-sonnet-4-7' non esiste; questo è l'ultimo Sonnet
 MAX_TURNS = 200  # cintura di sicurezza contro loop costosi
 COMPUTER_BETA = "computer-use-2025-01-24"
+# www.casevacanza.it non risolve dal runner GitHub Actions (vedi BOT_MEMORY 2026-05-05).
+LOGIN_URL = "https://user.casevacanza.it/login"
 
 # --- Carica dati proprietà ---
 data_file = sys.argv[1] if len(sys.argv) > 1 else "Casa_Adelasia_A_DATI.json"
@@ -198,7 +200,7 @@ def _summary_for_log(prop: dict) -> str:
 
 
 initial_screenshot = screenshot_b64()
-initial_text = f"""Devi pubblicare questa proprietà su https://my.casevacanza.it.
+initial_text = f"""Devi pubblicare questa proprietà su {LOGIN_URL}.
 
 CREDENZIALI:
 - Email: {CV_EMAIL}
@@ -211,7 +213,7 @@ DATI PROPRIETÀ ({_summary_for_log(PROP)}):
 ```
 
 PROCEDURA:
-1. Vai su https://my.casevacanza.it (digita l'URL nella barra indirizzi del browser).
+1. Vai su {LOGIN_URL} (digita ESATTAMENTE questo URL nella barra indirizzi del browser — NON usare www.casevacanza.it perché non risolve dal runner).
 2. Login con le credenziali sopra.
 3. Naviga al wizard "Aggiungi proprietà" / "Aggiungi un alloggio".
 4. Compila ogni step usando SOLO i dati dal JSON:
