@@ -117,7 +117,7 @@ Più wait 600ms post-click. Commit `4aa5224` su PR #67.
 
 PR #68. `casevacanza_uploader.py` resta come fallback finché Computer Use non ha 1-2 settimane di stabilità in produzione.
 
-### 2026-05-05 — Screenshot iniziale Computer Use fallisce su about:blank
+### 2026-05-05 (run #3) — Screenshot iniziale Computer Use fallisce su about:blank
 
 **Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #3 del workflow `upload_cu_casa_adelasia_a.yml`, branch `claude/casevacanza-computer-use`, commit `da4355d`).
 
@@ -137,9 +137,32 @@ Artifact `screenshots/` vuoto perché il primo `save_screenshot` è dentro il lo
 
 **Causa accertata**: il browser era ancora su `about:blank` (riga `page.goto("about:blank")`) al momento del primo screenshot. Chromium su xvfb in CI non riesce a fare `captureScreenshot` su `about:blank` in modo affidabile — il protocollo CDP fallisce dopo il "fonts loaded" senza un DOM reale.
 
-**Soluzione**: prima del primo screenshot navighiamo a `LOGIN_URL = "https://www.casevacanza.it/login"` (301 → `user.casevacanza.it/login`) con `wait_until="domcontentloaded"` + `wait_for_load_state("networkidle", timeout=10s)` best-effort + `time.sleep(1.5)` di settling. Lo screenshot iniziale è inoltre wrappato in retry (3 tentativi, sleep 2s tra uno e l'altro) con messaggio di errore esplicito se tutti falliscono. Commit di fix sul branch `claude/casevacanza-computer-use`.
+**Soluzione**: prima del primo screenshot navighiamo a `LOGIN_URL` con `wait_until="domcontentloaded"` + `wait_for_load_state("networkidle", timeout=10s)` best-effort + `time.sleep(1.5)` di settling. Lo screenshot iniziale è inoltre wrappato in retry (3 tentativi, sleep 2s tra uno e l'altro) con messaggio di errore esplicito se tutti falliscono. Commit `53f4d1e` sul branch `claude/casevacanza-computer-use`. Nota: `LOGIN_URL` puntava inizialmente a `https://www.casevacanza.it/login` (301 → user); poi cambiato a `https://user.casevacanza.it/login` per il bug DNS sotto.
 
 **Lezione**: con xvfb + Chromium headed mode, mai chiamare `page.screenshot()` su `about:blank`. Navigare sempre a una pagina reale prima del primo screenshot, anche solo come "warm-up" del compositor.
+
+### 2026-05-05 (run #4) — DNS ERR_NAME_NOT_RESOLVED su www.casevacanza.it dal runner
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #4 GitHub Actions).
+
+**Problema**: l'agente Computer Use fallisce al primo `Page.goto` con
+`playwright._impl._errors.Error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.casevacanza.it/login`.
+Da browser normale lo stesso URL fa 301 redirect a `user.casevacanza.it/login`
+e funziona; dal runner GitHub Actions invece il resolver non risolve `www`.
+
+**Causa accertata**: il DNS resolver del runner GitHub Actions non gestisce il
+subdomain `www.casevacanza.it`. Solo `user.casevacanza.it` (dominio reale del
+portale gestori, target del 301) è risolvibile in quell'ambiente.
+
+**Soluzione**: cambiata la costante `LOGIN_URL` in
+`casevacanza_computer_use.py` da `https://www.casevacanza.it/login` a
+`https://user.casevacanza.it/login`. Il prompt iniziale già la referenziava,
+quindi l'agente ora digita direttamente il dominio risolvibile e salta il
+redirect.
+
+**Lezione**: per qualsiasi portale con redirect `www → subdomain`, puntare
+direttamente al subdomain finale. I runner CI hanno DNS più rigorosi dei
+browser desktop e non sempre seguono catene di redirect su domini "marketing".
 
 ---
 
