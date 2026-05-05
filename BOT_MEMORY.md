@@ -117,6 +117,30 @@ Più wait 600ms post-click. Commit `4aa5224` su PR #67.
 
 PR #68. `casevacanza_uploader.py` resta come fallback finché Computer Use non ha 1-2 settimane di stabilità in produzione.
 
+### 2026-05-05 — Screenshot iniziale Computer Use fallisce su about:blank
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #3 del workflow `upload_cu_casa_adelasia_a.yml`, branch `claude/casevacanza-computer-use`, commit `da4355d`).
+
+**Problema**: lo script crashava in 44s, prima ancora di entrare nel loop dell'agent. Stack trace:
+```
+File "casevacanza_computer_use.py", line 200, in <module>
+    initial_screenshot = screenshot_b64()
+...
+playwright._impl._errors.Error: Page.screenshot: Protocol error
+(Page.captureScreenshot): Unable to capture screenshot
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+```
+Artifact `screenshots/` vuoto perché il primo `save_screenshot` è dentro il loop, mai raggiunto.
+
+**Causa accertata**: il browser era ancora su `about:blank` (riga `page.goto("about:blank")`) al momento del primo screenshot. Chromium su xvfb in CI non riesce a fare `captureScreenshot` su `about:blank` in modo affidabile — il protocollo CDP fallisce dopo il "fonts loaded" senza un DOM reale.
+
+**Soluzione**: prima del primo screenshot navighiamo a `LOGIN_URL = "https://www.casevacanza.it/login"` (301 → `user.casevacanza.it/login`) con `wait_until="domcontentloaded"` + `wait_for_load_state("networkidle", timeout=10s)` best-effort + `time.sleep(1.5)` di settling. Lo screenshot iniziale è inoltre wrappato in retry (3 tentativi, sleep 2s tra uno e l'altro) con messaggio di errore esplicito se tutti falliscono. Commit di fix sul branch `claude/casevacanza-computer-use`.
+
+**Lezione**: con xvfb + Chromium headed mode, mai chiamare `page.screenshot()` su `about:blank`. Navigare sempre a una pagina reale prima del primo screenshot, anche solo come "warm-up" del compositor.
+
 ---
 
 ## Quirk noti dei portali
