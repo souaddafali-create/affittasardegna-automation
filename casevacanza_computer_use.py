@@ -263,8 +263,36 @@ step_idx = 0
 total_input_tokens = 0
 total_output_tokens = 0
 
+
+def _describe_block(block) -> str:
+    """Riassume un content block per debug (solo type + lunghezze, no contenuto)."""
+    btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+    if btype == "text":
+        text = block.get("text", "") if isinstance(block, dict) else getattr(block, "text", "")
+        return f"text(len={len(text or '')})"
+    if btype == "image":
+        return "image"
+    if btype == "tool_use":
+        inp = block.get("input", {}) if isinstance(block, dict) else getattr(block, "input", {})
+        return f"tool_use(input_keys={len(inp or {})})"
+    if btype == "tool_result":
+        sub = block.get("content", []) if isinstance(block, dict) else getattr(block, "content", [])
+        return f"tool_result(blocks={len(sub) if isinstance(sub, list) else 1})"
+    return str(btype)
+
+
 try:
     for turn in range(1, MAX_TURNS + 1):
+        # Debug: struttura content blocks dell'ultimo message prima della chiamata API
+        if messages:
+            _last = messages[-1]
+            _content = _last.get("content", [])
+            if isinstance(_content, list):
+                _structure = [_describe_block(b) for b in _content]
+            else:
+                _structure = [f"raw({type(_content).__name__})"]
+            print(f"  [debug] turn {turn} last_msg role={_last.get('role')} blocks={_structure}")
+
         response = client.beta.messages.create(
             model=MODEL,
             max_tokens=4096,
@@ -293,8 +321,16 @@ try:
             print(f"\n⚠️ Stop reason inatteso: {response.stop_reason}. Esco.")
             break
 
-        # Re-invia tutto il content come parte della history (preserva tool_use blocks)
-        messages.append({"role": "assistant", "content": response.content})
+        # Re-invia tutto il content come parte della history (preserva tool_use blocks).
+        # Filtra i text block vuoti: l'API Anthropic rifiuta {"type":"text","text":""}.
+        filtered_content = [
+            block for block in response.content
+            if not (block.type == "text" and not (block.text or "").strip())
+        ]
+        if not filtered_content:
+            print("⚠️ Agent ha restituito messaggio vuoto, stop loop")
+            break
+        messages.append({"role": "assistant", "content": filtered_content})
 
         # Esegui ogni tool_use e raccogli i tool_result
         tool_results = []
