@@ -1,0 +1,51 @@
+name: CaseVacanza CU - Casa Adelasia A
+# Agente Claude Computer Use che pilota il browser leggendo lo schermo come un umano.
+# Sostituisce casevacanza_uploader.py (Playwright scriptato, fragile).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: casevacanza-global
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: Default
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+
+      - name: Install dependencies
+        run: |
+          pip install playwright anthropic
+          playwright install chromium --with-deps
+
+      - name: Run Computer Use agent (Casa Adelasia A)
+        env:
+          CV_EMAIL: ${{ secrets.CV_EMAIL }}
+          CV_PASSWORD: ${{ secrets.CV_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: xvfb-run --server-args="-screen 0 1280x800x24" python casevacanza_computer_use.py Casa_Adelasia_A_DATI.json
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cu-casa-adelasia-a-screenshots
+          path: screenshots/
+          retention-days: 7
