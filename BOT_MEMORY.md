@@ -117,6 +117,67 @@ Più wait 600ms post-click. Commit `4aa5224` su PR #67.
 
 PR #68. `casevacanza_uploader.py` resta come fallback finché Computer Use non ha 1-2 settimane di stabilità in produzione.
 
+### 2026-05-05 (run #3) — Screenshot iniziale Computer Use fallisce su about:blank
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #3 del workflow `upload_cu_casa_adelasia_a.yml`, branch `claude/casevacanza-computer-use`, commit `da4355d`).
+
+**Problema**: lo script crashava in 44s, prima ancora di entrare nel loop dell'agent. Stack trace:
+```
+File "casevacanza_computer_use.py", line 200, in <module>
+    initial_screenshot = screenshot_b64()
+...
+playwright._impl._errors.Error: Page.screenshot: Protocol error
+(Page.captureScreenshot): Unable to capture screenshot
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+```
+Artifact `screenshots/` vuoto perché il primo `save_screenshot` è dentro il loop, mai raggiunto.
+
+**Causa accertata**: il browser era ancora su `about:blank` (riga `page.goto("about:blank")`) al momento del primo screenshot. Chromium su xvfb in CI non riesce a fare `captureScreenshot` su `about:blank` in modo affidabile — il protocollo CDP fallisce dopo il "fonts loaded" senza un DOM reale.
+
+**Soluzione**: prima del primo screenshot navighiamo a `LOGIN_URL` con `wait_until="domcontentloaded"` + `wait_for_load_state("networkidle", timeout=10s)` best-effort + `time.sleep(1.5)` di settling. Lo screenshot iniziale è inoltre wrappato in retry (3 tentativi, sleep 2s tra uno e l'altro) con messaggio di errore esplicito se tutti falliscono. Commit `53f4d1e` sul branch `claude/casevacanza-computer-use`. Nota: `LOGIN_URL` puntava inizialmente a `https://www.casevacanza.it/login` (301 → user); poi cambiato a `https://user.casevacanza.it/login` per il bug DNS sotto.
+
+**Lezione**: con xvfb + Chromium headed mode, mai chiamare `page.screenshot()` su `about:blank`. Navigare sempre a una pagina reale prima del primo screenshot, anche solo come "warm-up" del compositor.
+
+### 2026-05-05 (run #4) — DNS ERR_NAME_NOT_RESOLVED su www.casevacanza.it dal runner
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #4 GitHub Actions).
+
+**Problema**: l'agente Computer Use fallisce al primo `Page.goto` con
+`playwright._impl._errors.Error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.casevacanza.it/login`.
+Da browser normale lo stesso URL fa 301 redirect a `user.casevacanza.it/login`
+e funziona; dal runner GitHub Actions invece il resolver non risolve `www`.
+
+**Causa accertata**: il DNS resolver del runner GitHub Actions non gestisce il
+subdomain `www.casevacanza.it`. Solo `user.casevacanza.it` (dominio reale del
+portale gestori, target del 301) è risolvibile in quell'ambiente.
+
+**Soluzione**: cambiata la costante `LOGIN_URL` in
+`casevacanza_computer_use.py` da `https://www.casevacanza.it/login` a
+`https://user.casevacanza.it/login`. Il prompt iniziale già la referenziava,
+quindi l'agente ora digita direttamente il dominio risolvibile e salta il
+redirect.
+
+**Lezione**: per qualsiasi portale con redirect `www → subdomain`, puntare
+direttamente al subdomain finale. I runner CI hanno DNS più rigorosi dei
+browser desktop e non sempre seguono catene di redirect su domini "marketing".
+
+### 2026-05-05 (run #5) — ERR_NAME_NOT_RESOLVED anche su user.casevacanza.it dal runner
+
+**Bot**: `casevacanza_computer_use.py`. **Proprietà**: Casa Adelasia A (run #5 GitHub Actions, branch `claude/casevacanza-computer-use`, commit `d74ff06`).
+
+**Problema**: dopo il fix di run #4 (LOGIN_URL → `https://user.casevacanza.it/login`), il run #5 fallisce comunque con
+`playwright._impl._errors.Error: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://user.casevacanza.it/login`.
+Da PC residenziale lo stesso URL risolve e carica il login senza problemi.
+
+**Causa accertata**: non è un problema di subdomain (come ipotizzato in run #4) ma di **IP del runner**. GitHub Actions usa range IP Azure; Cloudflare davanti a CaseVacanza/Krossbooking blocca/sinkhola le query DNS provenienti da quei range come misura anti-bot/anti-scraping. Risultato: il resolver del runner restituisce NXDOMAIN (o equivalente) per `user.casevacanza.it`, a prescindere dal subdomain scelto.
+
+**Soluzione**: **abbandonata l'esecuzione da GitHub Actions** per Computer Use CaseVacanza. Il bot va lanciato dal **PC residenziale di Souad** (Windows, IP consumer non bloccato). Istruzioni in `LOCAL_RUN.md`. I 3 fix di oggi (filtro text block vuoti, screenshot post-navigation, LOGIN_URL diretto) restano comunque validi e mergiati su main: utili per qualsiasi futura esecuzione, sia locale sia eventualmente da self-hosted runner residenziale.
+
+**Lezione**: i runner cloud condivisi (GitHub Actions, Azure, AWS Lambda, ecc.) sono spesso in blacklist sui CDN anti-bot di portali "consumer". Per scrape/automation di SaaS B2C-ish: o IP residenziale (PC locale, self-hosted runner casalingo) oppure proxy residenziale a pagamento. Non perdere tempo a ottimizzare DNS/User-Agent quando il problema è l'ASN.
+
 ---
 
 ## Quirk noti dei portali

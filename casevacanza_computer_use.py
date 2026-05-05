@@ -33,6 +33,8 @@ SCREENSHOT_DIR = Path("screenshots")
 MODEL = "claude-sonnet-4-6"  # 'claude-sonnet-4-7' non esiste; questo è l'ultimo Sonnet
 MAX_TURNS = 200  # cintura di sicurezza contro loop costosi
 COMPUTER_BETA = "computer-use-2025-01-24"
+# www.casevacanza.it non risolve dal runner GitHub Actions (vedi BOT_MEMORY 2026-05-05).
+LOGIN_URL = "https://user.casevacanza.it/login"
 
 # --- Carica dati proprietà ---
 data_file = sys.argv[1] if len(sys.argv) > 1 else "Casa_Adelasia_A_DATI.json"
@@ -61,8 +63,16 @@ context = browser.new_context(viewport={"width": SCREEN_W, "height": SCREEN_H})
 page = context.new_page()
 page.set_default_timeout(30_000)
 
-# Pagina di partenza: blank, poi sarà l'agente a navigare
-page.goto("about:blank")
+# Pagina di partenza: navighiamo subito alla login per avere un DOM reale
+# (about:blank fa fallire Page.captureScreenshot — visto in run #3 del 05/05/2026).
+print(f"🌐 Navigazione a {LOGIN_URL}...")
+page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30_000)
+try:
+    page.wait_for_load_state("networkidle", timeout=10_000)
+except Exception:
+    pass  # networkidle è best-effort, non bloccare se non arriva
+print("✅ Pagina caricata, attendo settling...")
+time.sleep(1.5)
 
 
 # --- Helper: screenshot e salvataggio ---
@@ -197,8 +207,20 @@ def _summary_for_log(prop: dict) -> str:
     )
 
 
-initial_screenshot = screenshot_b64()
-initial_text = f"""Devi pubblicare questa proprietà su https://my.casevacanza.it.
+initial_screenshot = None
+for _attempt in range(1, 4):
+    try:
+        initial_screenshot = screenshot_b64()
+        break
+    except Exception as exc:
+        print(f"⚠️ Screenshot iniziale tentativo {_attempt}/3 fallito: {exc}")
+        if _attempt == 3:
+            raise RuntimeError(
+                f"❌ Impossibile catturare screenshot iniziale dopo 3 tentativi su URL {LOGIN_URL}"
+            ) from exc
+        time.sleep(2)
+print(f"📸 Screenshot iniziale catturato ({len(initial_screenshot)} bytes base64)")
+initial_text = f"""Devi pubblicare questa proprietà su {LOGIN_URL}.
 
 CREDENZIALI:
 - Email: {CV_EMAIL}
@@ -211,7 +233,7 @@ DATI PROPRIETÀ ({_summary_for_log(PROP)}):
 ```
 
 PROCEDURA:
-1. Vai su https://my.casevacanza.it (digita l'URL nella barra indirizzi del browser).
+1. Vai su {LOGIN_URL} (digita ESATTAMENTE questo URL nella barra indirizzi del browser — NON usare www.casevacanza.it perché non risolve dal runner).
 2. Login con le credenziali sopra.
 3. Naviga al wizard "Aggiungi proprietà" / "Aggiungi un alloggio".
 4. Compila ogni step usando SOLO i dati dal JSON:
