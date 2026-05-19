@@ -25,13 +25,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright playwright-stealth
+          pip install -r requirements.txt
           playwright install chromium --with-deps
 
       - name: Run Booking uploader
         env:
           BK_EMAIL: ${{ secrets.BK_EMAIL }}
           BK_PASSWORD: ${{ secrets.BK_PASSWORD }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: xvfb-run python booking_uploader.py
 
       - name: Upload debug artifacts

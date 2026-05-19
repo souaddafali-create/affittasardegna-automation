@@ -32,16 +32,17 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium
 
-      - name: Install Playwright
+      - name: Install dependencies
         run: |
-          pip install playwright Pillow
+          pip install -r requirements.txt
           playwright install chromium --with-deps
 
       - name: Run uploader (Villa La Vela)
         env:
           CASEVACANZA_EMAIL: ${{ secrets.CASEVACANZA_EMAIL }}
           CASEVACANZA_PASSWORD: ${{ secrets.CASEVACANZA_PASSWORD }}
-          PROPERTY_DATA: Villa_La_Vela_DATI.json
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          PROPERTY_NAME: Villa La Vela
         run: xvfb-run python casevacanza_uploader.py
 
       - name: Upload debug artifacts
