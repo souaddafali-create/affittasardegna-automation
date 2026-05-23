@@ -2,9 +2,21 @@ import json
 import os
 import re
 import tempfile
+import time
 import urllib.request
 
 from playwright.sync_api import sync_playwright
+
+
+CDN_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://book.affittasardegna.it/",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+}
 
 # --- Carica dati proprietà dal file JSON ---
 DATA_FILE = os.environ.get(
@@ -282,9 +294,16 @@ def click_save_and_verify(page, step_name):
     return advanced
 
 
+def _download_with_headers(url, path):
+    req = urllib.request.Request(url, headers=CDN_HEADERS)
+    with urllib.request.urlopen(req, timeout=30) as resp, open(path, "wb") as out:
+        out.write(resp.read())
+
+
 def download_photos_from_urls(urls):
     """Scarica foto dagli URL CDN (es. Krossbooking) in cartella temporanea.
 
+    Usa header browser-like per evitare HTTP 403 da CDN hot-link-protetti.
     Ritorna la lista dei path locali scaricati con successo, oppure [] se
     nessun URL è disponibile / tutti i download falliscono.
     """
@@ -296,11 +315,12 @@ def download_photos_from_urls(urls):
         ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
         path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
         try:
-            urllib.request.urlretrieve(url, path)
+            _download_with_headers(url, path)
             paths.append(path)
             print(f"  Foto scaricata: {path} <- {url}")
         except Exception as e:
             print(f"  ATTENZIONE: download fallito per {url}: {e}")
+        time.sleep(0.5)
     return paths
 
 
@@ -344,7 +364,7 @@ def _generate_placeholder_jpeg(path, width, height, color_index=0):
         img = Image.new("RGB", (width, height), color)
         img.save(path, "JPEG", quality=85)
     except ImportError:
-        urllib.request.urlretrieve(f"https://picsum.photos/{width}/{height}?random={color_index + 1}", path)
+        _download_with_headers(f"https://picsum.photos/{width}/{height}?random={color_index + 1}", path)
 
 
 def calculate_base_price():

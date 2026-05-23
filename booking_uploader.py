@@ -8,6 +8,23 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
+
+CDN_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://book.affittasardegna.it/",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+}
+
+
+def _download_with_headers(url, path):
+    req = urllib.request.Request(url, headers=CDN_HEADERS)
+    with urllib.request.urlopen(req, timeout=30) as resp, open(path, "wb") as out:
+        out.write(resp.read())
+
 # Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
 INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
 
@@ -86,11 +103,12 @@ def download_photos_from_urls(urls, fallback_count=5):
             ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
             path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
             try:
-                urllib.request.urlretrieve(url, path)
+                _download_with_headers(url, path)
                 paths.append(path)
                 print(f"  Foto scaricata: {path} <- {url}")
             except Exception as e:
                 print(f"  ATTENZIONE: download fallito per {url}: {e}")
+            time.sleep(0.5)
         if paths:
             return paths
         print("  ATTENZIONE: nessuna foto scaricata dagli URL forniti, uso placeholder.")
@@ -100,7 +118,7 @@ def download_photos_from_urls(urls, fallback_count=5):
     for i in range(fallback_count):
         path = os.path.join(tmp_dir, f"placeholder_{i+1}.jpg")
         try:
-            urllib.request.urlretrieve(
+            _download_with_headers(
                 f"https://picsum.photos/800/600?random={i+1}", path
             )
             paths.append(path)
