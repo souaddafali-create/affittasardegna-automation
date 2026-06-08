@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import random
 import sys
 import tempfile
@@ -8,18 +9,33 @@ import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-# Modalità interattiva: se il terminale è un TTY o se INTERACTIVE=1
-INTERACTIVE = sys.stdin.isatty() or os.environ.get("INTERACTIVE", "") == "1"
+# ---------------------------------------------------------------------------
+# Modalità interattiva: TTY, INTERACTIVE=1, oppure Windows (locale).
+# Su Windows è SEMPRE interattivo (browser visibile, OTP/CAPTCHA manuali).
+# ---------------------------------------------------------------------------
+INTERACTIVE = (
+    sys.stdin.isatty()
+    or os.environ.get("INTERACTIVE", "") == "1"
+    or (platform.system() == "Windows" and os.environ.get("CI") is None)
+)
 
 # --- Carica dati proprietà dal file JSON ---
-DATA_FILE = os.environ.get(
-    "PROPERTY_DATA", os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
-)
+# Supporta: PROPERTY_DATA env, argomento CLI, o default Il_Faro_Badesi_DATI.json
+if len(sys.argv) > 1 and sys.argv[1].endswith(".json"):
+    DATA_FILE = sys.argv[1]
+elif os.environ.get("PROPERTY_DATA"):
+    DATA_FILE = os.environ["PROPERTY_DATA"]
+else:
+    DATA_FILE = os.path.join(os.path.dirname(__file__), "Il_Faro_Badesi_DATI.json")
+
 with open(DATA_FILE, encoding="utf-8") as _f:
     PROP = json.load(_f)
 
-EMAIL = os.environ["BK_EMAIL"]
-PASSWORD = os.environ["BK_PASSWORD"]
+print(f"Proprietà: {PROP['identificativi']['nome_struttura']} (da {DATA_FILE})")
+
+# Credenziali opzionali con --skip-login
+EMAIL = os.environ.get("BK_EMAIL", "")
+PASSWORD = os.environ.get("BK_PASSWORD", "")
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -62,14 +78,30 @@ def human_type(page, selector, text):
     time.sleep(random.uniform(0.2, 0.5))
 
 
+def click_continua(page):
+    """Clicca il pulsante Continua/Continue/Avanti/Next."""
+    for txt in ["Continua", "Continue", "Avanti", "Next"]:
+        try:
+            btn = page.get_by_text(txt, exact=True)
+            if btn.count() > 0:
+                btn.first.click()
+                print(f"  Click: {txt}")
+                return
+        except Exception:
+            continue
+    print("  Pulsante Continua non trovato")
+
+
 def try_step(page, step_name, func):
     try:
         func()
         print(f"  OK: {step_name}")
     except Exception as e:
-        print(f"  ERRORE in {step_name}: {e}")
+        print(f"\n  *** ERRORE in {step_name}: {e} ***")
         screenshot(page, f"errore_{step_name}")
         save_html(page, f"errore_{step_name}")
+        if INTERACTIVE:
+            input(f"\n>>> ERRORE in {step_name}. Guarda il browser, poi premi INVIO per continuare... ")
 
 
 def download_photos_from_urls(urls, fallback_count=5):
@@ -113,7 +145,6 @@ def download_photos_from_urls(urls, fallback_count=5):
 # ---------------------------------------------------------------------------
 # Booking Extranet: mappatura dotazioni
 # REGOLA: spunta SOLO le dotazioni con valore true nel JSON.
-#         Se false o assente, NON spuntare. Zero eccezioni.
 # ---------------------------------------------------------------------------
 
 DOTAZIONI_BOOKING = {
@@ -158,36 +189,29 @@ SERVIZI = _build_servizi_booking()
 
 
 # ---------------------------------------------------------------------------
-# Login Booking Extranet
+# CAPTCHA e OTP — sempre con pausa manuale interattiva
 # ---------------------------------------------------------------------------
 
-def _wait_for_interactive(page, prompt_msg, check_done_fn, timeout_s=300):
-    """Pausa interattiva: chiede input da terminale oppure aspetta che l'utente
-    agisca direttamente sul browser (modalità headless=False).
-
-    - Se INTERACTIVE: mostra un prompt e attende INVIO.
-    - Altrimenti (CI): attende fino a ``timeout_s`` che ``check_done_fn(page)``
-      restituisca True (polling ogni 5s), poi fallisce.
-    """
-    if INTERACTIVE:
-        input(f"\n>>> {prompt_msg}\n>>> Premi INVIO quando hai finito... ")
-    else:
-        deadline = time.time() + timeout_s
-        while time.time() < deadline:
-            if check_done_fn(page):
-                return
-            time.sleep(5)
-        raise TimeoutError(f"Timeout ({timeout_s}s) in attesa di: {prompt_msg}")
-
-
-def _has_password_field(page):
-    """Restituisce True se nella pagina c'è un campo password visibile."""
-    return page.locator('input[type="password"]:visible').count() > 0
-
-
 def _page_has_captcha(page):
+    """Rileva CAPTCHA reali. Evita falsi positivi da testo generico."""
+    # Cerca iframe o elementi CAPTCHA specifici (reCAPTCHA, hCaptcha, Arkose)
+    captcha_iframes = page.locator(
+        "iframe[src*='captcha'], iframe[src*='recaptcha'], "
+        "iframe[src*='hcaptcha'], iframe[src*='arkoselabs'], "
+        "iframe[title*='captcha' i]"
+    ).count()
+    if captcha_iframes > 0:
+        return True
+    # Cerca div/elementi CAPTCHA noti
+    captcha_els = page.locator(
+        ".g-recaptcha, .h-captcha, #captcha, [data-captcha], "
+        "[class*='captcha' i], #challenge"
+    ).count()
+    if captcha_els > 0:
+        return True
+    # Fallback testo — solo "captcha" (NON "human" che causa falsi positivi)
     html = page.content().lower()
-    return "captcha" in html or "human" in html or "choose all" in html
+    return "choose all" in html and "images" in html
 
 
 def _page_has_otp(page):
@@ -203,118 +227,212 @@ def _page_has_otp(page):
     return has_keyword and has_otp_input
 
 
-def login(page):
-    """Accesso a Booking Extranet con supporto OTP e CAPTCHA interattivi."""
-    print("Login Booking Extranet...")
+def _handle_captcha(page, label=""):
+    """Controlla e gestisce CAPTCHA se presente — SEMPRE pausa manuale."""
+    if not _page_has_captcha(page):
+        return
+    tag = f" ({label})" if label else ""
+    print(f"\n  *** CAPTCHA RILEVATO{tag} ***")
+    screenshot(page, f"captcha_{label or 'generic'}")
+    save_html(page, f"captcha_{label or 'generic'}")
     if INTERACTIVE:
-        print("  (modalità interattiva — il browser si aprirà visibile)")
-    page.goto("https://account.booking.com/sign-in", wait_until="networkidle", timeout=30_000)
-    wait(page, 3000)
-    screenshot(page, "login_page")
+        input(f">>> CAPTCHA rilevato{tag}! Risolvilo nel browser, poi premi INVIO... ")
+        print("  CAPTCHA superato.")
+        screenshot(page, f"captcha_superato_{label or 'generic'}")
+        wait(page, 3000)
+    else:
+        raise RuntimeError(f"CAPTCHA rilevato{tag}. Eseguire in locale con INTERACTIVE=1.")
+
+
+def _handle_otp(page, label=""):
+    """Controlla e gestisce OTP — SEMPRE pausa manuale."""
+    if not _page_has_otp(page):
+        return
+    tag = f" ({label})" if label else ""
+    print(f"\n  *** CODICE DI VERIFICA EMAIL RICHIESTO{tag} ***")
+    screenshot(page, f"otp_richiesto_{label}")
+    save_html(page, f"otp_pagina_{label}")
+    if INTERACTIVE:
+        input(">>> Inserisci il codice di verifica nel BROWSER, poi premi INVIO... ")
+        print("  OTP completato.")
+        wait(page, 5000)
+        screenshot(page, f"dopo_otp_{label}")
+    else:
+        raise RuntimeError(
+            "Booking richiede un codice di verifica email. "
+            "Eseguire in locale con INTERACTIVE=1."
+        )
+
+
+def _dismiss_cookie_banner(page):
+    """Chiude il banner cookie se presente."""
+    for label in ["Accept", "Accetta", "Decline", "Rifiuta"]:
+        try:
+            btn = page.get_by_text(label, exact=True)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                print(f"  Cookie banner chiuso ('{label}')")
+                wait(page, 1000)
+                return
+        except Exception:
+            continue
+
+
+# ---------------------------------------------------------------------------
+# Login Booking — riscritto da zero
+# ---------------------------------------------------------------------------
+
+def login(page):
+    """Accesso a Booking.com — ogni passaggio ha try/except con pausa manuale.
+
+    Se qualcosa fallisce, lo script NON crasha: fa screenshot e chiede
+    all'utente di intervenire manualmente nel browser.
+    """
+    print("\n=== LOGIN BOOKING ===")
+    if INTERACTIVE:
+        print("  Modalità INTERATTIVA — browser visibile")
+
+    # ── Pagina di login ──
+    print("  Navigo alla pagina di login...")
+    page.goto("https://account.booking.com/sign-in",
+              wait_until="domcontentloaded", timeout=120_000)
+    wait(page, 5000)
+    screenshot(page, "login_pagina")
+    print(f"  URL: {page.url}")
+
+    # ── Cookie banner ──
+    _dismiss_cookie_banner(page)
+
+    # ── CAPTCHA pre-email ──
+    _handle_captcha(page, "pre_email")
 
     # ── Email ──
     email_sel = 'input[type="email"], input[name="loginname"], #loginname'
-    page.wait_for_selector(email_sel, timeout=15_000)
-    human_type(page, email_sel, EMAIL)
-    wait(page, 1000)
-    screenshot(page, "email_inserita")
+    try:
+        page.wait_for_selector(email_sel, timeout=30_000)
+        human_type(page, email_sel, EMAIL)
+        wait(page, 1000)
+        screenshot(page, "email_inserita")
 
-    # Click continua
-    page.click('button[type="submit"]', timeout=10_000)
-    wait(page, 5000)
-    screenshot(page, "dopo_email")
-
-    # ── CAPTCHA ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO ***")
-        screenshot(page, "captcha")
-        save_html(page, "captcha")
-        _wait_for_interactive(
-            page,
-            "CAPTCHA rilevato! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        print("  CAPTCHA superato.")
-        screenshot(page, "captcha_superato")
-        wait(page, 3000)
-
-    # ── Codice di verifica email (OTP) ──
-    if _page_has_otp(page):
-        print("  *** CODICE DI VERIFICA EMAIL RICHIESTO ***")
-        screenshot(page, "otp_richiesto")
-        save_html(page, "otp_pagina")
-
+        # Click submit
+        page.click('button[type="submit"]', timeout=120_000)
+        wait(page, 5000)
+        screenshot(page, "dopo_email")
+    except Exception as e:
+        print(f"  Campo email non trovato: {e}")
+        screenshot(page, "email_non_trovata")
+        save_html(page, "email_non_trovata")
         if INTERACTIVE:
-            code = input("\n>>> Inserisci il codice di verifica ricevuto via email: ").strip()
-            # Trova il campo OTP e compila
-            otp_sel = (
-                "input[name*='otp'], input[name*='code'], input[name*='pin'], "
-                "input[name*='token'], input[type='tel'], "
-                "input[autocomplete='one-time-code']"
-            )
-            otp_field = page.locator(otp_sel).first
-            otp_field.fill(code)
-            wait(page, 1000)
-            screenshot(page, "otp_inserito")
-
-            # Submit OTP
-            page.click('button[type="submit"]', timeout=10_000)
-            wait(page, 5000)
-            screenshot(page, "dopo_otp")
-            print("  Codice di verifica inviato.")
+            input("\n>>> Campo email non trovato. Inserisci email e clicca Continua nel browser, poi premi INVIO... ")
+            screenshot(page, "dopo_email_manuale")
         else:
-            # In CI non possiamo chiedere input — fallisce
-            raise RuntimeError(
-                "Booking richiede un codice di verifica email. "
-                "Eseguire lo script in locale con INTERACTIVE=1."
-            )
-    else:
-        print("  Nessun OTP richiesto, procedo.")
+            raise
 
-    # ── Secondo CAPTCHA (possibile dopo OTP) ──
-    if _page_has_captcha(page):
-        print("  *** CAPTCHA RILEVATO (post-OTP) ***")
-        screenshot(page, "captcha_post_otp")
-        _wait_for_interactive(
-            page,
-            "Secondo CAPTCHA! Risolvilo nel browser.",
-            lambda p: not _page_has_captcha(p),
-        )
-        wait(page, 3000)
+    # ── CAPTCHA post-email ──
+    _handle_captcha(page, "post_email")
+
+    # ── OTP (codice verifica email) ──
+    _handle_otp(page, "pre_password")
+
+    # ── CAPTCHA post-OTP ──
+    _handle_captcha(page, "post_otp")
 
     # ── Password ──
     pw_sel = 'input[type="password"], input[name="password"], #password'
     try:
-        page.wait_for_selector(pw_sel, timeout=15_000)
+        page.wait_for_selector(pw_sel, timeout=30_000)
         human_type(page, pw_sel, PASSWORD)
         wait(page, 1000)
         screenshot(page, "password_inserita")
 
-        page.click('button[type="submit"]', timeout=10_000)
+        page.click('button[type="submit"]', timeout=120_000)
         wait(page, 8000)
         screenshot(page, "dopo_login")
     except Exception:
-        # Alcuni flussi (es. magic link) saltano la password
-        print("  Campo password non trovato — potrebbe essere login senza password.")
+        print("  Campo password non trovato.")
         screenshot(page, "no_password")
+        if INTERACTIVE:
+            input("\n>>> Password non trovata. Inserisci la password nel browser e fai login, poi premi INVIO... ")
+            screenshot(page, "dopo_password_manuale")
+
+    # ── CAPTCHA/OTP post-password ──
+    _handle_captcha(page, "post_password")
+    _handle_otp(page, "post_password")
+
+    # ── Cookie banner (può riapparire) ──
+    _dismiss_cookie_banner(page)
 
     print(f"  URL dopo login: {page.url}")
+    screenshot(page, "login_completato")
+
+    # ── Verifica finale: sei loggato? ──
+    if INTERACTIVE:
+        input("\n>>> Login completato? Se non sei loggato, fai login manualmente nel browser, poi premi INVIO... ")
+        screenshot(page, "dopo_verifica_login")
+
+    print("  Login completato.\n")
 
 
 # ---------------------------------------------------------------------------
-# Navigazione a "Aggiungi nuova struttura"
+# Navigazione a Extranet — riscritto da zero
 # ---------------------------------------------------------------------------
 
 def navigate_to_add_property(page):
-    """Navigate to 'List your property' on Booking Extranet."""
-    print("Navigazione a 'Aggiungi nuova struttura'...")
+    """Dopo il login, naviga alla pagina di registrazione nuova struttura.
 
-    # Try the Extranet join/list-property URL
-    page.goto("https://join.booking.com/", wait_until="networkidle", timeout=30_000)
-    wait(page, 5000)
+    Problema noto: admin.booking.com fa redirect a booking.com/index (sito
+    clienti) perché l'account non ha ancora strutture. Quindi:
+    1. Prima prova a cliccare "List your property" nella pagina corrente
+    2. Se non funziona, vai diretto a join.booking.com/sign-in
+    NON andare su admin.booking.com — fa solo redirect inutile.
+    """
+    print("=== NAVIGAZIONE A REGISTRAZIONE STRUTTURA ===")
+    screenshot(page, "pre_navigazione")
+    print(f"  URL attuale: {page.url}")
+
+    # ── Step 1: Cerca "List your property" / "Registra la tua struttura" ──
+    # nella pagina corrente (booking.com/index dopo login)
+    print("  Cerco link 'List your property' nella pagina corrente...")
+    for label in [
+        "List your property",
+        "Registra il tuo immobile",
+        "Registra la tua struttura",
+        "Aggiungi nuova struttura",
+        "Metti in affitto",
+        "Add a new property",
+        "Register your property",
+    ]:
+        try:
+            link = page.get_by_text(label, exact=False)
+            if link.count() > 0 and link.first.is_visible():
+                link.first.click()
+                print(f"  Click: '{label}'")
+                wait(page, 8000)
+                _dismiss_cookie_banner(page)
+                _handle_captcha(page, "dopo_registra")
+                screenshot(page, "dopo_registra_struttura")
+                print(f"  URL: {page.url}")
+
+                if INTERACTIVE:
+                    input("\n>>> Sei sulla pagina di registrazione? Premi INVIO per continuare... ")
+                    screenshot(page, "dopo_pausa_registrazione")
+                return
+        except Exception:
+            continue
+
+    # ── Step 2: Fallback — vai diretto a join.booking.com ──
+    print("  Link non trovato nella pagina, vado diretto a join.booking.com...")
+    page.goto("https://join.booking.com/",
+              wait_until="domcontentloaded", timeout=120_000)
+    wait(page, 8000)
+    _dismiss_cookie_banner(page)
+    _handle_captcha(page, "join_page")
     screenshot(page, "join_page")
     save_html(page, "join_page")
     print(f"  URL: {page.url}")
+
+    if INTERACTIVE:
+        input("\n>>> Sei sulla pagina di registrazione struttura? Premi INVIO per continuare... ")
 
 
 # ---------------------------------------------------------------------------
@@ -329,12 +447,11 @@ def insert_property(page):
     photo_paths = download_photos_from_urls(foto_urls, fallback_count=5)
 
     # --- Step 1: Seleziona tipo struttura ---
-    print("Step 1: Tipo struttura — Appartamento")
+    print("\nStep 1: Tipo struttura — Appartamento")
 
     def do_step1():
         screenshot(page, "tipo_struttura_pagina")
         save_html(page, "step1_tipo")
-        # Booking usa "Apartment" o "Appartamento" a seconda della lingua
         for label in ["Appartamento", "Apartment", "Appartamenti"]:
             try:
                 btn = page.get_by_text(label, exact=True)
@@ -363,15 +480,7 @@ def insert_property(page):
             except Exception:
                 continue
         wait(page)
-        # Click continua/next
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_numero")
 
@@ -383,7 +492,6 @@ def insert_property(page):
     def do_step3():
         screenshot(page, "nome_pagina")
         save_html(page, "step3_nome")
-        # Prova diversi selettori per il campo nome
         nome_field = page.get_by_label("Nome della struttura")
         if nome_field.count() == 0:
             nome_field = page.get_by_label("Property name")
@@ -398,16 +506,7 @@ def insert_property(page):
         else:
             print("  Campo nome non trovato")
         wait(page)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_nome")
 
@@ -457,16 +556,7 @@ def insert_property(page):
             print(f"  CAP: {ident['cap']}")
 
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_indirizzo")
 
@@ -479,7 +569,6 @@ def insert_property(page):
         screenshot(page, "composizione_pagina")
         save_html(page, "step5_composizione")
 
-        # Ospiti
         for label in ["Ospiti", "Guests", "Numero massimo di ospiti"]:
             field = page.get_by_label(label)
             if field.count() > 0:
@@ -489,7 +578,6 @@ def insert_property(page):
 
         wait(page, 1000)
 
-        # Camere da letto
         for label in ["Camere da letto", "Bedrooms"]:
             field = page.get_by_label(label)
             if field.count() > 0:
@@ -499,7 +587,6 @@ def insert_property(page):
 
         wait(page, 1000)
 
-        # Bagni
         for label in ["Bagni", "Bathrooms"]:
             field = page.get_by_label(label)
             if field.count() > 0:
@@ -508,16 +595,7 @@ def insert_property(page):
                 break
 
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_composizione")
 
@@ -526,8 +604,6 @@ def insert_property(page):
     # --- Step 6: Letti (dal JSON composizione.letti) ---
     print("Step 6: Configurazione letti")
 
-    # Mappa tipo letto JSON → label parziale su Booking (match parziale)
-    # Le label complete sono es. "Letto matrimoniale (ca. 140 x 200 cm)"
     LETTO_LABELS_BOOKING = {
         "matrimoniale": ["Letto matrimoniale"],
         "francese": ["Letto Queen-size"],
@@ -539,15 +615,9 @@ def insert_property(page):
     }
 
     def _click_bed_plus(partial_label, clicks):
-        """Clicca il pulsante '+' N volte per un tipo letto su Booking.
-        Booking usa contatori +/- per ogni tipo letto, non campi di testo."""
-        # Trova il testo del letto nella pagina
         label_el = page.get_by_text(partial_label, exact=False)
         if label_el.count() == 0:
             return False
-
-        # Risali al container riga che contiene i pulsanti +/-
-        # Il '+' è tipicamente l'ultimo button nella riga
         try:
             plus = label_el.first.locator(
                 "xpath=ancestor::*[.//button][1]//button[last()]"
@@ -559,8 +629,6 @@ def insert_property(page):
                 return True
         except Exception:
             pass
-
-        # Fallback: cerca il primo '+' button che segue il label nel DOM
         try:
             plus = label_el.first.locator(
                 "xpath=following::button[normalize-space()='+'][1]"
@@ -572,7 +640,6 @@ def insert_property(page):
                 return True
         except Exception:
             pass
-
         return False
 
     def do_step6():
@@ -597,7 +664,6 @@ def insert_property(page):
                     found = True
                     break
             if not found:
-                # Fallback: prova fill() su input con label
                 for label in labels:
                     field = page.get_by_label(label)
                     if field.count() > 0:
@@ -609,15 +675,7 @@ def insert_property(page):
                 print(f"  Label non trovata per tipo '{tipo}', skip")
             wait(page, 500)
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_letti")
 
@@ -638,7 +696,6 @@ def insert_property(page):
                     page.wait_for_timeout(500)
                     print(f"  Servizio selezionato: {servizio}")
                 else:
-                    # Prova con checkbox/label
                     cb = page.locator(f"label:has-text('{servizio}')")
                     if cb.count() > 0:
                         cb.first.click()
@@ -650,16 +707,7 @@ def insert_property(page):
                 print(f"  Errore servizio {servizio}: {e}")
 
         wait(page)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_servizi")
 
@@ -702,15 +750,7 @@ def insert_property(page):
             print("  SKIP foto")
             screenshot(page, "foto_skip")
 
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
 
     try_step(page, "step8_foto", do_step8)
@@ -731,22 +771,13 @@ def insert_property(page):
             print("  Campo descrizione non trovato")
 
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_descrizione")
 
     try_step(page, "step9_descrizione", do_step9)
 
-    # --- Step 10: Prezzo e condizioni (dal JSON, niente hardcoded) ---
+    # --- Step 10: Prezzo e condizioni (dal JSON) ---
     print("Step 10: Prezzo e condizioni")
 
     def do_step10():
@@ -756,7 +787,7 @@ def insert_property(page):
         cond = PROP.get("condizioni", {})
 
         # Prezzo a notte — solo se presente nel JSON
-        prezzo = cond.get("prezzo_notte")
+        prezzo = cond.get("prezzo_notte") or cond.get("prezzo_base")
         if prezzo is not None:
             prezzo_str = str(prezzo)
             for label in ["Prezzo per notte", "Price per night", "Prezzo"]:
@@ -771,7 +802,7 @@ def insert_property(page):
         wait(page, 1000)
 
         # Cauzione — solo se presente nel JSON
-        cauzione_val = cond.get("cauzione_euro")
+        cauzione_val = cond.get("cauzione_euro") or cond.get("cauzione")
         if cauzione_val is not None:
             cauzione = str(cauzione_val)
             for label in ["Cauzione", "Deposit", "Damage deposit"]:
@@ -784,16 +815,7 @@ def insert_property(page):
             print("  Cauzione non presente nel JSON — lascio vuoto")
 
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_prezzo")
 
@@ -809,7 +831,6 @@ def insert_property(page):
         cin = ident["cin"]
         cir = ident.get("cir", "")
 
-        # CIN
         for label in ["CIN", "Codice Identificativo Nazionale"]:
             field = page.get_by_label(label)
             if field.count() > 0:
@@ -826,7 +847,6 @@ def insert_property(page):
 
         wait(page, 1000)
 
-        # CIR
         if cir:
             for label in ["CIR", "Codice Identificativo Regionale"]:
                 field = page.get_by_label(label)
@@ -836,16 +856,7 @@ def insert_property(page):
                     break
 
         wait(page, 1000)
-
-        # Continua
-        for txt in ["Continua", "Continue", "Avanti", "Next"]:
-            try:
-                btn = page.get_by_text(txt, exact=True)
-                if btn.count() > 0:
-                    btn.first.click()
-                    break
-            except Exception:
-                continue
+        click_continua(page)
         wait(page)
         screenshot(page, "dopo_codici")
 
@@ -858,7 +869,7 @@ def insert_property(page):
         wait(page)
         screenshot(page, "pagina_finale")
         save_html(page, "step12_finale")
-        print("Flusso Booking completato! NON inviato per la verifica.")
+        print("  Flusso Booking completato! NON inviato — solo verifica.")
 
     try_step(page, "step12_finale", do_step12)
 
@@ -870,20 +881,29 @@ def insert_property(page):
 def main():
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-    # In locale (INTERACTIVE): browser visibile per OTP/CAPTCHA manuali
-    # In CI: headless
+    # --skip-login: apre il browser su booking.com, tu fai login manualmente,
+    # poi lo script continua con navigazione e wizard.
+    skip_login = "--skip-login" in sys.argv
+
+    # SEMPRE browser visibile in modalità interattiva (Windows locale)
     headless = not INTERACTIVE
-    print(f"Browser: {'headless' if headless else 'visibile'} "
+    print(f"\nBrowser: {'headless' if headless else 'VISIBILE'} "
           f"(INTERACTIVE={INTERACTIVE})")
+    if skip_login:
+        print("  Modalità --skip-login: fai login tu nel browser.")
 
     with sync_playwright() as p:
+        launch_args = [
+            "--disable-blink-features=AutomationControlled",
+        ]
+        if platform.system() != "Windows":
+            launch_args.append("--no-sandbox")
+            launch_args.append("--disable-dev-shm-usage")
+
         browser = p.chromium.launch(
             headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
+            slow_mo=300 if INTERACTIVE else 0,
+            args=launch_args,
         )
         context = browser.new_context(
             locale="it-IT",
@@ -893,7 +913,7 @@ def main():
         )
         page = context.new_page()
 
-        # Stealth opzionale (se playwright-stealth è installato)
+        # Stealth opzionale
         try:
             from playwright_stealth import stealth_sync
             stealth_sync(page)
@@ -902,16 +922,41 @@ def main():
             print("playwright-stealth non trovato, procedo senza stealth.")
 
         try:
-            login(page)
+            if skip_login:
+                # Apri booking.com e lascia fare login all'utente
+                page.goto("https://www.booking.com/",
+                          wait_until="domcontentloaded", timeout=120_000)
+                wait(page, 3000)
+                _dismiss_cookie_banner(page)
+                screenshot(page, "skip_login_pagina")
+                input("\n>>> Fai login nel browser (email, CAPTCHA, OTP, password).\n"
+                      ">>> Quando sei loggato e vedi la homepage, premi INVIO... ")
+                screenshot(page, "dopo_login_manuale")
+                print(f"  URL dopo login manuale: {page.url}")
+            else:
+                login(page)
+
             navigate_to_add_property(page)
-            screenshot(page, "pagina_iniziale")
+            screenshot(page, "pagina_iniziale_wizard")
             insert_property(page)
+        except Exception as e:
+            print(f"\n*** ERRORE FATALE: {e} ***")
+            try:
+                screenshot(page, "errore_finale")
+                save_html(page, "errore_finale")
+            except Exception:
+                pass
+            if INTERACTIVE:
+                input("\n>>> ERRORE. Guarda il browser, poi premi INVIO per chiudere... ")
+            raise
         finally:
             try:
                 screenshot(page, "final_state")
                 save_html(page, "final_state")
             except Exception:
                 pass
+            if INTERACTIVE:
+                input("\n>>> Completato! Controlla il browser, poi premi INVIO per chiudere... ")
             browser.close()
 
 
