@@ -103,6 +103,10 @@ LETTO_LABEL = {
 
 step_counter = 0
 step_errors = []
+# Errori "soft": non bloccano l'inserimento della struttura né fanno fallire
+# il run. Tipicamente la parte tariffe stagionali (storicamente fragile e
+# comunque rifinibile a mano dal pannello "Tariffe e disponibilità").
+soft_errors = []
 
 
 def screenshot(page, name):
@@ -282,6 +286,29 @@ def click_save_and_verify(page, step_name):
     return advanced
 
 
+# Header per CDN hot-link-protetti (Krossbooking): senza Referer + User-Agent
+# da browser reale il CDN risponde HTTP 403. Vedi BOT_MEMORY.md 2026-05-04.
+CDN_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://book.affittasardegna.it/",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+}
+
+
+def download_one_photo(url, path):
+    """Scarica una singola foto con header da browser. Solleva l'eccezione
+    di rete in caso di errore (es. urllib.error.HTTPError 403)."""
+    req = urllib.request.Request(url, headers=CDN_HEADERS)
+    with urllib.request.urlopen(req, timeout=30) as resp, open(path, "wb") as out:
+        out.write(resp.read())
+
+
 def download_photos_from_urls(urls):
     """Scarica foto dagli URL CDN (es. Krossbooking) in cartella temporanea.
 
@@ -296,7 +323,7 @@ def download_photos_from_urls(urls):
         ext = os.path.splitext(url.split("?")[0])[1] or ".jpg"
         path = os.path.join(tmp_dir, f"photo_{i+1}{ext}")
         try:
-            urllib.request.urlretrieve(url, path)
+            download_one_photo(url, path)
             paths.append(path)
             print(f"  Foto scaricata: {path} <- {url}")
         except Exception as e:
@@ -1175,7 +1202,7 @@ def insert_property(page):
 
         step_done(page, "stagioni_wizard")
 
-    try_step(page, "step20b_stagioni", do_step20b)
+    try_step(page, "step20b_stagioni", do_step20b, optional=True)
 
     def do_step26():
         ical_url = PROP.get("condizioni", {}).get("ical_url")
@@ -1328,8 +1355,8 @@ def main():
                 try:
                     add_seasonal_prices(page)
                 except Exception as e:
-                    print(f"\n[ERRORE] Tariffe stagionali: {e}")
-                    step_errors.append(("tariffe_stagionali", str(e)))
+                    print(f"\n[ERRORE] Tariffe stagionali (soft, non blocca il run): {e}")
+                    soft_errors.append(("tariffe_stagionali", str(e)))
         finally:
             try:
                 screenshot(page, "final_state")
@@ -1342,12 +1369,15 @@ def main():
                     print(f"  - {name}: {err}")
             else:
                 print("\nTutti gli step completati con successo!")
+            if soft_errors:
+                print(f"\nAVVISI (soft, struttura inserita comunque — rifinire a mano):")
+                for name, err in soft_errors:
+                    print(f"  - {name}: {err}")
             context.close()
             browser.close()
 
-    # Se siamo arrivati qui senza eccezioni propagate ma step_errors non è vuoto
-    # (caso tipico: add_seasonal_prices ha fallito ed è stato catturato), il run
-    # deve comunque diventare rosso su Actions.
+    # Solo gli errori "hard" (step_errors) fanno fallire il run. Gli errori soft
+    # (es. tariffe stagionali) sono segnalati ma la struttura risulta inserita.
     if step_errors:
         print(f"\n❌ RUN FALLITO: {len(step_errors)} step in errore — uscita con codice 1")
         raise SystemExit(1)

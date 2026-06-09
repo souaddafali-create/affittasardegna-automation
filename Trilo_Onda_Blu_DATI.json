@@ -1,0 +1,101 @@
+{
+  "identificativi": {
+    "nome_struttura": "TRILO ONDA BLU",
+    "tipo_struttura": "Appartamento",
+    "indirizzo": "Via Cavallotti 1",
+    "comune": "Castelsardo",
+    "cap": "07031",
+    "provincia": "SS",
+    "regione": "Sardegna",
+    "paese": "Italy",
+    "cin": "IT090023C2000U0459",
+    "cir": "U0459"
+  },
+  "composizione": {
+    "max_ospiti": 4,
+    "camere": 2,
+    "bagni": 1,
+    "posti_letto": 4,
+    "letti": [
+      { "tipo": "matrimoniale", "quantita": 1 },
+      { "tipo": "singolo", "quantita": 2 }
+    ]
+  },
+  "dotazioni": {
+    "tv": true,
+    "piano_cottura": true,
+    "frigo_congelatore": true,
+    "forno": true,
+    "microonde": false,
+    "lavatrice": true,
+    "lavastoviglie": true,
+    "aria_condizionata": true,
+    "riscaldamento": false,
+    "internet_wifi": true,
+    "phon": true,
+    "ferro_stiro": true,
+    "terrazza": true,
+    "giardino": false,
+    "piscina": false,
+    "piscina_tipo": "",
+    "barbecue": false,
+    "culla": false,
+    "seggiolone": false,
+    "animali_ammessi": true,
+    "parcheggio_privato": true,
+    "altro_dotazioni": ""
+  },
+  "marketing": {
+    "titolo": "TRILO ONDA BLU - Trilocale nel cuore di Castelsardo, a due passi dalle spiagge",
+    "descrizione_lunga": "TRILO ONDA BLU, grazioso trilocale nel cuore di Castelsardo, a pochi passi dalle spiagge. In zona tranquilla ma a pochi minuti dai punti più scenografici del borgo medievale, piano terra rialzato, atmosfera intima e rilassata. 50 m² fino a 4 persone: soggiorno con cucina attrezzata, camera matrimoniale, camera con due letti singoli, bagno con doccia, posto auto privato. A piedi: spiaggia del paese, centro storico, Castello dei Doria, porto turistico.",
+    "foto": [],
+    "foto_urls": [
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769791173.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769825847.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769902258.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769909921.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769908469.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769913469.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769916288.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769915511.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769916466.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769919966.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769914983.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769926705.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769924272.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769922657.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769921159.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769922165.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769929043.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/178047699344.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769934602.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/17804769939060.jpg",
+      "https://cdn.krossbooking.com/affittasardegna/images/3/1165/1780476993871.jpg"
+    ]
+  },
+  "condizioni": {
+    "prezzo_base": 2000,
+    "check_in": "17:00 - 21:00",
+    "check_out": "10:00",
+    "soggiorno_minimo_bassa": { "notti": 3, "periodo": "bassa stagione" },
+    "soggiorno_minimo_alta": { "notti": 7, "periodo": "alta stagione" },
+    "cauzione": null,
+    "pulizia_finale": "160",
+    "asciugamani": "",
+    "lenzuola": "",
+    "ical_url": "",
+    "listino_prezzi": [
+      { "da": "2026-03-28", "a": "2026-05-30", "prezzo_notte": 61.71 },
+      { "da": "2026-05-30", "a": "2026-06-13", "prezzo_notte": 69.43 },
+      { "da": "2026-06-13", "a": "2026-06-27", "prezzo_notte": 77.14 },
+      { "da": "2026-06-27", "a": "2026-07-11", "prezzo_notte": 92.57 },
+      { "da": "2026-07-11", "a": "2026-07-25", "prezzo_notte": 108.00 },
+      { "da": "2026-07-25", "a": "2026-08-01", "prezzo_notte": 115.71 },
+      { "da": "2026-08-01", "a": "2026-08-22", "prezzo_notte": 131.14 },
+      { "da": "2026-08-22", "a": "2026-08-29", "prezzo_notte": 115.71 },
+      { "da": "2026-08-29", "a": "2026-09-12", "prezzo_notte": 77.14 },
+      { "da": "2026-09-12", "a": "2026-09-26", "prezzo_notte": 69.43 },
+      { "da": "2026-09-26", "a": "2026-10-31", "prezzo_notte": 61.71 }
+    ]
+  }
+}
